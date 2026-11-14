@@ -23,3 +23,49 @@ mini-trellis does not create or drive tasks.
 
 Managed by mini-trellis. Edits outside this block are preserved.
 <!-- TRELLIS:END -->
+
+# agyline
+
+The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-CN.md). When a boundary changes, update both. Keep shipped behavior and intended behavior in different sections. Do not copy the same description into `.trellis/spec/`.
+
+## Status
+
+There is no Rust crate yet. Describe agyline as a planned program, and describe `ref/agy-patch` as the line that runs today.
+
+`ref/` is gitignored local reference. Read it. Implement the application in the crate, and leave the files under `ref/` unchanged.
+
+## Default line
+
+Match `ref/agy-patch/statusline.ps1` for default segments, labels, colors, JSON fields, and thresholds. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
+
+Stdin fields the scripts already read:
+
+`session_id`, `conversation_id`, `agent_state`, `execution_mode`, `cycle_mode`, `model.display_name`, `model.id`, `model.effort`, `thinkingLevel`, `cwd`, `workspace.current_dir`, `workspace.project_dir`, `vcs.branch`, `vcs.dirty`, `sandbox.enabled`, `sandbox.allow_network`, `context_window` (input, output, cache read, total output, window size, used percentage), `cost`, `quota.*.remaining_fraction`, `subagents`, `task_count`, `pending_input_count`, `tool_confirmation_pending`.
+
+## Integration
+
+`agy` runs agyline through `statusLine` in `~/.gemini/antigravity-cli/settings.json` (`type` is `command`, `enabled` is true). The official `agy` and `agy.exe` binaries stay as installed.
+
+`patch_agy.py`, the prompt templates, `hub-wrapper`, and `consult_gemini/` stay in the reference. Porting them into the crate needs its own decision.
+
+The status line may read the cache relay's existing state file. Rewriting `cache_relay.py` needs its own decision.
+
+## Configuration
+
+`AGY_THEME`, `AGY_STATUSLINE_LINES`, `AGY_STATUSLINE_INDENT`, `AGY_SHOW_DEFAULT_MODE`, and `AGY_CACHE_RELAY` are behavior to preserve. New settings go in `~/.gemini/agyline/config.toml`. `AGYLINE_HOME` moves that directory. Once a TOML key is chosen, the loader and both READMEs use that key.
+
+A terminal stdin opens the configurator. Any other stdin is a render. The preview and the live line share one renderer. The default config reproduces the reference line. Segment order and colors come from the config.
+
+## Performance
+
+The render that prints the line must not start a shell and must not wait on `git`. In the reference, `statusline.py` limits `git status` to 1.5 seconds, and `statusline.ps1` reads git output on the render path before its 1.5 second wait. Move git and conversation-database scans off the printing path, or bound them so a slow read cannot hold the line.
+
+Measure a change that claims to be faster. A cache that can change the printed text needs a fixture that covers the changed text.
+
+## Code
+
+- One Cargo package until a split has a reason.
+- Imports stay at the top of the file.
+- A `match` on a union or enum ends with a `never` check.
+- Comments and commit messages are in English.
+- Commit only when asked. No Cursor trailer and no `Co-authored-by` for Cursor. Commit with local `git commit -F`.
