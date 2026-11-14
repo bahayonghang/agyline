@@ -69,3 +69,9 @@ Measure a change that claims to be faster. A cache that can change the printed t
 - A `match` on a union or enum ends with a `never` check.
 - Comments and commit messages are in English.
 - Commit only when asked. No Cursor trailer and no `Co-authored-by` for Cursor. Commit with local `git commit -F`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues, specs, and wayfinder maps are GitHub issues in `bahayonghang/agyline`, a public repo. See `docs/agents/issue-tracker.md`.
