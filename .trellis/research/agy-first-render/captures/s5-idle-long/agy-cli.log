@@ -1,0 +1,246 @@
+I1114 03:40:48.826359      40 server.go:2543] Starting language server process with pid 41008
+I1114 03:40:48.827404      40 workflow_python.go:21] run_workflow Python: interpreter "", embedded true
+I1114 03:40:48.828515      40 server.go:2602] Language server version: 1.5.9
+I1114 03:40:48.828515      40 server.go:1269] Language server will attempt to listen on host localhost
+I1114 03:40:48.848465      40 server.go:1284] Language server listening on random port at 5904 for HTTPS (gRPC)
+I1114 03:40:48.848976      40 server.go:1292] Language server listening on random port at 5905 for HTTP
+I1114 03:40:48.872638      83 store_client.go:714] summary store: starting background reconciliation (trigger=empty_on_open)
+I1114 03:40:48.872638      83 store_client.go:743] summary store: reconcile func returned 0 records, skipping
+I1114 03:40:48.875774      40 server.go:3032] Generated and saved persistent installation UUID: <installation-uuid>
+W1114 03:40:48.877846      40 defaults.go:717] failed to get cs path: cs path /usr/bin/cs invalid
+I1114 03:40:48.877846      40 manager.go:140] Creating trajectory store manager with proto store and SQLite store
+I1114 03:40:48.877846     133 migrate.go:49] Migration marker C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\config\.migrated does not exist. Attempting migration from AppDataDir C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity-cli.
+I1114 03:40:48.878364     133 migrate.go:157] Migration complete, marked with C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\config\.migrated
+I1114 03:40:48.959479     162 manager.go:98] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] is enabled
+I1114 03:40:48.960002     162 manager.go:113] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] starting
+I1114 03:40:48.961069     162 project_uris_migration.go:42] Starting ProjectUrisMigration
+I1114 03:40:48.961069     162 manager.go:133] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] completed successfully in 168.4µs
+I1114 03:40:48.962577     162 manager.go:98] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] is enabled
+I1114 03:40:48.963088     162 manager.go:113] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] starting
+I1114 03:40:48.967748     162 plugin_enablement_migration.go:64] Seeded plugin enablement for 1 plugin(s) into config.json
+I1114 03:40:48.967748     162 manager.go:133] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] completed successfully in 3.0331ms
+I1114 03:40:48.969843     162 manager.go:98] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] is enabled
+I1114 03:40:48.970355     162 manager.go:113] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] starting
+I1114 03:40:48.972414     162 manager.go:133] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] completed successfully in 678.2µs
+I1114 03:40:48.975804     162 manager.go:95] Migration [MIGRATION_ID_LIN_BUILTIN_TO_MARKETPLACE] is disabled, skipping entirely
+I1114 03:40:48.975804     162 manager.go:95] Migration [MIGRATION_ID_ADOPT_BWG_INSTALLS] is disabled, skipping entirely
+I1114 03:40:48.975804     162 manager.go:95] Migration [MIGRATION_ID_GDRIVE_BUILTIN_PLUGIN] is disabled, skipping entirely
+I1114 03:40:48.975804     162 manager.go:95] Migration [MIGRATION_ID_SPLIT_SCIENCE_PLUGIN] is disabled, skipping entirely
+I1114 03:40:48.987612      40 server.go:3949] initialized server successfully in 161.4602ms
+I1114 03:40:48.988126     276 server.go:4693] Auth succeeded, refreshing features and managers
+I1114 03:40:48.988126     276 server.go:4727] [RemoteControl] Subscription callback triggered.
+I1114 03:40:48.988126       1 auto_updater.go:247] Auto-update disabled via environment variable AGY_CLI_DISABLE_AUTO_UPDATE
+I1114 03:40:48.988126       1 common.go:191] Launching CLI mode
+E1114 03:40:48.988126       1 launchsteps.go:95] Failed to resolve GeminiDir ".gemini": .gemini must be an absolute path: path is not absolute, falling back to default
+I1114 03:40:48.988126       1 common.go:212] CLI app data directory: C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity-cli
+I1114 03:40:48.988126       1 server.go:313] Creating CLI server backend: product=antigravity workspaceDirs=[C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\ws] appDataDir=C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity-cli languageServer=true codeAssist=true
+I1114 03:40:48.988126     276 server.go:4730] [RemoteControl] RemoteControlEnabled value: false
+I1114 03:40:48.988645     276 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:40:48.988645     276 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:40:48.988645     276 profiler.go:231] Continuous pprof profiling is disabled.
+I1114 03:40:48.988645     295 manager.go:98] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] is enabled
+I1114 03:40:48.988645     291 reconcile_summaries.go:94] [Summaries] reconcile checked 0 conversations, restored 0, cached 0, skipped 0, dropped 0, cancelled false in 0ms (resident: 0 -> 0)
+I1114 03:40:48.988645     295 manager.go:107] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:40:48.989322     295 manager.go:98] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] is enabled
+I1114 03:40:48.989832     295 manager.go:107] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:40:48.989832     295 manager.go:98] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] is enabled
+I1114 03:40:48.989832     295 manager.go:107] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:40:48.989832     295 manager.go:95] Migration [MIGRATION_ID_LIN_BUILTIN_TO_MARKETPLACE] is disabled, skipping entirely
+I1114 03:40:48.989832     295 manager.go:95] Migration [MIGRATION_ID_ADOPT_BWG_INSTALLS] is disabled, skipping entirely
+I1114 03:40:48.990348     295 manager.go:95] Migration [MIGRATION_ID_GDRIVE_BUILTIN_PLUGIN] is disabled, skipping entirely
+I1114 03:40:48.990348     295 manager.go:95] Migration [MIGRATION_ID_SPLIT_SCIENCE_PLUGIN] is disabled, skipping entirely
+I1114 03:40:48.990348     265 store_client.go:714] summary store: starting background reconciliation (trigger=empty_on_open)
+E1114 03:40:48.990872     265 server.go:3255] Failed to read conversations directory C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity\conversations: open C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s5-idle-long/home/.gemini/antigravity/conversations: The system cannot find the path specified.
+I1114 03:40:48.991184     265 server.go:3141] ListConversations returning 0 summaries
+I1114 03:40:48.991184     265 store_client.go:743] summary store: reconcile func returned 0 records, skipping
+E1114 03:40:48.991700     267 server.go:3255] Failed to read conversations directory C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity\conversations: open C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s5-idle-long/home/.gemini/antigravity/conversations: The system cannot find the path specified.
+I1114 03:40:48.991700     267 server.go:3141] ListConversations returning 0 summaries
+I1114 03:40:48.993817       1 project.go:78] project: created project "CLI Project" (id=default-cli-project) at C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\config\projects\default-cli-project.json
+I1114 03:40:48.993817       1 server.go:2267] Backend project ID updated dynamically to: default-cli-project
+I1114 03:40:48.993817       1 manager.go:555] Initializing CLI store manager for workspace C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\ws
+I1114 03:40:49.031082       1 cli_setting_manager.go:98] CLI settings initialized: permissions=<nil>, toolPermission=request-review
+E1114 03:40:49.037076       1 errorreport.go:307] failed to get git info for workspace C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\ws: reference not found
+I1114 03:40:49.040775       1 hooks_manager.go:54] loaded 0 named hooks from 0 hooks.json file(s)
+I1114 03:40:49.040775       1 manager.go:729] CLI store manager initialized successfully
+I1114 03:40:49.040775       1 common.go:346] CLI store manager created successfully
+I1114 03:40:49.040775       1 cli_setting_manager.go:228] ApplyProjectPermissionGrants: no grants for project "CLI Project", cleared project permissions
+I1114 03:40:49.040775     272 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:40:49.045493       1 terminal_info_manager.go:354] Terminal detection: TERM="xterm-256color" altScreen=true ssh=false osc8=true osc52=true appleTerminalSSH=false
+I1114 03:40:49.045493       1 common.go:549] Starting CLI program
+CLI ready for user input
+I1114 03:40:49.047030     217 gemini_extensions.go:29] Detecting Gemini extensions in C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\extensions
+I1114 03:40:49.047030     217 gemini_extensions.go:50] No extensions found
+I1114 03:40:49.047544     224 manager.go:1677] Reloading system slash commands and skills
+I1114 03:40:49.047544     224 manager.go:1633] Reloading system slash commands
+I1114 03:40:49.047544     149 auth.go:157] ChainedAuth: authenticated via gemini_api_key (effective: gemini_api_key)
+I1114 03:40:49.047544     149 server_oauth.go:221] applyAuthResult: email=, authMethod=gemini_api_key, quotaProject=
+I1114 03:40:49.047544     149 server_oauth.go:226] OAuth: authenticated successfully as 
+I1114 03:40:49.047544       1 analytics.go:249] CLI startup completed (took 226.4137ms, phases [main_entered=0ms ls_start=5ms ls_ready=166ms launch_cli=167ms backend_created=169ms project_resolved=172ms manager_created=219ms program_run=224ms tui_init_start=225ms tui_init_done=225ms])
+W1114 03:40:49.047544     407 cache.go:189] Failed to refresh cache in background: admin controls not applicable
+W1114 03:40:49.049111     331 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins/marketplace.json": Bad Gateway
+W1114 03:40:49.049111     331 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Bad Gateway
+I1114 03:40:49.050805     149 model_config_manager.go:375] Propagating selected model override to backend: label="Gemini 3.1 Pro (Low)"
+I1114 03:40:49.050805     272 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:40:49.050805     273 experiment_manager.go:66] Starting experiment refresh after login
+I1114 03:40:49.050805     409 model_config_manager.go:375] Propagating selected model override to backend: label="Gemini 3.1 Pro (Low)"
+I1114 03:40:49.050805     272 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:40:49.051332     273 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:40:49.051332     273 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:40:49.051332     273 experiment_manager.go:70] Experiments refreshed after login
+I1114 03:40:49.051332     273 experiment_manager.go:66] Starting experiment refresh after login
+I1114 03:40:49.051332     308 manager.go:1726] SetCycleMode called: auto
+I1114 03:40:49.051874     308 manager.go:1732] auto mode is unavailable, falling back to default
+I1114 03:40:49.051332     471 manager.go:1633] Reloading system slash commands
+I1114 03:40:49.051874     273 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:40:49.051874     273 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:40:49.051874     273 experiment_manager.go:70] Experiments refreshed after login
+I1114 03:40:49.052395     477 manager.go:1633] Reloading system slash commands
+W1114 03:40:49.052904     193 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins/marketplace.json": Bad Gateway
+W1114 03:40:49.052904     193 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Bad Gateway
+I1114 03:40:49.056128     223 hooks_manager.go:54] loaded 0 named hooks from 0 hooks.json file(s)
+I1114 03:40:49.067686     471 manager.go:1642] Slash commands unchanged, skipping update
+I1114 03:40:49.067686     477 manager.go:1642] Slash commands unchanged, skipping update
+I1114 03:40:49.097598     172 manager.go:1122] Full redraw completed (RerenderAll) for conversation  (epoch 0, items 1) in 0s
+E1114 03:40:53.851423      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:40:53.857784      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:40:58.853153      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:40:58.859887      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:03.855240      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:03.860972      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:08.857421      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:08.863352      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:13.858886      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:13.864909      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:18.861328      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:18.866530      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:23.863294      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:23.868626      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:28.865693      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:28.870360      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:33.867444      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:33.872365      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:38.869885      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:38.874056      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:43.872482      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:43.876120      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:48.874573      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:48.878378      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:53.876758      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:53.880907      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:41:58.877983      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:41:58.882452      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:03.880605      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:03.884915      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:08.882799      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:08.886944      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:13.884684      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:13.890479      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:18.886650      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:18.892358      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:23.888598      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:23.893773      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:28.890050      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:28.895771      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:33.892211      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:33.897730      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:38.894346      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:38.900574      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:43.895846      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:43.902931      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:48.897340      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:48.904670      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:53.899436      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:53.906232      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:42:58.901391      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:42:58.908690      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:03.903162      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:03.911092      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:08.904507      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:08.913606      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:13.906810      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:13.915765      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:18.908467      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:18.916453      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:23.910436      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:23.919221      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:28.912449      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:28.921014      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:33.914045      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:33.923165      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:38.916513      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:38.925151      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:43.918471      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:43.927177      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:48.920784      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:48.928785      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:53.923031      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:53.931160      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:43:58.924357      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:43:58.933467      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:03.926424      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:03.934919      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:08.928584      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:08.936489      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:13.930563      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:13.939037      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:18.932256      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:18.940323      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:23.934433      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:23.942427      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:28.935808      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:28.944025      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:33.937271      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:33.945659      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:38.939229      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:38.947402      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:43.940667      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:43.948382      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:48.942319      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:48.950619      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:53.944067      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:53.952843      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:44:58.945544      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:44:58.954614      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:03.946941      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:03.955964      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:08.949285      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:08.957713      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:13.951158      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:13.959601      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:18.952738      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:18.961123      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:23.954715      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:23.962618      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:28.956106      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:28.964147      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:33.957991      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:33.966155      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:38.960019      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:38.967919      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:43.962656      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:43.969193      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:48.964380      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:48.970825      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:53.966156      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:53.972587      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:45:58.967591      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:45:58.974334      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:46:03.969133      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:46:03.975930      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:46:08.971049      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:46:08.977945      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:46:13.972712      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:46:13.979470      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:46:18.974553      48 g3syslog.go:23] [Post "https://play.googleapis.com/log": Bad Gateway]
+E1114 03:46:18.980511      45 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+I1114 03:46:19.600742       1 common.go:558] CLI program exited, shutting down
+E1114 03:46:19.601246       1 common.go:565] failed to truncate history: reading history file: open C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s5-idle-long\home\.gemini\antigravity-cli\history.jsonl: The system cannot find the file specified.
+I1114 03:46:19.601246       1 manager.go:940] CLI store manager shutting down
+I1114 03:46:19.601765    1510 server.go:4395] Language server shutting down
+I1114 03:46:19.601765    1510 server.go:4422] Waiting for migrations to complete to prevent partial migration state...
+E1114 03:46:19.602286     147 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:46:19.602286     147 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:46:19.602286     147 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:46:19.602286     147 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:46:19.606342    1510 server.go:4524] Failed to shutdown telemetry client: Post "https://play.googleapis.com/log": Bad Gateway
+Post "https://play.googleapis.com/log": Bad Gateway

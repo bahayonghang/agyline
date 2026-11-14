@@ -1,0 +1,40 @@
+
+Resume with -c (or command below):
+agy --conversation=96cb227a-0c9c-4f48-bac7-399cb5887078
+
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s2-events-after/ws
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+> /statusline
+  ⎿  Usage:
+       /statusline                 Toggle statusline on/off.
+       /statusline <command>       Configure a custom shell command to render the statusline.
+       /statusline delete          Delete the custom command and revert to the built-in default.
+       /statusline on | enable     Enable the statusline.
+       /statusline off | disable   Disable the statusline.
+       /statusline help            Show this help message.
+
+> /model
+  ⎿  Model set to Gemini 3.1 Pro (Low)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> 1u
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+

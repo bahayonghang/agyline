@@ -1,0 +1,7 @@
+    0.042  STEP boot
+   15.088  STEP slash '/'
+   18.132  STEP model 'model'
+   20.192  STEP enter '\r'
+   24.217  STEP esc '\x1b'
+   28.234  STEP idle
+   35.327  STEP pty_eof

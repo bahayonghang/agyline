@@ -1,0 +1,11 @@
+{
+  "trustedWorkspaces": [
+    "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s5-idle-long\\ws"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s5-idle-long/invocations minimal",
+    "enabled": true
+  },
+  "colorScheme": "colorblind-friendly dark"
+}

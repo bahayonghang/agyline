@@ -1,0 +1,47 @@
+    0.047  STEP boot
+    0.449              proc_start cmd.exe pid=62192 parent=48024
+    0.449              proc_start pwsh.exe pid=24184 parent=62192
+    0.725              proc_start cmd.exe pid=1948 parent=48024
+    0.726              proc_end cmd.exe pid=62192
+    0.766              proc_start pwsh.exe pid=49228 parent=1948
+    1.013              proc_end pwsh.exe pid=24184
+    1.245              proc_end cmd.exe pid=1948
+    1.245              proc_end pwsh.exe pid=49228
+   15.058  STEP slash '/'
+   15.096              proc_start cmd.exe pid=39756 parent=48024
+   15.097              proc_start pwsh.exe pid=49940 parent=39756
+   15.387              proc_start cmd.exe pid=65048 parent=48024
+   15.387              proc_end cmd.exe pid=39756
+   15.435              proc_start pwsh.exe pid=30284 parent=65048
+   15.483              proc_end pwsh.exe pid=49940
+   15.773              proc_end cmd.exe pid=65048
+   15.773              proc_end pwsh.exe pid=30284
+   18.093  STEP model 'model'
+   20.101  STEP enter '\r'
+   20.136              proc_start cmd.exe pid=57248 parent=48024
+   20.136              proc_start pwsh.exe pid=48896 parent=57248
+   20.442              proc_start cmd.exe pid=23932 parent=48024
+   20.442              proc_start pwsh.exe pid=8652 parent=23932
+   20.442              proc_end cmd.exe pid=57248
+   20.553              proc_end pwsh.exe pid=48896
+   20.832              proc_end cmd.exe pid=23932
+   20.832              proc_end pwsh.exe pid=8652
+   24.138  STEP esc '\x1b'
+   24.292              proc_start cmd.exe pid=20232 parent=48024
+   24.292              proc_start pwsh.exe pid=62180 parent=20232
+   24.579              proc_start cmd.exe pid=65920 parent=48024
+   24.579              proc_start pwsh.exe pid=30276 parent=65920
+   24.579              proc_end cmd.exe pid=20232
+   24.683              proc_end pwsh.exe pid=62180
+   25.022              proc_start git.exe pid=8340 parent=30276
+   25.067              proc_start conhost.exe pid=43064 parent=8340
+   25.067              proc_start git.exe pid=75276 parent=8340
+   25.117              proc_end git.exe pid=8340
+   25.117              proc_end conhost.exe pid=43064
+   25.117              proc_end git.exe pid=75276
+   25.174          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  cold
+   25.178              proc_end cmd.exe pid=65920
+   25.178              proc_end pwsh.exe pid=30276
+   28.193  STEP idle
+   35.081          screen: (status line absent)
+   35.306  STEP pty_eof

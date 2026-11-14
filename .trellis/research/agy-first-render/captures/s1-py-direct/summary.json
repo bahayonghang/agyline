@@ -1,0 +1,13 @@
+{
+ "t0": 1794645805.224206,
+ "kind": "py-direct",
+ "steps": [
+  "boot||15",
+  "slash|/|3",
+  "model|model|2",
+  "enter|\\r|4",
+  "esc|\\x1b|4",
+  "idle||6"
+ ],
+ "timeline": []
+}

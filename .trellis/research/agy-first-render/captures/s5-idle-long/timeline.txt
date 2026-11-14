@@ -1,0 +1,15 @@
+    0.043  STEP boot
+    0.430              proc_start cmd.exe pid=69076 parent=41008
+    0.437      inv #1: sid='' state=authenticating width=80 stdin=831B stdout=32B exit=0 ran=0.0267s
+    0.478              proc_start python.exe pid=70884 parent=69076
+    0.543          screen: AGYLINE-MARK #0001 03:40:49.110
+    0.577              proc_end cmd.exe pid=69076
+    0.577              proc_end python.exe pid=70884
+    0.728              proc_start cmd.exe pid=72008 parent=41008
+    0.738      inv #2: sid='' state=idle width=120 stdin=929B stdout=32B exit=0 ran=0.0296s
+    0.774              proc_start python.exe pid=18564 parent=72008
+    0.844          screen: AGYLINE-MARK #0002 03:40:49.413
+    0.865              proc_end cmd.exe pid=72008
+    0.865              proc_end python.exe pid=18564
+  330.982          screen: (status line absent)
+  331.181  STEP pty_eof

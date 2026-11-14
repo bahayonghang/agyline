@@ -1,0 +1,95 @@
+# Strings read from agy.exe 1.5.9 (Windows), sha256 8803C289CAC04D6E53F2211592D9981C2D5760BC0D9B4A7F222EF6ECC7ABB38A, 231726744 bytes.
+# rg -a -o --no-filename '<patterns for the status line runner, its symbols, the /statusline help and the app data dir flags>' agy.exe | sort -u
+# Go keeps string constants back to back, so a hit can end inside the next constant.
+
+  /statusline                 Toggle statusline on/off.
+  /statusline <command>       Configure a custom shell command to render the statusline.
+  /statusline delete          Delete the custom command and revert to the built-in default.
+  /statusline help            Show this help message.
+  /statusline off | disable   Disable the statusline.
+  /statusline on | enable     Enable the statusline.
+- Added a `stack_with_default` flag to the `statusLine` configuration to render both the default Antigravity status line and custom status line output vertically stacked.
+ANTIGRAVITY_APP_DATA_DIR
+ANTIGRAVITY_GEMINI_DIR
+app_data_dir for CLI settings and logs
+Debug StatusLineData: %s
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).deleteCommand
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).deleteCommand.func1
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).Description
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).Execute
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).Name
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).setCommand
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).setCommand.func1
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).setEnabled
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).setEnabled.func1
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).showHelp
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).showHelp.func1
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).toggle
+google3/third_party/jetski/cli/commands/commands.(*statuslineCommand).toggle.func1
+google3/third_party/jetski/cli/model/model.(*ArtifactReviewModel).StatusLine
+google3/third_party/jetski/cli/model/model.(*RootModel).handleStatusLineLayout
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).HasCustomStatusLine
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).Height
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).MaxHeight
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).Render
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).RenderBuiltIn
+google3/third_party/jetski/cli/model/model.(*StatusLineModel).RenderCustom
+google3/third_party/jetski/cli/model/model.ArtifactReviewModel.StatusLine
+google3/third_party/jetski/cli/model/model.pluginAuthStatusLines
+google3/third_party/jetski/cli/model/model.StatusLineModel.ActionFromMsg
+google3/third_party/jetski/cli/model/model.StatusLineModel.cloudProjectName
+google3/third_party/jetski/cli/model/model.StatusLineModel.HasArtifacts
+google3/third_party/jetski/cli/model/model.StatusLineModel.HasCustomStatusLine
+google3/third_party/jetski/cli/model/model.StatusLineModel.Height
+google3/third_party/jetski/cli/model/model.StatusLineModel.Keybindings
+google3/third_party/jetski/cli/model/model.StatusLineModel.Layout
+google3/third_party/jetski/cli/model/model.StatusLineModel.MaxHeight
+google3/third_party/jetski/cli/model/model.StatusLineModel.modelDisplayWithBadge
+google3/third_party/jetski/cli/model/model.StatusLineModel.Render
+google3/third_party/jetski/cli/model/model.StatusLineModel.Render.func1
+google3/third_party/jetski/cli/model/model.StatusLineModel.RenderBuiltIn
+google3/third_party/jetski/cli/model/model.StatusLineModel.RenderCustom
+google3/third_party/jetski/cli/model/model.StatusLineModel.renderHint
+google3/third_party/jetski/cli/model/model.StatusLineModel.renderModeLabel
+google3/third_party/jetski/cli/model/model.StatusLineModel.renderRight
+google3/third_party/jetski/cli/model/model.StatusLineModel.SetLayout
+google3/third_party/jetski/cli/model/model.StatusLineModel.showShortcutHint
+google3/third_party/jetski/cli/model/model.StatusLineModel.Store
+google3/third_party/jetski/cli/model/model.StatusLineModel.UIPhase
+google3/third_party/jetski/cli/store/store.(*Manager).initStatusLine
+google3/third_party/jetski/cli/store/store.(*Manager).initStatusLine.deferwrap1
+google3/third_party/jetski/cli/store/store.(*Manager).initStatusLine.func1
+google3/third_party/jetski/cli/store/store.(*Manager).SetStatusLineConfig
+google3/third_party/jetski/cli/store/store.(*Manager).StatusLineRunner
+google3/third_party/jetski/cli/store/store.(*Manager).StatusLineRunner.deferwrap1
+google3/third_party/jetski/cli/store/store.(*Manager).triggerStatusLineUpdate
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).ErrorHint
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).ErrorHint.deferwrap1
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Output
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Output.deferwrap1
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Padding
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Padding.deferwrap1
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).recordFailure
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).run
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Run.deferwrap1
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Run.func1
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Run.gowrap2
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Stop
+google3/third_party/jetski/cli/store/store.(*StatusLineRunner).Stop.deferwrap1
+google3/third_party/jetski/cli/store/store.BuildStatusLineData
+google3/third_party/jetski/cli/store/store.NewStatusLineRunner
+google3/third_party/jetski/cli/types/types.(*StatusLineConfig).CommandRendersTelemetry
+google3/third_party/jetski/cli/types/types.(*StatusLineData).SetTelemetry
+google3/third_party/jetski/cli/types/types.mergeStatusLine
+json:"statusLine,omitempty"
+Run /statusline delete to reset, or /statusline enable to retry.
+Statusline disabled after %d consecutive failures.
+statusline: %s (failure %d/%d)
+statusline: auto-disabled after %d consecutive failures. Last error: %s
+statusLineErrorReported
+third_party/jetski/cli/commands/statusline.go
+third_party/jetski/cli/model/statusline.go
+third_party/jetski/cli/store/statusline_data_builder.go
+third_party/jetski/cli/store/statusline_manager.go
+third_party/jetski/cli/store/statusline_runner.go
+third_party/jetski/cli/types/statusline_external.go

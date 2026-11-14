@@ -1,0 +1,56 @@
+    0.044  STEP boot
+    0.433              proc_start cmd.exe pid=57676 parent=19384
+    0.440      inv #1: sid='' state=authenticating width=80 stdin=823B stdout=32B exit=0 ran=0.0251s
+    0.477              proc_start python.exe pid=77540 parent=57676
+    0.548          screen: AGYLINE-MARK #0001 03:40:51.197
+    0.570              proc_end cmd.exe pid=57676
+    0.570              proc_end python.exe pid=77540
+    0.741      inv #2: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0241s
+    0.755              proc_start cmd.exe pid=23488 parent=19384
+    0.755              proc_start python.exe pid=28656 parent=23488
+    0.848          screen: AGYLINE-MARK #0002 03:40:51.496
+    0.849              proc_end cmd.exe pid=23488
+    0.849              proc_end python.exe pid=28656
+   60.077  STEP slash '/'
+   60.119      inv #3: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0298s
+   60.134              proc_start cmd.exe pid=23932 parent=19384
+   60.134              proc_start python.exe pid=31296 parent=23932
+   60.244          screen: AGYLINE-MARK #0003 03:41:50.889
+   60.258              proc_end cmd.exe pid=23932
+   60.258              proc_end python.exe pid=31296
+   60.412      inv #4: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0309s
+   60.438              proc_start cmd.exe pid=22400 parent=19384
+   60.438              proc_start python.exe pid=69240 parent=22400
+   60.543          screen: AGYLINE-MARK #0004 03:41:51.182
+   60.560              proc_end cmd.exe pid=22400
+   60.560              proc_end python.exe pid=69240
+   63.098  STEP model 'model'
+   65.139  STEP enter '\r'
+   65.190      inv #5: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0295s
+   65.229              proc_start cmd.exe pid=4392 parent=19384
+   65.229              proc_start python.exe pid=62268 parent=4392
+   65.299          screen: AGYLINE-MARK #0005 03:41:55.957
+   65.347              proc_end cmd.exe pid=4392
+   65.347              proc_end python.exe pid=62268
+   65.469      inv #6: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0348s
+   65.472              proc_start cmd.exe pid=47084 parent=19384
+   65.528              proc_start python.exe pid=62368 parent=47084
+   65.583          screen: AGYLINE-MARK #0006 03:41:56.232
+   65.639              proc_end cmd.exe pid=47084
+   65.639              proc_end python.exe pid=62368
+   69.157  STEP esc '\x1b'
+   69.277      inv #7: sid='' state=idle width=120 stdin=921B stdout=32B exit=0 ran=0.0323s
+   69.307              proc_start cmd.exe pid=31840 parent=19384
+   69.307              proc_start python.exe pid=73460 parent=31840
+   69.399          screen: AGYLINE-MARK #0007 03:42:00.053
+   69.430              proc_end cmd.exe pid=31840
+   69.430              proc_end python.exe pid=73460
+   69.577      inv #8: sid=79e1552f state=idle width=120 stdin=1031B stdout=32B exit=0 ran=0.0314s
+   69.615              proc_start cmd.exe pid=57212 parent=19384
+   69.615              proc_start python.exe pid=71696 parent=57212
+   69.699          screen: AGYLINE-MARK #0008 03:42:00.345
+   69.735              proc_end cmd.exe pid=57212
+   69.735              proc_end python.exe pid=71696
+   73.182  STEP idle
+   80.086          screen: (status line absent)
+   80.309  STEP pty_eof

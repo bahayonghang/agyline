@@ -1,0 +1,11 @@
+{
+  "trustedWorkspaces": [
+    "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s3-sleep8\\ws"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s3-sleep8/invocations minimal --sleep 8",
+    "enabled": true
+  },
+  "colorScheme": "colorblind-friendly dark"
+}

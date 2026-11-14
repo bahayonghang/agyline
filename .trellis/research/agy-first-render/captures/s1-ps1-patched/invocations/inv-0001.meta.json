@@ -1,0 +1,84 @@
+{
+ "seq": 1,
+ "mode": "wrap",
+ "t_process_created": 1794645914.0659924,
+ "t_start": 1794645914.1220758,
+ "pid": 71428,
+ "argv": [
+  "D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/invocations",
+  "wrap",
+  "--",
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/patched/statusline.ps1"
+ ],
+ "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-ps1-patched\\ws",
+ "ancestors": [
+  {
+   "pid": 71428,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 74652,
+   "exe": "cmd.exe"
+  },
+  {
+   "pid": 30792,
+   "exe": "agy.exe"
+  },
+  {
+   "pid": 65960,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 9784,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 65392,
+   "exe": "pwsh.exe"
+  }
+ ],
+ "parent_command_line": "cmd /c \"python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/invocations wrap -- pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/patched/statusline.ps1\"",
+ "stdin_isatty": false,
+ "stdout_isatty": false,
+ "env_names_agy": [
+  "AGY_CLI_DISABLE_AUTO_UPDATE",
+  "GEMINI_API_KEY"
+ ],
+ "env_term": {
+  "TERM": "xterm-256color",
+  "COLORTERM": "truecolor",
+  "COLUMNS": null,
+  "LINES": null,
+  "COLORFGBG": null,
+  "NO_COLOR": "1"
+ },
+ "t_stdin_eof": 1794645914.1454244,
+ "stdin_len": 839,
+ "wrapped": [
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/patched/statusline.ps1"
+ ],
+ "t_child_start": 1794645914.1463451,
+ "t_child_end": 1794645915.456571,
+ "child_seconds": 1.3102,
+ "child_stderr": "",
+ "stdout_len": 145,
+ "exit_code": 0,
+ "stdout_write": "ok",
+ "t_end": 1794645915.4576335,
+ "seconds": 1.3356
+}

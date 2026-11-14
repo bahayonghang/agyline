@@ -1,0 +1,113 @@
+I1114 03:51:26.644002      30 server.go:2543] Starting language server process with pid 69200
+I1114 03:51:26.644532      30 workflow_python.go:21] run_workflow Python: interpreter "", embedded true
+I1114 03:51:26.645572      30 server.go:2602] Language server version: 1.5.9
+I1114 03:51:26.645572      30 server.go:1269] Language server will attempt to listen on host localhost
+I1114 03:51:26.662000      30 server.go:1284] Language server listening on random port at 11072 for HTTPS (gRPC)
+I1114 03:51:26.662522      30 server.go:1292] Language server listening on random port at 11073 for HTTP
+I1114 03:51:26.670335      77 store_client.go:714] summary store: starting background reconciliation (trigger=startup)
+W1114 03:51:26.673983      30 defaults.go:717] failed to get cs path: cs path /usr/bin/cs invalid
+I1114 03:51:26.673983      30 manager.go:140] Creating trajectory store manager with proto store and SQLite store
+I1114 03:51:26.675521      77 store_client.go:764] summary store: reconciliation complete, synced 1 records
+I1114 03:51:26.675521     178 manager.go:98] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] is enabled
+I1114 03:51:26.676038     178 manager.go:107] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.676038     178 manager.go:98] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] is enabled
+I1114 03:51:26.676038     178 manager.go:107] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.676038     178 manager.go:98] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] is enabled
+I1114 03:51:26.676038     178 manager.go:107] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.676038     178 manager.go:95] Migration [MIGRATION_ID_LIN_BUILTIN_TO_MARKETPLACE] is disabled, skipping entirely
+I1114 03:51:26.676038     178 manager.go:95] Migration [MIGRATION_ID_ADOPT_BWG_INSTALLS] is disabled, skipping entirely
+I1114 03:51:26.676038     178 manager.go:95] Migration [MIGRATION_ID_GDRIVE_BUILTIN_PLUGIN] is disabled, skipping entirely
+I1114 03:51:26.676038     178 manager.go:95] Migration [MIGRATION_ID_SPLIT_SCIENCE_PLUGIN] is disabled, skipping entirely
+I1114 03:51:26.699886     212 server.go:4693] Auth succeeded, refreshing features and managers
+I1114 03:51:26.699886      30 server.go:3949] initialized server successfully in 55.6602ms
+I1114 03:51:26.699886     212 server.go:4727] [RemoteControl] Subscription callback triggered.
+I1114 03:51:26.699886       1 auto_updater.go:247] Auto-update disabled via environment variable AGY_CLI_DISABLE_AUTO_UPDATE
+I1114 03:51:26.700404       1 common.go:191] Launching CLI mode
+E1114 03:51:26.700404       1 launchsteps.go:95] Failed to resolve GeminiDir ".gemini": .gemini must be an absolute path: path is not absolute, falling back to default
+I1114 03:51:26.700404       1 common.go:212] CLI app data directory: C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s4-continue\home\.gemini\antigravity-cli
+I1114 03:51:26.700404       1 server.go:313] Creating CLI server backend: product=antigravity workspaceDirs=[C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s1-minimal\ws] appDataDir=C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s4-continue\home\.gemini\antigravity-cli languageServer=true codeAssist=true
+I1114 03:51:26.700404     212 server.go:4730] [RemoteControl] RemoteControlEnabled value: false
+I1114 03:51:26.700404     212 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:51:26.700404     212 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:51:26.700404     212 profiler.go:231] Continuous pprof profiling is disabled.
+I1114 03:51:26.700404     233 manager.go:98] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] is enabled
+I1114 03:51:26.700915     229 reconcile_summaries.go:94] [Summaries] reconcile checked 1 conversations, restored 0, cached 1, skipped 0, dropped 0, cancelled false in 0ms (resident: 0 -> 0)
+I1114 03:51:26.700915     233 manager.go:107] Migration [MIGRATION_ID_SANITY_CHECK_PROJECT_URIS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.700915     233 manager.go:98] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] is enabled
+I1114 03:51:26.700915     233 manager.go:107] Migration [MIGRATION_ID_PLUGIN_ENABLEMENT] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.700915     233 manager.go:98] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] is enabled
+I1114 03:51:26.700915     233 manager.go:107] Migration [MIGRATION_ID_BUILTIN_SIDECARS_TO_PLUGINS] already has status MIGRATION_STATUS_COMPLETED, skipping
+I1114 03:51:26.700915     233 manager.go:95] Migration [MIGRATION_ID_LIN_BUILTIN_TO_MARKETPLACE] is disabled, skipping entirely
+I1114 03:51:26.700915     233 manager.go:95] Migration [MIGRATION_ID_ADOPT_BWG_INSTALLS] is disabled, skipping entirely
+I1114 03:51:26.701438     233 manager.go:95] Migration [MIGRATION_ID_GDRIVE_BUILTIN_PLUGIN] is disabled, skipping entirely
+I1114 03:51:26.701438     233 manager.go:95] Migration [MIGRATION_ID_SPLIT_SCIENCE_PLUGIN] is disabled, skipping entirely
+E1114 03:51:26.702468     248 server.go:3255] Failed to read conversations directory C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s4-continue\home\.gemini\antigravity\conversations: open C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s4-continue/home/.gemini/antigravity/conversations: The system cannot find the path specified.
+I1114 03:51:26.702468     248 server.go:3120] ListConversations: cache miss for 1 conversations, loading 1 in parallel, deferring 0
+I1114 03:51:26.705081       1 server.go:3410] GetConversationDetail: found conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619 (active=false)
+I1114 03:51:26.705081       1 conversation.go:73] Continuing last-used conversation (from cache): 79e1552f-0163-4bbd-adaa-dc8b55cc0619
+I1114 03:51:26.706116       1 server.go:3410] GetConversationDetail: found conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619 (active=false)
+I1114 03:51:26.706116       1 projectresolve.go:97] project: resuming conversation belonging to project ID: default-cli-project
+I1114 03:51:26.706635       1 projectresolve.go:111] project: synced active project to "CLI Project" (id=default-cli-project) from resumed conversation
+I1114 03:51:26.706635       1 server.go:2267] Backend project ID updated dynamically to: default-cli-project
+I1114 03:51:26.706635       1 manager.go:555] Initializing CLI store manager for workspace C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s1-minimal\ws
+I1114 03:51:26.710411     248 server.go:3141] ListConversations returning 1 summaries
+I1114 03:51:26.744023       1 cli_setting_manager.go:98] CLI settings initialized: permissions=<nil>, toolPermission=request-review
+E1114 03:51:26.749863       1 errorreport.go:307] failed to get git info for workspace C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s1-minimal\ws: reference not found
+I1114 03:51:26.752645       1 hooks_manager.go:54] loaded 0 named hooks from 0 hooks.json file(s)
+I1114 03:51:26.752645     275 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:51:26.752645       1 manager.go:729] CLI store manager initialized successfully
+I1114 03:51:26.752645       1 common.go:346] CLI store manager created successfully
+I1114 03:51:26.752645       1 cli_setting_manager.go:228] ApplyProjectPermissionGrants: no grants for project "CLI Project", cleared project permissions
+I1114 03:51:26.757570       1 common.go:483] Resuming conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619
+I1114 03:51:26.757570       1 terminal_info_manager.go:354] Terminal detection: TERM="xterm-256color" altScreen=true ssh=false osc8=true osc52=true appleTerminalSSH=false
+I1114 03:51:26.757570     338 conversation_manager.go:1060] Streaming conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619
+I1114 03:51:26.757570       1 common.go:549] Starting CLI program
+CLI ready for user input
+I1114 03:51:26.758606     165 gemini_extensions.go:29] Detecting Gemini extensions in C:\Users\<user>\AppData\Local\Temp\agyline-research-fr\runs\s4-continue\home\.gemini\extensions
+I1114 03:51:26.758606     201 auth.go:157] ChainedAuth: authenticated via gemini_api_key (effective: gemini_api_key)
+I1114 03:51:26.758606     172 manager.go:1677] Reloading system slash commands and skills
+I1114 03:51:26.758606     165 gemini_extensions.go:50] No extensions found
+I1114 03:51:26.758606     172 manager.go:1633] Reloading system slash commands
+I1114 03:51:26.759290       1 analytics.go:249] CLI startup completed (took 118.6306ms, phases [main_entered=0ms ls_start=3ms ls_ready=59ms launch_cli=59ms backend_created=61ms project_resolved=66ms manager_created=112ms program_run=117ms tui_init_start=117ms tui_init_done=117ms])
+I1114 03:51:26.758606     201 server_oauth.go:221] applyAuthResult: email=, authMethod=gemini_api_key, quotaProject=
+I1114 03:51:26.759290     201 server_oauth.go:226] OAuth: authenticated successfully as 
+W1114 03:51:26.759290     391 cache.go:189] Failed to refresh cache in background: admin controls not applicable
+W1114 03:51:26.760877     354 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins/marketplace.json": Bad Gateway
+W1114 03:51:26.760877     354 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Bad Gateway
+I1114 03:51:26.761431     338 server.go:3410] GetConversationDetail: found conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619 (active=false)
+I1114 03:51:26.761951     201 model_config_manager.go:375] Propagating selected model override to backend: label="Gemini 3.1 Pro (Low)"
+I1114 03:51:26.761951     275 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:51:26.761951     276 experiment_manager.go:66] Starting experiment refresh after login
+I1114 03:51:26.761951     393 model_config_manager.go:375] Propagating selected model override to backend: label="Gemini 3.1 Pro (Low)"
+I1114 03:51:26.761951     275 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:51:26.762478     276 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:51:26.762478     276 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:51:26.762478     276 experiment_manager.go:70] Experiments refreshed after login
+I1114 03:51:26.762478     276 experiment_manager.go:66] Starting experiment refresh after login
+I1114 03:51:26.762478     273 manager.go:1726] SetCycleMode called: auto
+I1114 03:51:26.762478     273 manager.go:1732] auto mode is unavailable, falling back to default
+I1114 03:51:26.762478     209 manager.go:1633] Reloading system slash commands
+I1114 03:51:26.762993     276 server.go:5828] [RemoteControl] Session toggle is off, staying disconnected
+I1114 03:51:26.762993     276 server.go:5511] [RemoteControl] Resolved proxyServerURL: ""
+I1114 03:51:26.762993     276 experiment_manager.go:70] Experiments refreshed after login
+I1114 03:51:26.762993     423 manager.go:1633] Reloading system slash commands
+I1114 03:51:26.763541     338 server.go:1260] Starting conversation update stream for 79e1552f-0163-4bbd-adaa-dc8b55cc0619
+W1114 03:51:26.764073     325 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins/marketplace.json": Bad Gateway
+W1114 03:51:26.764073     325 catalog.go:169] Marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json" is unavailable, omitting it: failed to fetch marketplace "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Get "https://www.gstatic.com/antigravity/plugins-partners/marketplace.json": Bad Gateway
+I1114 03:51:26.768987     171 hooks_manager.go:54] loaded 0 named hooks from 0 hooks.json file(s)
+I1114 03:51:26.771126     275 quota_manager.go:36] doRefreshQuota: skipped (not logged in)
+I1114 03:51:26.780073     172 manager.go:1642] Slash commands unchanged, skipping update
+I1114 03:51:26.780073     423 manager.go:1642] Slash commands unchanged, skipping update
+I1114 03:51:26.809360     351 manager.go:1122] Full redraw completed (RerenderAll) for conversation 79e1552f-0163-4bbd-adaa-dc8b55cc0619 (epoch 0, items 1) in 0s
+E1114 03:51:31.665822      67 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:51:36.667677      67 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+E1114 03:51:41.669703      67 client.go:97] Post "https://play.googleapis.com/log": Bad Gateway
+I1114 03:51:45.476990       1 common.go:558] CLI program exited, shutting down
+I1114 03:51:45.477522       1 manager.go:940] CLI store manager shutting down
+I1114 03:51:45.480832       1 conversation_manager.go:1001] Stopping conversation stream
+I1114 03:51:45.480832     184 server.go:1323] Stream goroutine exited for 79e1552f-0163-4bbd-adaa-dc8b55cc0619, sending completion signal
+I1114 03:51:45.483470     778 server.go:4395] Language server shutting down
+I1114 03:51:45.483470     778 server.go:4422] Waiting for migrations to complete to prevent partial migration state...
+E1114 03:51:45.491385     162 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:51:45.491385     162 file_watcher.go:194] skipping empty or temp file: 
+E1114 03:51:45.493991     778 server.go:4524] Failed to shutdown telemetry client: Post "https://play.googleapis.com/log": Bad Gateway

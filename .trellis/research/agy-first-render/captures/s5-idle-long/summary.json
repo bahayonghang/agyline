@@ -1,0 +1,86 @@
+{
+ "t0": 1794645648.6237779,
+ "kind": "minimal",
+ "steps": [
+  "boot||330"
+ ],
+ "timeline": [
+  {
+   "seq": 1,
+   "rel_process_created": 0.437,
+   "rel_start": 0.487,
+   "rel_stdin_eof": 0.512,
+   "rel_end": 0.514,
+   "stdin_len": 831,
+   "stdout_len": 32,
+   "exit_code": 0,
+   "seconds": 0.0267,
+   "stdout_write": "ok",
+   "ancestors": [
+    "python.exe",
+    "cmd.exe",
+    "agy.exe",
+    "python.exe",
+    "python.exe",
+    "pwsh.exe"
+   ],
+   "payload_keys": [
+    "agent_state",
+    "context_window",
+    "conversation_id",
+    "cwd",
+    "exceeds_200k_tokens",
+    "model",
+    "product",
+    "sandbox",
+    "session_id",
+    "terminal_width",
+    "transcript_path",
+    "version",
+    "workspace"
+   ],
+   "session_id": "",
+   "conversation_id": "",
+   "agent_state": "authenticating"
+  },
+  {
+   "seq": 2,
+   "rel_process_created": 0.738,
+   "rel_start": 0.79,
+   "rel_stdin_eof": 0.818,
+   "rel_end": 0.82,
+   "stdin_len": 929,
+   "stdout_len": 32,
+   "exit_code": 0,
+   "seconds": 0.0296,
+   "stdout_write": "ok",
+   "ancestors": [
+    "python.exe",
+    "cmd.exe",
+    "agy.exe",
+    "python.exe",
+    "python.exe",
+    "pwsh.exe"
+   ],
+   "payload_keys": [
+    "agent_state",
+    "context_window",
+    "conversation_id",
+    "cwd",
+    "exceeds_200k_tokens",
+    "model",
+    "product",
+    "sandbox",
+    "session_id",
+    "terminal_width",
+    "transcript_path",
+    "vcs",
+    "version",
+    "workspace"
+   ],
+   "session_id": "",
+   "conversation_id": "",
+   "agent_state": "idle"
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+Captured 2026-11-14, 03:40-03:56 local time (UTC-5). Log timestamps in agy-cli.log are local time.
+
+OS            Microsoft Windows 11 Pro, build 26300 (10.0.26300)
+agy.exe       1.5.9, %LOCALAPPDATA%\agy\bin\agy.exe, 231726744 bytes
+              sha256 8803C289CAC04D6E53F2211592D9981C2D5760BC0D9B4A7F222EF6ECC7ABB38A (same before and after the runs)
+python        3.14.7 (C:\Program Files\Python314\python.exe; first `python` on PATH, used by the status line commands)
+pwsh          7.6.10
+git           2.56.0.windows.4
+harness venv  pywinpty 3.1.2 (ConPTY backend: agy.exe's parent is the harness python.exe, no winpty-agent), pyte 0.8.2
+terminal      40 rows x 120 columns, TERM=xterm-256color, COLORTERM=truecolor
+
+Reference scripts (sha256)
+  ref/agy-patch/statusline.ps1                 6E221C0FCAD47132F38D7F0EF1A78E4A4340F770540AB96210113CDE1AD914BD
+  ref/agy-patch/statusline.py                  A140D4F4C46CC19FE7B681CE5C619B683A5F01D62B50BCB9828525733F9B9806
+  ~/.gemini/antigravity-cli/statusline.ps1     6E221C0FCAD47132F38D7F0EF1A78E4A4340F770540AB96210113CDE1AD914BD
+  (the script the user's settings.json runs is byte-identical to the reference copy; hashed, not copied)
+
+Environment of the agy process in every run (observe.py, isolated_env)
+  USERPROFILE, HOME, HOMEDRIVE, HOMEPATH, APPDATA, LOCALAPPDATA -> <run>\home
+  TEMP, TMP -> <run>\tmp
+  GEMINI_API_KEY=probe (dummy), GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:<loopback model endpoint>
+  HTTPS_PROXY, HTTP_PROXY=http://127.0.0.1:<refusing loopback proxy>, NO_PROXY=127.0.0.1,localhost
+  AGY_CLI_DISABLE_AUTO_UPDATE=true
+  every inherited AGY_*, GEMINI_*, GOOGLE_*, ANTIGRAVITY_* variable removed
+  NO_COLOR=1 was inherited from the shell that started the harness; the s7-color-* runs remove it
+
+agy arguments   --settings {"modelProvider": "gemini"}   (s4-* add -c)
+Not used        --app_data_dir: on this build it is relative to ~/.gemini, so the home itself was redirected instead
+
+Requests during the runs
+  model_server.jsonl is empty in every run: no request reached the loopback model endpoint
+  proxy.jsonl lists what agy tried to reach and was refused: www.gstatic.com:443 (plugin marketplace)
+  and play.googleapis.com:443 (telemetry)

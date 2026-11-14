@@ -1,0 +1,75 @@
+{"t": 1794645768.778, "rel": 0.056, "event": "spawn", "pid": 7996, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-ps1\\ws", "size": "40x120", "kind": "ps1", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1/invocations wrap -- pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.ps1"}
+{"t": 1794645768.7795, "rel": 0.058, "event": "wait", "label": "boot"}
+{"t": 1794645768.7853, "rel": 0.064, "event": "first_output"}
+{"t": 1794645768.7871, "rel": 0.065, "event": "query", "what": "DA1"}
+{"t": 1794645769.2416, "rel": 0.52, "event": "query", "what": "OSC11"}
+{"t": 1794645769.2542, "rel": 0.533, "event": "proc_start", "pid": 48240, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645769.2543, "rel": 0.533, "event": "proc_start", "pid": 58632, "exe": "python.exe", "parent": 48240}
+{"t": 1794645769.358, "rel": 0.636, "event": "proc_start", "pid": 75408, "exe": "pwsh.exe", "parent": 58632}
+{"t": 1794645769.4471, "rel": 0.725, "event": "query", "what": "CPR"}
+{"t": 1794645769.5575, "rel": 0.836, "event": "proc_start", "pid": 17096, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645769.5576, "rel": 0.836, "event": "proc_start", "pid": 48600, "exe": "python.exe", "parent": 17096}
+{"t": 1794645769.5576, "rel": 0.836, "event": "proc_end", "pid": 48240, "exe": "cmd.exe"}
+{"t": 1794645769.6485, "rel": 0.927, "event": "proc_start", "pid": 4624, "exe": "pwsh.exe", "parent": 48600}
+{"t": 1794645769.8634, "rel": 1.142, "event": "proc_end", "pid": 75408, "exe": "pwsh.exe"}
+{"t": 1794645769.9087, "rel": 1.187, "event": "proc_end", "pid": 58632, "exe": "python.exe"}
+{"t": 1794645770.2015, "rel": 1.48, "event": "proc_end", "pid": 17096, "exe": "cmd.exe"}
+{"t": 1794645770.2016, "rel": 1.48, "event": "proc_end", "pid": 48600, "exe": "python.exe"}
+{"t": 1794645770.2016, "rel": 1.48, "event": "proc_end", "pid": 4624, "exe": "pwsh.exe"}
+{"t": 1794645783.7983, "rel": 15.077, "event": "step_done", "label": "boot", "shown": null, "screen": "01-boot.txt", "invocations": 2}
+{"t": 1794645783.7984, "rel": 15.077, "event": "keys", "label": "slash", "keys": "/"}
+{"t": 1794645783.8334, "rel": 15.112, "event": "proc_start", "pid": 38836, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645783.8336, "rel": 15.112, "event": "proc_start", "pid": 45228, "exe": "python.exe", "parent": 38836}
+{"t": 1794645783.9465, "rel": 15.225, "event": "proc_start", "pid": 43336, "exe": "pwsh.exe", "parent": 45228}
+{"t": 1794645784.129, "rel": 15.407, "event": "proc_start", "pid": 77760, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645784.1291, "rel": 15.407, "event": "proc_start", "pid": 4256, "exe": "python.exe", "parent": 77760}
+{"t": 1794645784.1291, "rel": 15.407, "event": "proc_end", "pid": 38836, "exe": "cmd.exe"}
+{"t": 1794645784.2495, "rel": 15.528, "event": "proc_start", "pid": 31368, "exe": "pwsh.exe", "parent": 4256}
+{"t": 1794645784.3707, "rel": 15.649, "event": "proc_end", "pid": 45228, "exe": "python.exe"}
+{"t": 1794645784.3708, "rel": 15.649, "event": "proc_end", "pid": 43336, "exe": "pwsh.exe"}
+{"t": 1794645784.6711, "rel": 15.949, "event": "proc_end", "pid": 77760, "exe": "cmd.exe"}
+{"t": 1794645784.6712, "rel": 15.95, "event": "proc_end", "pid": 4256, "exe": "python.exe"}
+{"t": 1794645784.6712, "rel": 15.95, "event": "proc_end", "pid": 31368, "exe": "pwsh.exe"}
+{"t": 1794645786.8466, "rel": 18.125, "event": "step_done", "label": "slash", "shown": null, "screen": "02-slash.txt", "invocations": 4}
+{"t": 1794645786.8467, "rel": 18.125, "event": "keys", "label": "model", "keys": "model"}
+{"t": 1794645788.8858, "rel": 20.164, "event": "step_done", "label": "model", "shown": null, "screen": "03-model.txt", "invocations": 4}
+{"t": 1794645788.8859, "rel": 20.164, "event": "keys", "label": "enter", "keys": "\r"}
+{"t": 1794645788.9453, "rel": 20.224, "event": "proc_start", "pid": 70496, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645788.9454, "rel": 20.224, "event": "proc_start", "pid": 20140, "exe": "python.exe", "parent": 70496}
+{"t": 1794645789.0625, "rel": 20.341, "event": "proc_start", "pid": 4392, "exe": "pwsh.exe", "parent": 20140}
+{"t": 1794645789.2477, "rel": 20.526, "event": "proc_start", "pid": 40328, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645789.2478, "rel": 20.526, "event": "proc_end", "pid": 70496, "exe": "cmd.exe"}
+{"t": 1794645789.3075, "rel": 20.586, "event": "proc_start", "pid": 8744, "exe": "python.exe", "parent": 40328}
+{"t": 1794645789.3604, "rel": 20.639, "event": "proc_start", "pid": 67404, "exe": "pwsh.exe", "parent": 8744}
+{"t": 1794645789.4893, "rel": 20.768, "event": "proc_end", "pid": 4392, "exe": "pwsh.exe"}
+{"t": 1794645789.5658, "rel": 20.844, "event": "proc_end", "pid": 20140, "exe": "python.exe"}
+{"t": 1794645789.8756, "rel": 21.154, "event": "proc_end", "pid": 8744, "exe": "python.exe"}
+{"t": 1794645789.8757, "rel": 21.154, "event": "proc_end", "pid": 67404, "exe": "pwsh.exe"}
+{"t": 1794645789.9317, "rel": 21.21, "event": "proc_end", "pid": 40328, "exe": "cmd.exe"}
+{"t": 1794645792.9397, "rel": 24.218, "event": "step_done", "label": "enter", "shown": null, "screen": "04-enter.txt", "invocations": 6}
+{"t": 1794645792.9397, "rel": 24.218, "event": "keys", "label": "esc", "keys": "\u001b"}
+{"t": 1794645793.1154, "rel": 24.394, "event": "proc_start", "pid": 24340, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645793.1155, "rel": 24.394, "event": "proc_start", "pid": 35756, "exe": "python.exe", "parent": 24340}
+{"t": 1794645793.2096, "rel": 24.488, "event": "proc_start", "pid": 61744, "exe": "pwsh.exe", "parent": 35756}
+{"t": 1794645793.4078, "rel": 24.686, "event": "proc_start", "pid": 32656, "exe": "cmd.exe", "parent": 7996}
+{"t": 1794645793.4079, "rel": 24.686, "event": "proc_end", "pid": 24340, "exe": "cmd.exe"}
+{"t": 1794645793.4552, "rel": 24.734, "event": "proc_start", "pid": 50632, "exe": "python.exe", "parent": 32656}
+{"t": 1794645793.5175, "rel": 24.796, "event": "proc_start", "pid": 65100, "exe": "pwsh.exe", "parent": 50632}
+{"t": 1794645793.6717, "rel": 24.95, "event": "proc_end", "pid": 35756, "exe": "python.exe"}
+{"t": 1794645793.6718, "rel": 24.95, "event": "proc_end", "pid": 61744, "exe": "pwsh.exe"}
+{"t": 1794645794.0359, "rel": 25.314, "event": "proc_start", "pid": 55888, "exe": "git.exe", "parent": 65100}
+{"t": 1794645794.036, "rel": 25.314, "event": "proc_start", "pid": 52964, "exe": "conhost.exe", "parent": 55888}
+{"t": 1794645794.0824, "rel": 25.361, "event": "proc_start", "pid": 54388, "exe": "git.exe", "parent": 55888}
+{"t": 1794645794.1296, "rel": 25.408, "event": "proc_end", "pid": 55888, "exe": "git.exe"}
+{"t": 1794645794.1297, "rel": 25.408, "event": "proc_end", "pid": 52964, "exe": "conhost.exe"}
+{"t": 1794645794.1297, "rel": 25.408, "event": "proc_end", "pid": 54388, "exe": "git.exe"}
+{"t": 1794645794.2112, "rel": 25.49, "event": "visible_change", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "05-visible.txt"}
+{"t": 1794645794.2372, "rel": 25.516, "event": "proc_end", "pid": 32656, "exe": "cmd.exe"}
+{"t": 1794645794.2372, "rel": 25.516, "event": "proc_end", "pid": 50632, "exe": "python.exe"}
+{"t": 1794645794.2373, "rel": 25.516, "event": "proc_end", "pid": 65100, "exe": "pwsh.exe"}
+{"t": 1794645796.9722, "rel": 28.251, "event": "step_done", "label": "esc", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "06-esc.txt", "invocations": 8}
+{"t": 1794645796.9723, "rel": 28.251, "event": "wait", "label": "idle"}
+{"t": 1794645803.0, "rel": 34.278, "event": "step_done", "label": "idle", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "07-idle.txt", "invocations": 8}
+{"t": 1794645803.8828, "rel": 35.161, "event": "visible_change", "shown": null, "screen": "08-hidden.txt"}
+{"t": 1794645804.0896, "rel": 35.368, "event": "pty_eof"}
+{"t": 1794645804.1235, "rel": 35.402, "event": "exit", "alive": false, "leftover_children": {}}

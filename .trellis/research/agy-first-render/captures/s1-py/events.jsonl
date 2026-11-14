@@ -1,0 +1,101 @@
+{"t": 1794645732.2347, "rel": 0.048, "event": "spawn", "pid": 49784, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-py\\ws", "size": "40x120", "kind": "py", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-py/invocations wrap -- python -I D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.py"}
+{"t": 1794645732.2361, "rel": 0.049, "event": "wait", "label": "boot"}
+{"t": 1794645732.2438, "rel": 0.057, "event": "first_output"}
+{"t": 1794645732.2457, "rel": 0.059, "event": "query", "what": "DA1"}
+{"t": 1794645732.6689, "rel": 0.482, "event": "query", "what": "OSC11"}
+{"t": 1794645732.6732, "rel": 0.486, "event": "proc_start", "pid": 43212, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645732.7322, "rel": 0.545, "event": "proc_start", "pid": 76048, "exe": "python.exe", "parent": 43212}
+{"t": 1794645732.7792, "rel": 0.592, "event": "proc_start", "pid": 52800, "exe": "python.exe", "parent": 76048}
+{"t": 1794645732.8835, "rel": 0.697, "event": "proc_start", "pid": 60440, "exe": "git.exe", "parent": 52800}
+{"t": 1794645732.8836, "rel": 0.697, "event": "proc_start", "pid": 72488, "exe": "conhost.exe", "parent": 60440}
+{"t": 1794645732.8836, "rel": 0.697, "event": "proc_start", "pid": 76508, "exe": "git.exe", "parent": 60440}
+{"t": 1794645732.9743, "rel": 0.787, "event": "proc_start", "pid": 42552, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645732.9744, "rel": 0.787, "event": "proc_start", "pid": 3692, "exe": "python.exe", "parent": 42552}
+{"t": 1794645732.9744, "rel": 0.787, "event": "proc_end", "pid": 43212, "exe": "cmd.exe"}
+{"t": 1794645732.9744, "rel": 0.787, "event": "proc_end", "pid": 76048, "exe": "python.exe"}
+{"t": 1794645732.9744, "rel": 0.787, "event": "proc_end", "pid": 52800, "exe": "python.exe"}
+{"t": 1794645732.9744, "rel": 0.787, "event": "proc_end", "pid": 60440, "exe": "git.exe"}
+{"t": 1794645732.9745, "rel": 0.787, "event": "proc_end", "pid": 72488, "exe": "conhost.exe"}
+{"t": 1794645732.9745, "rel": 0.787, "event": "proc_end", "pid": 76508, "exe": "git.exe"}
+{"t": 1794645733.0767, "rel": 0.89, "event": "proc_start", "pid": 40056, "exe": "python.exe", "parent": 3692}
+{"t": 1794645733.1725, "rel": 0.986, "event": "visible_change", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:59                                                            ", "screen": "01-visible.txt"}
+{"t": 1794645733.1848, "rel": 0.998, "event": "proc_end", "pid": 42552, "exe": "cmd.exe"}
+{"t": 1794645733.1849, "rel": 0.998, "event": "proc_end", "pid": 3692, "exe": "python.exe"}
+{"t": 1794645733.1849, "rel": 0.998, "event": "proc_end", "pid": 40056, "exe": "python.exe"}
+{"t": 1794645747.2706, "rel": 15.084, "event": "step_done", "label": "boot", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:59                                                            ", "screen": "02-boot.txt", "invocations": 2}
+{"t": 1794645747.2706, "rel": 15.084, "event": "keys", "label": "slash", "keys": "/"}
+{"t": 1794645747.3094, "rel": 15.122, "event": "proc_start", "pid": 68160, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645747.3095, "rel": 15.122, "event": "proc_start", "pid": 58020, "exe": "python.exe", "parent": 68160}
+{"t": 1794645747.4143, "rel": 15.227, "event": "proc_start", "pid": 34644, "exe": "python.exe", "parent": 58020}
+{"t": 1794645747.4622, "rel": 15.275, "event": "proc_start", "pid": 35700, "exe": "git.exe", "parent": 34644}
+{"t": 1794645747.4623, "rel": 15.275, "event": "proc_start", "pid": 22596, "exe": "conhost.exe", "parent": 35700}
+{"t": 1794645747.5092, "rel": 15.322, "event": "proc_start", "pid": 62180, "exe": "git.exe", "parent": 35700}
+{"t": 1794645747.5541, "rel": 15.367, "event": "visible_change", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:45                                                            ", "screen": "03-visible.txt"}
+{"t": 1794645747.5634, "rel": 15.376, "event": "proc_end", "pid": 68160, "exe": "cmd.exe"}
+{"t": 1794645747.5635, "rel": 15.376, "event": "proc_end", "pid": 58020, "exe": "python.exe"}
+{"t": 1794645747.5635, "rel": 15.376, "event": "proc_end", "pid": 34644, "exe": "python.exe"}
+{"t": 1794645747.5635, "rel": 15.376, "event": "proc_end", "pid": 35700, "exe": "git.exe"}
+{"t": 1794645747.5635, "rel": 15.377, "event": "proc_end", "pid": 22596, "exe": "conhost.exe"}
+{"t": 1794645747.5635, "rel": 15.377, "event": "proc_end", "pid": 62180, "exe": "git.exe"}
+{"t": 1794645747.6159, "rel": 15.429, "event": "proc_start", "pid": 52916, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645747.616, "rel": 15.429, "event": "proc_start", "pid": 37660, "exe": "python.exe", "parent": 52916}
+{"t": 1794645747.7067, "rel": 15.52, "event": "proc_start", "pid": 71164, "exe": "python.exe", "parent": 37660}
+{"t": 1794645747.7639, "rel": 15.577, "event": "proc_end", "pid": 52916, "exe": "cmd.exe"}
+{"t": 1794645747.764, "rel": 15.577, "event": "proc_end", "pid": 37660, "exe": "python.exe"}
+{"t": 1794645747.764, "rel": 15.577, "event": "proc_end", "pid": 71164, "exe": "python.exe"}
+{"t": 1794645750.2957, "rel": 18.109, "event": "step_done", "label": "slash", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:45                                                            ", "screen": "04-slash.txt", "invocations": 4}
+{"t": 1794645750.2958, "rel": 18.109, "event": "keys", "label": "model", "keys": "model"}
+{"t": 1794645752.3528, "rel": 20.166, "event": "step_done", "label": "model", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:45                                                            ", "screen": "05-model.txt", "invocations": 4}
+{"t": 1794645752.3529, "rel": 20.166, "event": "keys", "label": "enter", "keys": "\r"}
+{"t": 1794645752.4083, "rel": 20.221, "event": "proc_start", "pid": 54700, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645752.4083, "rel": 20.221, "event": "proc_start", "pid": 49228, "exe": "python.exe", "parent": 54700}
+{"t": 1794645752.4681, "rel": 20.281, "event": "proc_start", "pid": 75620, "exe": "python.exe", "parent": 49228}
+{"t": 1794645752.5787, "rel": 20.392, "event": "proc_start", "pid": 71108, "exe": "git.exe", "parent": 75620}
+{"t": 1794645752.5788, "rel": 20.392, "event": "proc_start", "pid": 8572, "exe": "conhost.exe", "parent": 71108}
+{"t": 1794645752.5789, "rel": 20.392, "event": "proc_start", "pid": 19584, "exe": "git.exe", "parent": 71108}
+{"t": 1794645752.63, "rel": 20.443, "event": "visible_change", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:40                                                            ", "screen": "06-visible.txt"}
+{"t": 1794645752.6405, "rel": 20.454, "event": "proc_end", "pid": 54700, "exe": "cmd.exe"}
+{"t": 1794645752.6406, "rel": 20.454, "event": "proc_end", "pid": 49228, "exe": "python.exe"}
+{"t": 1794645752.6406, "rel": 20.454, "event": "proc_end", "pid": 75620, "exe": "python.exe"}
+{"t": 1794645752.6406, "rel": 20.454, "event": "proc_end", "pid": 71108, "exe": "git.exe"}
+{"t": 1794645752.6406, "rel": 20.454, "event": "proc_end", "pid": 8572, "exe": "conhost.exe"}
+{"t": 1794645752.6406, "rel": 20.454, "event": "proc_end", "pid": 19584, "exe": "git.exe"}
+{"t": 1794645752.698, "rel": 20.511, "event": "proc_start", "pid": 72276, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645752.6981, "rel": 20.511, "event": "proc_start", "pid": 52800, "exe": "python.exe", "parent": 72276}
+{"t": 1794645752.8255, "rel": 20.638, "event": "proc_start", "pid": 76048, "exe": "python.exe", "parent": 52800}
+{"t": 1794645752.8798, "rel": 20.693, "event": "proc_end", "pid": 72276, "exe": "cmd.exe"}
+{"t": 1794645752.8799, "rel": 20.693, "event": "proc_end", "pid": 52800, "exe": "python.exe"}
+{"t": 1794645752.8799, "rel": 20.693, "event": "proc_end", "pid": 76048, "exe": "python.exe"}
+{"t": 1794645756.4002, "rel": 24.213, "event": "step_done", "label": "enter", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  4:40                                                            ", "screen": "07-enter.txt", "invocations": 6}
+{"t": 1794645756.4003, "rel": 24.213, "event": "keys", "label": "esc", "keys": "\u001b"}
+{"t": 1794645756.5208, "rel": 24.334, "event": "proc_start", "pid": 66072, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645756.582, "rel": 24.395, "event": "proc_start", "pid": 59152, "exe": "python.exe", "parent": 66072}
+{"t": 1794645756.6388, "rel": 24.452, "event": "proc_start", "pid": 71768, "exe": "python.exe", "parent": 59152}
+{"t": 1794645756.7479, "rel": 24.561, "event": "proc_start", "pid": 14420, "exe": "git.exe", "parent": 71768}
+{"t": 1794645756.748, "rel": 24.561, "event": "proc_start", "pid": 65336, "exe": "conhost.exe", "parent": 14420}
+{"t": 1794645756.748, "rel": 24.561, "event": "proc_start", "pid": 56628, "exe": "git.exe", "parent": 14420}
+{"t": 1794645756.8051, "rel": 24.618, "event": "proc_end", "pid": 66072, "exe": "cmd.exe"}
+{"t": 1794645756.8051, "rel": 24.618, "event": "proc_end", "pid": 71768, "exe": "python.exe"}
+{"t": 1794645756.8052, "rel": 24.618, "event": "proc_end", "pid": 14420, "exe": "git.exe"}
+{"t": 1794645756.8052, "rel": 24.618, "event": "proc_end", "pid": 65336, "exe": "conhost.exe"}
+{"t": 1794645756.8052, "rel": 24.618, "event": "proc_end", "pid": 56628, "exe": "git.exe"}
+{"t": 1794645756.8594, "rel": 24.672, "event": "proc_start", "pid": 62444, "exe": "cmd.exe", "parent": 49784}
+{"t": 1794645756.8594, "rel": 24.672, "event": "proc_start", "pid": 2720, "exe": "python.exe", "parent": 62444}
+{"t": 1794645756.8595, "rel": 24.672, "event": "proc_end", "pid": 59152, "exe": "python.exe"}
+{"t": 1794645756.9578, "rel": 24.771, "event": "proc_start", "pid": 49224, "exe": "python.exe", "parent": 2720}
+{"t": 1794645757.0167, "rel": 24.83, "event": "proc_start", "pid": 77660, "exe": "git.exe", "parent": 49224}
+{"t": 1794645757.0168, "rel": 24.83, "event": "proc_start", "pid": 70780, "exe": "conhost.exe", "parent": 77660}
+{"t": 1794645757.0768, "rel": 24.89, "event": "proc_start", "pid": 14872, "exe": "git.exe", "parent": 77660}
+{"t": 1794645757.12, "rel": 24.933, "event": "visible_change", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "08-visible.txt"}
+{"t": 1794645757.1367, "rel": 24.95, "event": "proc_end", "pid": 62444, "exe": "cmd.exe"}
+{"t": 1794645757.1367, "rel": 24.95, "event": "proc_end", "pid": 2720, "exe": "python.exe"}
+{"t": 1794645757.1368, "rel": 24.95, "event": "proc_end", "pid": 49224, "exe": "python.exe"}
+{"t": 1794645757.1368, "rel": 24.95, "event": "proc_end", "pid": 77660, "exe": "git.exe"}
+{"t": 1794645757.1368, "rel": 24.95, "event": "proc_end", "pid": 70780, "exe": "conhost.exe"}
+{"t": 1794645757.1368, "rel": 24.95, "event": "proc_end", "pid": 14872, "exe": "git.exe"}
+{"t": 1794645760.4597, "rel": 28.273, "event": "step_done", "label": "esc", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "09-esc.txt", "invocations": 8}
+{"t": 1794645760.4598, "rel": 28.273, "event": "wait", "label": "idle"}
+{"t": 1794645766.4946, "rel": 34.308, "event": "step_done", "label": "idle", "shown": "󰉋 ws | 󰊢 master ✓ |  0% |  cold                                                            ", "screen": "10-idle.txt", "invocations": 8}
+{"t": 1794645767.366, "rel": 35.179, "event": "visible_change", "shown": null, "screen": "11-hidden.txt"}
+{"t": 1794645767.5873, "rel": 35.4, "event": "pty_eof"}
+{"t": 1794645767.6455, "rel": 35.459, "event": "exit", "alive": false, "leftover_children": {}}

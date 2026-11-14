@@ -1,0 +1,78 @@
+    0.053  STEP boot
+    0.504              proc_start cmd.exe pid=40424 parent=3476
+    0.554              proc_start cmd.exe pid=77772 parent=3476
+    0.554              proc_start python.exe pid=69352 parent=77772
+    0.554              proc_end cmd.exe pid=40424
+    0.627              proc_start git.exe pid=54504 parent=69352
+    0.627              proc_start conhost.exe pid=5896 parent=54504
+    0.672              proc_start git.exe pid=24904 parent=54504
+    0.712          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  5:00
+    0.719              proc_end cmd.exe pid=77772
+    0.719              proc_end python.exe pid=69352
+    0.719              proc_end git.exe pid=54504
+    0.719              proc_end conhost.exe pid=5896
+    0.719              proc_end git.exe pid=24904
+    0.810              proc_start cmd.exe pid=24120 parent=3476
+    0.854              proc_start python.exe pid=14432 parent=24120
+    0.899              proc_end cmd.exe pid=24120
+    0.899              proc_end python.exe pid=14432
+    0.911          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:59
+   15.057  STEP slash '/'
+   15.086              proc_start cmd.exe pid=16352 parent=3476
+   15.148              proc_start python.exe pid=50276 parent=16352
+   15.203              proc_start git.exe pid=60988 parent=50276
+   15.203              proc_start conhost.exe pid=77536 parent=60988
+   15.263              proc_start git.exe pid=56988 parent=60988
+   15.288          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:45
+   15.326              proc_end cmd.exe pid=16352
+   15.326              proc_end python.exe pid=50276
+   15.326              proc_end git.exe pid=60988
+   15.326              proc_end conhost.exe pid=77536
+   15.326              proc_end git.exe pid=56988
+   15.389              proc_start cmd.exe pid=69168 parent=3476
+   15.452              proc_start python.exe pid=15512 parent=69168
+   15.512              proc_end cmd.exe pid=69168
+   15.512              proc_end python.exe pid=15512
+   18.090  STEP model 'model'
+   20.135  STEP enter '\r'
+   20.166              proc_start cmd.exe pid=26824 parent=3476
+   20.222              proc_start python.exe pid=5892 parent=26824
+   20.282              proc_start git.exe pid=46396 parent=5892
+   20.282              proc_start conhost.exe pid=73380 parent=46396
+   20.282              proc_start git.exe pid=77208 parent=46396
+   20.341              proc_end git.exe pid=46396
+   20.341              proc_end conhost.exe pid=73380
+   20.341              proc_end git.exe pid=77208
+   20.350          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:40
+   20.401              proc_end cmd.exe pid=26824
+   20.401              proc_end python.exe pid=5892
+   20.511              proc_start cmd.exe pid=52376 parent=3476
+   20.512              proc_start python.exe pid=61984 parent=52376
+   20.570              proc_end cmd.exe pid=52376
+   20.570              proc_end python.exe pid=61984
+   24.187  STEP esc '\x1b'
+   24.334              proc_start cmd.exe pid=22724 parent=3476
+   24.334              proc_start python.exe pid=43760 parent=22724
+   24.459              proc_start git.exe pid=75792 parent=43760
+   24.459              proc_start conhost.exe pid=74476 parent=75792
+   24.459              proc_start git.exe pid=62796 parent=75792
+   24.512          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:36
+   24.519              proc_end cmd.exe pid=22724
+   24.519              proc_end python.exe pid=43760
+   24.519              proc_end git.exe pid=75792
+   24.519              proc_end conhost.exe pid=74476
+   24.519              proc_end git.exe pid=62796
+   24.639              proc_start cmd.exe pid=53828 parent=3476
+   24.639              proc_start python.exe pid=69696 parent=53828
+   24.706              proc_start git.exe pid=66484 parent=69696
+   24.763              proc_start conhost.exe pid=19964 parent=66484
+   24.763              proc_start git.exe pid=32688 parent=66484
+   24.814          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  cold
+   24.822              proc_end cmd.exe pid=53828
+   24.822              proc_end python.exe pid=69696
+   24.822              proc_end git.exe pid=66484
+   24.822              proc_end conhost.exe pid=19964
+   24.822              proc_end git.exe pid=32688
+   28.233  STEP idle
+   35.135          screen: (status line absent)
+   35.347  STEP pty_eof

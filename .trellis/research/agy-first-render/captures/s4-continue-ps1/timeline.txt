@@ -1,0 +1,54 @@
+    0.090  STEP boot
+    0.418      inv #1: sid='' state=authenticating width=80 stdin=828B stdout=0B exit=0 ran=0.5304s
+    0.435              proc_start cmd.exe pid=47596 parent=18412
+    0.435              proc_start python.exe pid=47724 parent=47596
+    0.540              proc_start pwsh.exe pid=32756 parent=47724
+    0.736              proc_start cmd.exe pid=8580 parent=18412
+    0.736              proc_end cmd.exe pid=47596
+    0.736      inv #2: sid=79e1552f state=idle width=120 stdin=1036B stdout=175B exit=0 ran=0.7963s
+    0.781              proc_start python.exe pid=8028 parent=8580
+    0.833              proc_start pwsh.exe pid=77364 parent=8028
+    1.029              proc_end python.exe pid=47724
+    1.029              proc_end pwsh.exe pid=32756
+    1.428              proc_start git.exe pid=76380 parent=77364
+    1.428              proc_start conhost.exe pid=47744 parent=76380
+    1.428              proc_start git.exe pid=4156 parent=76380
+    1.519              proc_end git.exe pid=76380
+    1.519              proc_end conhost.exe pid=47744
+    1.519              proc_end git.exe pid=4156
+    1.600          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  cold
+    1.626              proc_end cmd.exe pid=8580
+    1.626              proc_end python.exe pid=8028
+    1.626              proc_end pwsh.exe pid=77364
+   12.099  STEP slash '/'
+   12.128      inv #3: sid=79e1552f state=idle width=120 stdin=1036B stdout=175B exit=0 ran=0.7029s
+   12.153              proc_start cmd.exe pid=68504 parent=18412
+   12.153              proc_start python.exe pid=54928 parent=68504
+   12.217              proc_start pwsh.exe pid=46576 parent=54928
+   12.429      inv #4: sid=79e1552f state=idle width=120 stdin=1036B stdout=175B exit=0 ran=0.5877s
+   12.476              proc_start cmd.exe pid=71492 parent=18412
+   12.476              proc_start python.exe pid=72456 parent=71492
+   12.476              proc_end cmd.exe pid=68504
+   12.536              proc_start pwsh.exe pid=15520 parent=72456
+   12.892              proc_end pwsh.exe pid=46576
+   12.950              proc_end python.exe pid=54928
+   13.132              proc_end cmd.exe pid=71492
+   13.132              proc_end python.exe pid=72456
+   13.132              proc_end pwsh.exe pid=15520
+   15.110  STEP close '\x7f'
+   15.133      inv #5: sid=79e1552f state=idle width=120 stdin=1036B stdout=175B exit=0 ran=0.6624s
+   15.152              proc_start cmd.exe pid=30972 parent=18412
+   15.152              proc_start python.exe pid=64728 parent=30972
+   15.277              proc_start pwsh.exe pid=54044 parent=64728
+   15.434      inv #6: sid=79e1552f state=idle width=120 stdin=1036B stdout=175B exit=0 ran=0.557s
+   15.458              proc_start cmd.exe pid=40632 parent=18412
+   15.458              proc_start python.exe pid=49828 parent=40632
+   15.458              proc_end cmd.exe pid=30972
+   15.521              proc_start pwsh.exe pid=12464 parent=49828
+   15.889              proc_end python.exe pid=64728
+   15.889              proc_end pwsh.exe pid=54044
+   16.070              proc_end cmd.exe pid=40632
+   16.070              proc_end python.exe pid=49828
+   16.070              proc_end pwsh.exe pid=12464
+   19.038          screen: (status line absent)
+   19.245  STEP pty_eof

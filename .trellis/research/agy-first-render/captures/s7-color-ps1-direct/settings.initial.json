@@ -1,0 +1,11 @@
+{
+  "trustedWorkspaces": [
+    "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s7-color-ps1-direct\\ws"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.ps1",
+    "enabled": true
+  },
+  "colorScheme": "colorblind-friendly dark"
+}
