@@ -1,0 +1,81 @@
+{
+ "seq": 29,
+ "mode": "wrap",
+ "t_process_created": 1794648654.4822197,
+ "t_start": 1794648654.5393362,
+ "pid": 72628,
+ "argv": [
+  "D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py",
+  "C:/Users/<user>/.gemini/antigravity-cli/brain/a158baf5-46d9-424b-8b67-57d7986b0f1f/scratch/real-session-raw/run1/invocations",
+  "wrap",
+  "--",
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "C:/Users/<user>/.gemini/antigravity-cli/statusline.ps1"
+ ],
+ "cwd": "D:\\Documents\\Code\\Web\\Exp\\agyline",
+ "ancestors": [
+  {
+   "pid": 72628,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 21328,
+   "exe": "cmd.exe"
+  },
+  {
+   "pid": 19036,
+   "exe": "agy.exe"
+  },
+  {
+   "pid": 45800,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 45320,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 13304,
+   "exe": "pwsh.exe"
+  }
+ ],
+ "parent_command_line": "cmd /c \"python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/.gemini/antigravity-cli/brain/a158baf5-46d9-424b-8b67-57d7986b0f1f/scratch/real-session-raw/run1/invocations wrap -- pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Users/<user>/.gemini/antigravity-cli/statusline.ps1\"",
+ "stdin_isatty": false,
+ "stdout_isatty": false,
+ "env_names_agy": [],
+ "env_term": {
+  "TERM": "xterm-256color",
+  "COLORTERM": "truecolor",
+  "COLUMNS": null,
+  "LINES": null,
+  "COLORFGBG": null,
+  "NO_COLOR": null
+ },
+ "t_stdin_eof": 1794648654.5683346,
+ "stdin_len": 1626,
+ "wrapped": [
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "C:/Users/<user>/.gemini/antigravity-cli/statusline.ps1"
+ ],
+ "t_child_start": 1794648654.5694,
+ "t_child_end": 1794648655.0758436,
+ "child_seconds": 0.5064,
+ "child_stderr": "",
+ "stdout_len": 406,
+ "exit_code": 0,
+ "stdout_write": "ok",
+ "t_end": 1794648655.0771909,
+ "seconds": 0.5379
+}

@@ -1,0 +1,40 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       <email> (<plan-tier>)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Carbon (High)
+   ▄▀▀    ▀▀▄     D:/Documents/Code/Web/Exp/agyline
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+────────────────────────────────────────────────────────────
+> Call invoke_subagent once with TypeName research, Role ProbeRoleLabel, Model flash_lite, and Prompt Say PONG only and
+  call no tools. Wait for it to finish, then reply with DONE only and call no other tools.
+⣾  Generating...
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Gemini 4 Carbon · High | 󰉋 agyline | 󰊢 dev ● |  0% |  5:00 | 󰁾 49% quota
+  ▸▸ auto mode on (shift+tab to cycle)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

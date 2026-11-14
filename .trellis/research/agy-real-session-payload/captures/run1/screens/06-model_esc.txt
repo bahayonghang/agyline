@@ -1,0 +1,40 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       <email> (<plan-tier>)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Carbon (High)
+   ▄▀▀    ▀▀▄     D:/Documents/Code/Web/Exp/agyline
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+
+ ┃ Introducing Gemini 4 Hydrogen
+ ┃ Our daily driver for rapid coding and dependable agentic execution!
+ ┃ esc to dismiss
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Gemini 4 Carbon · High | 󰉋 agyline | 󰊢 dev ● |  0% |  cold | 󰁾 49% quota
+  ▸▸ auto mode on (shift+tab to cycle)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
