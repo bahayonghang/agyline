@@ -1,0 +1,133 @@
+binary: agy.exe (231726744 bytes)
+types base: 0x14a312d20
+
+### types.StatusLineData  (rtype 0x14b70ff70, size 336)
+methods (value): none
+methods (pointer): SetTelemetry
+  +0    CWD                      string                                     json:"cwd"                         
+  +16   SessionID                string                                     json:"session_id"                  
+  +32   ConversationID           string                                     json:"conversation_id"             
+  +48   ConversationTitle        string                                     json:"conversation_title,omitempty" 
+  +64   TranscriptPath           string                                     json:"transcript_path,omitempty"   
+  +80   Model                    *types.StatusLineModelInfo                 json:"model"                       
+  +88   Workspace                *types.StatusLineWorkspace                 json:"workspace"                   
+  +96   Version                  string                                     json:"version"                     
+  +112  ContextWindow            *types.StatusLineContext                   json:"context_window"              
+  +120  Exceeds200kTokens        *bool                                      json:"exceeds_200k_tokens"         
+  +128  Agent                    *types.StatusLineAgent                     json:"agent,omitempty"             
+  +136  Product                  string                                     json:"product,omitempty"           
+  +152  Quota                    map[string]types.StatusLineQuotaBucket     json:"quota,omitempty"             
+  +160  AgentState               string                                     json:"agent_state,omitempty"       
+  +176  VCS                      *types.StatusLineVCS                       json:"vcs,omitempty"               
+  +184  CycleMode                string                                     json:"cycle_mode,omitempty"        
+  +200  Sandbox                  *types.StatusLineSandbox                   json:"sandbox,omitempty"           
+  +208  Subagents                []types.StatusLineSubagent                 json:"subagents,omitempty"         
+  +232  ArtifactCount            int                                        json:"artifact_count,omitempty"    
+  +240  PlanTier                 string                                     json:"plan_tier,omitempty"         
+  +256  Email                    string                                     json:"email,omitempty"             
+  +272  PendingInputCount        int                                        json:"pending_input_count,omitempty" 
+  +280  ToolConfirmationPending  bool                                       json:"tool_confirmation_pending,omitempty" 
+  +288  TaskCount                int                                        json:"task_count,omitempty"        
+  +296  TerminalWidth            int                                        json:"terminal_width,omitempty"    
+  +304  Battle                   *types.StatusLineBattle                    json:"battle,omitempty"            
+  +312  Vim                      *types.StatusLineVim                       json:"vim,omitempty"               
+  +320  Cost                     *types.StatusLineCost                      json:"cost,omitempty"              
+  +328  statusLineDataInternal   types.statusLineDataInternal                                                  embedded unexported
+
+### types.StatusLineModelInfo  (rtype 0x14b160f90, size 48)
+methods (value): none
+methods (pointer): none
+  +0    ID                       string                                     json:"id"                          
+  +16   DisplayName              string                                     json:"display_name"                
+  +32   Effort                   string                                     json:"effort,omitempty"            
+
+### types.StatusLineWorkspace  (rtype 0x14b0086d0, size 32)
+methods (value): none
+methods (pointer): none
+  +0    CurrentDir               string                                     json:"current_dir"                 
+  +16   ProjectDir               string                                     json:"project_dir"                 
+
+### types.StatusLineContext  (rtype 0x14b422908, size 48)
+methods (value): none
+methods (pointer): none
+  +0    TotalInputTokens         int                                        json:"total_input_tokens"          
+  +8    TotalOutputTokens        int                                        json:"total_output_tokens"         
+  +16   ContextWindowSize        int                                        json:"context_window_size"         
+  +24   UsedPercentage           *float64                                   json:"used_percentage"             
+  +32   RemainingPercentage      *float64                                   json:"remaining_percentage"        
+  +40   CurrentUsage             *types.StatusLineCurrentUsage              json:"current_usage"               
+
+### types.StatusLineCurrentUsage  (rtype 0x14b25bc60, size 32)
+methods (value): none
+methods (pointer): none
+  +0    InputTokens              int                                        json:"input_tokens"                
+  +8    OutputTokens             int                                        json:"output_tokens"               
+  +16   CacheCreationInputTokens int                                        json:"cache_creation_input_tokens" 
+  +24   CacheReadInputTokens     int                                        json:"cache_read_input_tokens"     
+
+### types.StatusLineAgent  (rtype 0x14aeb5e28, size 16)
+methods (value): none
+methods (pointer): none
+  +0    Name                     string                                     json:"name"                        
+
+### types.StatusLineQuotaBucket  (rtype 0x14b32e4b8, size 40)
+methods (value): none
+methods (pointer): none
+  +0    RemainingFraction        *float32                                   json:"remaining_fraction,omitempty" 
+  +8    RemainingAmount          *int64                                     json:"remaining_amount,omitempty"  
+  +16   ResetTime                *time.Time                                 json:"reset_time,omitempty"        
+  +24   ResetInSeconds           *int64                                     json:"reset_in_seconds,omitempty"  
+  +32   Disabled                 bool                                       json:"disabled,omitempty"          
+
+### types.StatusLineVCS  (rtype 0x14b25bde0, size 56)
+methods (value): none
+methods (pointer): none
+  +0    Type                     string                                     json:"type"                        
+  +16   Branch                   string                                     json:"branch,omitempty"            
+  +32   Client                   string                                     json:"client,omitempty"            
+  +48   Dirty                    bool                                       json:"dirty,omitempty"             
+
+### types.StatusLineSandbox  (rtype 0x14b008640, size 2)
+methods (value): none
+methods (pointer): none
+  +0    Enabled                  bool                                       json:"enabled"                     
+  +1    AllowNetwork             bool                                       json:"allow_network,omitempty"     
+
+### types.StatusLineSubagent  (rtype 0x14b25bd20, size 64)
+methods (value): none
+methods (pointer): none
+  +0    Name                     string                                     json:"name"                        
+  +16   Role                     string                                     json:"role,omitempty"              
+  +32   Model                    string                                     json:"model,omitempty"             
+  +48   Status                   string                                     json:"status"                      
+
+### types.StatusLineBattle  (rtype 0x14b0085b0, size 24)
+methods (value): none
+methods (pointer): none
+  +0    Status                   string                                     json:"status"                      
+  +16   FocusedArm               int                                        json:"focused_arm"                 
+
+### types.StatusLineVim  (rtype 0x14aeb5ea0, size 16)
+methods (value): none
+methods (pointer): none
+  +0    Mode                     string                                     json:"mode"                        
+
+### types.StatusLineCost  (rtype 0x14b160ee8, size 24)
+methods (value): none
+methods (pointer): none
+  +0    TotalUSD                 float64                                    json:"total_usd"                   
+  +8    SubagentUSD              float64                                    json:"subagent_usd"                
+  +16   Estimated                bool                                       json:"estimated"                   
+
+### types.statusLineDataInternal  (rtype 0x14adc6f30, size 0)
+methods (value): none
+methods (pointer): none
+
+### owners of json:"execution_mode..."
+  (no struct field in the binary carries this tag)
+
+### owners of json:"thinkingLevel..."
+  ThinkingLevel                json:"thinkingLevel,omitempty"           in genai.ThinkingConfig
+  ThinkingLevel                json:"thinkingLevel,omitempty"           in types.CustomModelConfig
+  ThinkingLevel                json:"thinkingLevel,omitempty"           in genai.ReinforcementTuningHyperParameters
+  ThinkingLevel                json:"thinkingLevel,omitempty"           in genai.CreateTuningJobConfig
