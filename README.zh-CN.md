@@ -4,7 +4,7 @@
 
 agyline 是给 Antigravity CLI（`agy`）用的状态栏：一个独立的 Rust 程序，自己带配置。它在 `agy` 里的位置，对应 [CCometixLine](https://github.com/Haleclipse/CCometixLine) 在 Claude Code 里的位置。
 
-这个 Rust 程序还没写进仓库。现在能跑的是 `ref/agy-patch` 里的脚本。该目录是本机参考材料，已写进 `.gitignore`。
+本仓库已实现 `agyline` Rust crate。`ref/agy-patch` 是本机参考脚本基线（已写入 `.gitignore`），`agyline` 默认外观与 `AGY_*` 环境变量行为与之对齐。
 
 写代码时要遵守的约定在 [AGENTS.md](AGENTS.md)。
 
@@ -45,28 +45,27 @@ Windows 上是 `statusline.ps1`，另一份是 Python 的 `statusline.py`。外�
 
 画这一行的过程里会跑 git status。`statusline.py` 把这次调用限在 1.5 秒，并复用两秒缓存。`statusline.ps1` 在同一条路径上读 git。
 
-## 做成独立程序
+## 仓库已实现功能
 
-每次刷新都要启动 PowerShell 或 Python。git status 赶在这一行印出来之前，缓存 touch 还会再开一个 shell。
+不同于每次刷新都启动 PowerShell 或 Python 的脚本，`agyline` 是编译后的单一 Rust 二进制：渲染输出路径绝不启动 shell，也绝不阻塞等待 `git`。本地 Git 状态刷新与缓存中继 touch 通过后台分离进程（`__refresh-git`、`__touch`）异步完成。
 
-换成 Rust 二进制之后，这次刷新就是该进程自己。它打印这一行时不用等 git，touch 也不再另开 shell。这个二进制是目标，仓库里还没有。
-
-上面的环境变量是要留下的行为。布局和外观改配置文件。CCometixLine 把配置放在 `~/.claude/ccline/config.toml`，运行 `ccline` 来改。agyline 对 `agy` 用同一套做法。
-
-## 打算做成的接口
-
-下面这些还没有代码。实现时用这些名字。
-
-| 部分 | 位置 |
+| 部分 | 已交付行为 |
 | --- | --- |
-| 二进制 | `agyline` |
-| 配置目录 | `~/.gemini/agyline/`，或 `AGYLINE_HOME` 指向的目录 |
-| 配置文件 | `config.toml`：预设、配色，以及每一行放哪些段。字段名和加载器在同一次改动里定下来 |
-| 在终端里直接运行 | 配置器，预览和真实状态栏用同一套渲染 |
-| 接到 `agy` | `~/.gemini/antigravity-cli/settings.json` 的 `statusLine.command`。写入前先把改动显示出来 |
-| 默认外观 | 上面的参考行 |
+| 二进制与 `just` 命令 | 单一 `agyline` crate（`cargo install --path .`），提供 `just ci`、`just install`、`just uninstall` 与 `just sandbox-install-test` |
+| 实时管道渲染 | `agy` 将单帧 JSON 写入 `agyline` 标准输入；`agyline` 输出 1 或 2 行 ANSI/纯文本状态栏，并支持按优先级的窄屏自适应压缩（`overflow = "fit"` / `"none"`） |
+| 20 项状态目录 | 工作区（`model`、`dir`、`git`）、用量（`context`、`cache`、`speed`、`budget`、可重复添加多桶的 `quota`、`cost`）、运行态（`mode`、`subagents`、`tasks`、`queue`、`sandbox`）与会话标识（`vim`、`title`、`agent`、`artifacts`、`version`、`plan`） |
+| 预设与调色板 | 内置预设（`cometix`、`minimal`、`dashboard`、`cache-focus`）及自定义 `~/.gemini/agyline/presets/*.toml`；内置 8 套调色板（`terminal`、`catppuccin-mocha`、`catppuccin-latte`、`tokyo-night`、`nord`、`gruvbox`、`rose-pine`、`dracula`）及自定义 `palettes/*.toml`；`terminal` 支持明暗双极性，其余 7 套 RGB 调色板各有固定极性，不匹配时回退到 `terminal` |
+| 配置目录与文件 | `~/.gemini/agyline/config.toml`（或 `AGYLINE_HOME`）：`version`、`preset`、`palette`、`theme`（`auto`/`dark`/`light`）、`glyphs`（`nerd`/`unicode`/`ascii`）、`color_depth`（`auto`/`truecolor`/`256`/`16`/`none`）、`separator`、`indent`、`single_line`、`overflow`；子表 `[thresholds]`、`[git]`、`[cache_relay]`、`[palette_overrides]` 与 `[[line]]`。显式 `AGY_*` 环境变量优先于 `config.toml`；`COLORFGBG` 在 `theme = "auto"` 时生效 |
+| 运行期状态 | `AGYLINE_HOME` 下的 `state/`（每会话遥测、有界 SQLite 响应模型查询、本地 Git 缓存、后台锁与 `previous_statusline.json` 快照；`cache_relay.py` 状态文件仍从系统临时目录只读） |
+| 交互式终端配置器 | 在终端直接运行 `agyline` 或 `agyline -c` / `--config`：四标签工作台（`Layout`、`Style & Presets`、`Thresholds & Runtime`、`agy Hook`），与实时状态栏无损共用渲染管线（零 ANSI 反解析），支持 100 步撤销/重做、实时只读 `TOML` 抽屉、损坏 `config.toml` 的 `.bak` 备份恢复、外部 `mtime` 冲突保护以及独立的 `settings.json` diff 预览确认 |
+| 公开子命令 | `agyline preview`（`--scenario`、`--all`、`--list`、`--input`、`--width`、`--plain`）、`agyline install`（`--dry-run`、`--yes`）、`agyline uninstall`（`--dry-run`、`--yes`、`--reset`、`--purge`） |
+| 接到 `agy` | `~/.gemini/antigravity-cli/settings.json` 的 `statusLine.command`（保留符号链接与其余键，写入前展示 unified diff，卸载时恢复原有 `statusLine`） |
 
 官方的 `agy` 和 `agy.exe` 保持安装时的样子。`agy` 把 `agyline` 当作 `statusLine` 命令来跑。
+
+## 后续发布规划
+
+通过 GitHub Releases 分发预编译包（Windows `msvc`、macOS 与纯静态 `musl` Linux，覆盖 `x86_64` 与 `arm64` 对齐官方 `agy` 发行目标；需同侧运行，不做 npm 包装）独立于本仓库本地 `cargo install --path .` 构建进行规划。
 
 ## 仍留在参考目录里的部分
 

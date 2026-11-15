@@ -1,0 +1,97 @@
+use std::ffi::OsStr;
+use std::fs;
+use std::io;
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+pub fn host_platform() -> super::PlatformKind {
+    super::PlatformKind::Unix
+}
+
+pub fn short_path_name(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
+pub fn user_home_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if let Some(val) = env_lookup("HOME") {
+        let trimmed = val.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    None
+}
+
+pub fn relay_temp_dir(_env_lookup: &dyn Fn(&str) -> Option<String>) -> PathBuf {
+    PathBuf::from("/tmp")
+}
+
+pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
+    let exe = std::env::current_exe()?;
+    Command::new(exe)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map(|_| ())
+}
+
+pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
+    fs::create_dir_all(path)?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
+pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
+}
+
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    match fs::rename(tmp, dst) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(tmp);
+            Err(err)
+        }
+    }
+}
+
+pub fn configure_background_command(_cmd: &mut Command) {}
+
+#[repr(C)]
+struct Winsize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+}
+
+#[cfg(target_os = "macos")]
+const TIOCGWINSZ: core::ffi::c_ulong = 0x4008_7468;
+#[cfg(not(target_os = "macos"))]
+const TIOCGWINSZ: core::ffi::c_ulong = 0x5413;
+
+unsafe extern "C" {
+    fn ioctl(fd: core::ffi::c_int, request: core::ffi::c_ulong, ...) -> core::ffi::c_int;
+}
+
+pub fn stdout_terminal_columns() -> Option<usize> {
+    let mut ws = Winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    // SAFETY: `ws` is a valid mutable `Winsize` struct passed to `TIOCGWINSZ` on stdout fd 1.
+    let rc = unsafe { ioctl(1, TIOCGWINSZ, &mut ws) };
+    if rc == 0 && ws.ws_col > 0 {
+        return Some(usize::from(ws.ws_col));
+    }
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|&c| c > 0)
+}

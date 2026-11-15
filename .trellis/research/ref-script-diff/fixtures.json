@@ -1,0 +1,2135 @@
+{
+  "total_cases": 65,
+  "matching_cases": 31,
+  "diverging_cases": 34,
+  "elapsed_seconds": 23.47,
+  "stray_system_temp_files_cleaned": 0,
+  "cases": [
+    {
+      "id": "A01_empty_stdin",
+      "category": "stdin_json",
+      "description": "空白 stdin 输入两边均静默退出",
+      "covers": [
+        "stdin"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "   \n",
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "A02_invalid_json",
+      "category": "stdin_json",
+      "description": "非法 JSON 输入两边均静默退出",
+      "covers": [
+        "stdin"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "{not-json",
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "A03_top_level_empty_array",
+      "category": "stdin_json",
+      "description": "顶层空数组 []：ps1 管道展开为 $null 退出，py 非 dict 退出",
+      "covers": [
+        "stdin"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "[]",
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "A04_top_level_nonempty_array",
+      "category": "stdin_json",
+      "description": "顶层非空数组 [1]：ps1 按默认字段渲染，py 检查 dict 输出 0 B",
+      "covers": [
+        "stdin"
+      ],
+      "divergence_id": "DIV-01",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "[1]",
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "A05_top_level_scalar",
+      "category": "stdin_json",
+      "description": "顶层标量 123：ps1 按默认字段渲染，py 检查 dict 输出 0 B",
+      "covers": [
+        "stdin"
+      ],
+      "divergence_id": "DIV-01",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "123",
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "A06_case_colliding_keys",
+      "category": "stdin_json",
+      "description": "仅大小写不同的重复键：ps1 ConvertFrom-Json 报错输出 0 B，py 正常渲染",
+      "covers": [
+        "stdin",
+        "session_id"
+      ],
+      "divergence_id": "DIV-02",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": "{\"session_id\":\"probe_a06\",\"x\":1,\"X\":2}",
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "A07_uppercase_field_names",
+      "category": "stdin_json",
+      "description": "JSON 键名大小写不一致（THINKINGLEVEL）：ps1 属性不区分大小写识别，py 忽略",
+      "covers": [
+        "session_id",
+        "thinkingLevel"
+      ],
+      "divergence_id": "DIV-03",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_a07",
+        "THINKINGLEVEL": "high"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 104,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "B01_missing_both_ids",
+      "category": "session_state",
+      "description": "session_id 与 conversation_id 均缺失：两边均回退到 default",
+      "covers": [
+        "session_id",
+        "conversation_id"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {},
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "B02_conversation_id_fallback",
+      "category": "session_state",
+      "description": "session_id 缺失、conversation_id 非空：两边均回退到 conversation_id",
+      "covers": [
+        "session_id",
+        "conversation_id"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "conversation_id": "probe_conv_b02"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "B03_empty_session_id_startup",
+      "category": "session_state",
+      "description": "agy 1.5.9 启动态 session_id=\"\" & conversation_id=\"\"：ps1 输出 0 B，py 按 default 渲染",
+      "covers": [
+        "session_id",
+        "conversation_id",
+        "agent_state",
+        "model.id",
+        "model.display_name",
+        "model.effort",
+        "cycle_mode",
+        "quota.*.remaining_fraction"
+      ],
+      "divergence_id": "DIV-04",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "",
+        "conversation_id": "",
+        "agent_state": "idle",
+        "model": {
+          "id": "Gemini 4 Carbon (High)",
+          "display_name": "Gemini 4 Carbon (High)",
+          "effort": "high"
+        },
+        "cycle_mode": "auto",
+        "quota": {
+          "3p-weekly": {
+            "remaining_fraction": 0.49016213
+          },
+          "gemini-5h": {
+            "remaining_fraction": 0.96379286
+          }
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 210,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;92m󰁾 49% quota\u001b[0m\n  \u001b[0m\u001b[0;91m▸▸ auto mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b39326df3b081be203439252071756f74611b5b306d0a20201b5b306d1b5b303b39316de296b8e296b8206175746f206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "B04_empty_session_id_with_conv_id",
+      "category": "session_state",
+      "description": "session_id=\"\" 但 conversation_id 非空：ps1 的 ?? 不跨空串，仍输出 0 B；py 用 conversation_id 渲染",
+      "covers": [
+        "session_id",
+        "conversation_id"
+      ],
+      "divergence_id": "DIV-04",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "",
+        "conversation_id": "probe_conv_b04"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "B05_agent_state_working",
+      "category": "session_state",
+      "description": "agent_state=\"working\"：两边均将缓存置为 5:00 热态",
+      "covers": [
+        "agent_state"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_b05",
+        "agent_state": "working"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      }
+    },
+    {
+      "id": "B06_agent_state_empty_string",
+      "category": "session_state",
+      "description": "agent_state=\"\"：ps1 的 ?? 保留空串且判 -ne 'idle' 显示 5:00（并写坏状态文件首列），py 归一为 idle 显示 cold",
+      "covers": [
+        "agent_state"
+      ],
+      "divergence_id": "DIV-05",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_b06",
+        "agent_state": ""
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C01_display_paren_effort",
+      "category": "model_effort",
+      "description": "display_name 括号 effort（Gemini 4 Carbon (High)）与显式 effort",
+      "covers": [
+        "model.display_name",
+        "model.id",
+        "model.effort"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c01",
+        "model": {
+          "id": "Gemini 4 Carbon (High)",
+          "display_name": "Gemini 4 Carbon (High)",
+          "effort": "high"
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 114,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 114,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C02_display_middledot_no_effort",
+      "category": "model_effort",
+      "description": "display_name 含中点 `Gemini 4 Carbon · High`（无 effort）：ps1 单引号内 `u{00b7} 不展开，颜色字节缺少灰色分隔符",
+      "covers": [
+        "model.display_name"
+      ],
+      "divergence_id": "DIV-06",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c02",
+        "model": {
+          "display_name": "Gemini 4 Carbon · High"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 100,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon · High\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e20c2b720486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 114,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C03_display_middledot_with_effort",
+      "category": "model_effort",
+      "description": "display_name 含 `Gemini 4 Carbon · High` 且同时带 model.effort=\"high\"：ps1 未剥离后缀导致可见文字重复两次 `· High`",
+      "covers": [
+        "model.display_name",
+        "model.effort"
+      ],
+      "divergence_id": "DIV-06",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c03",
+        "model": {
+          "display_name": "Gemini 4 Carbon · High",
+          "effort": "high"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 122,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon · High\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e20c2b720486967681b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 114,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C04_display_middledot_norm_effort",
+      "category": "model_effort",
+      "description": "display_name 含 `Gemini 4 Carbon · medium`：py 拆出并规整为 Med，ps1 原样保留小写 medium",
+      "covers": [
+        "model.display_name"
+      ],
+      "divergence_id": "DIV-06",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c04",
+        "model": {
+          "display_name": "Gemini 4 Carbon · medium"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 102,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon · medium\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e20c2b7206d656469756d1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mMed\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e1b5b303b33376d20c2b7201b5b303b39366d4d65641b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C05_effort_mapping_all_levels",
+      "category": "model_effort",
+      "description": "thinkingLevel 回退及全部 effort 映射（very_high -> xHigh）",
+      "covers": [
+        "model.id",
+        "thinkingLevel"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c05",
+        "model": {
+          "id": "models/claude-opus-4-6-1m-20250929"
+        },
+        "thinkingLevel": "very_high"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 111,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6 1M\u001b[0;37m · \u001b[0;96mxHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e3620314d1b5b303b33376d20c2b7201b5b303b39366d78486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 111,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6 1M\u001b[0;37m · \u001b[0;96mxHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e3620314d1b5b303b33376d20c2b7201b5b303b39366d78486967681b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C06_empty_effort_blocks_thinkinglevel",
+      "category": "model_effort",
+      "description": "model.effort=\"\" 且 thinkingLevel=\"max\"：ps1 的 ?? 停在空串丢掉 Max，py 回退渲染 Max",
+      "covers": [
+        "model.effort",
+        "thinkingLevel"
+      ],
+      "divergence_id": "DIV-04",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c06",
+        "model": {
+          "id": "claude-3-5-sonnet",
+          "effort": ""
+        },
+        "thinkingLevel": "max"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 87,
+        "utf8": "  \u001b[0m\u001b[0;96m Sonnet 3.5\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca320536f6e6e657420332e351b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 108,
+        "utf8": "  \u001b[0m\u001b[0;96m Sonnet 3.5\u001b[0;37m · \u001b[0;96mMax\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca320536f6e6e657420332e351b5b303b33376d20c2b7201b5b303b39366d4d61781b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C07_gpt_standard_4o_32k",
+      "category": "model_effort",
+      "description": "GPT 常规与数字开头后缀（gpt-4o-32k）：两边均输出 GPT-4 O 32K",
+      "covers": [
+        "model.id"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c07",
+        "model": {
+          "id": "gpt-4o-32k"
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 88,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-4 O 32K\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d34204f2033324b1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 88,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-4 O 32K\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d34204f2033324b1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C08_gpt_alnum_word_titlecase",
+      "category": "model_effort",
+      "description": "GPT 字母+数字+字母后缀（gpt-5-o4mini）：ps1 ToTitleCase 输出 O4mini，py .title() 输出 O4Mini",
+      "covers": [
+        "model.id"
+      ],
+      "divergence_id": "DIV-07",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c08",
+        "model": {
+          "id": "gpt-5-o4mini"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 89,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-5 O4mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d35204f346d696e691b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 89,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-5 O4Mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d35204f344d696e691b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C09_gpt_double_hyphen",
+      "category": "model_effort",
+      "description": "GPT 连续连字符（gpt-4--mini）：ps1 只去单个前导连字符输出双空格 `GPT-4  Mini`，py 输出 `GPT-4 Mini`",
+      "covers": [
+        "model.id"
+      ],
+      "divergence_id": "DIV-08",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c09",
+        "model": {
+          "id": "gpt-4--mini"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 88,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-4  Mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d3420204d696e691b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 87,
+        "utf8": "  \u001b[0m\u001b[0;96m GPT-4 Mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204750542d34204d696e691b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C10_uppercase_prefix_suffix_slug",
+      "category": "model_effort",
+      "description": "大写前缀/后缀（MODELS/gemini-2.5-pro-PREVIEW）：ps1 -replace 不区分大小写剥离，py 区分大小写保留原串",
+      "covers": [
+        "model.id"
+      ],
+      "divergence_id": "DIV-09",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c10",
+        "model": {
+          "id": "MODELS/gemini-2.5-pro-PREVIEW"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 91,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 2.5 Pro\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e6920322e352050726f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 106,
+        "utf8": "  \u001b[0m\u001b[0;96m MODELS/gemini-2.5-pro-PREVIEW\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d4f44454c532f67656d696e692d322e352d70726f2d505245564945571b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "C11_generic_kebab_slug",
+      "category": "model_effort",
+      "description": "通用 kebab-case 美化（gemini-4-carbon-v2 -> Gemini 4 Carbon V2）",
+      "covers": [
+        "model.id"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_c11",
+        "model": {
+          "id": "gemini-4-carbon-v2-preview-05-06"
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 95,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon V2\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e2056321b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 95,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon V2\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e69203420436172626f6e2056321b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D01_workspace_fallbacks",
+      "category": "cwd_vcs",
+      "description": "cwd 缺失时依次回退 workspace.current_dir / workspace.project_dir",
+      "covers": [
+        "cwd",
+        "workspace.current_dir",
+        "workspace.project_dir"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_d01",
+        "workspace": {
+          "project_dir": "D:\\NonExistent\\agyline-demo\\\\"
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 123,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m agyline-demo\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206167796c696e652d64656d6f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 123,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m agyline-demo\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206167796c696e652d64656d6f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D02_empty_cwd_blocks_workspace",
+      "category": "cwd_vcs",
+      "description": "cwd=\"\" 且 workspace.current_dir 非空：ps1 的 ?? 停在空串丢掉目录段与 Git 段，py 回退正常渲染",
+      "covers": [
+        "cwd",
+        "workspace.current_dir"
+      ],
+      "divergence_id": "DIV-04",
+      "via_cmd_cp": null,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d02",
+        "cwd": "<TEMP_FIXTURE>/",
+        "workspace": {
+          "current_dir": "<TEMP_FIXTURE>/ws-repo"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 148,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m ws-repo\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d2077732d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D03_drive_root_cwd",
+      "category": "cwd_vcs",
+      "description": "盘符根目录 cwd=\"D:\\\\\"：两边均回退显示 D:",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_d03",
+        "cwd": "D:\\"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m D:\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20443a1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m D:\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20443a1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D04_git_clean_repo",
+      "category": "cwd_vcs",
+      "description": "干净 Git 仓库：两边均通过 git status --porcelain=v2 渲染 main ✓",
+      "covers": [
+        "cwd",
+        "vcs.branch",
+        "vcs.dirty"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d04",
+        "vcs": {
+          "type": "git"
+        },
+        "cwd": "<TEMP_FIXTURE>/clean-repo"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 151,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m clean-repo\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636c65616e2d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 151,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m clean-repo\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636c65616e2d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D05_git_dirty_ahead_behind",
+      "category": "cwd_vcs",
+      "description": "Git ahead/behind 与长分支截断（>24 字符截为 23+…）及 payload vcs.dirty=true",
+      "covers": [
+        "cwd",
+        "vcs.branch",
+        "vcs.dirty"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d05",
+        "vcs": {
+          "dirty": true
+        },
+        "cwd": "<TEMP_FIXTURE>/ab-repo"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 180,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m ab-repo\u001b[0;37m | \u001b[0;94m󰊢 feature/twenty-five-cha… ● ↑2 ↓1\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d2061622d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa220666561747572652f7477656e74792d666976652d636861e280a620e2978f20e286913220e28693311b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 180,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m ab-repo\u001b[0;37m | \u001b[0;94m󰊢 feature/twenty-five-cha… ● ↑2 ↓1\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d2061622d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa220666561747572652f7477656e74792d666976652d636861e280a620e2978f20e286913220e28693311b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D06_git_conflict_and_detached",
+      "category": "cwd_vcs",
+      "description": "Git 合并冲突状态（红色 ⚠）",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d06",
+        "cwd": "<TEMP_FIXTURE>/conf-repo"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 157,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m conf-repo\u001b[0;37m | \u001b[0;94m󰊢\u001b[0;31m main ⚠\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636f6e662d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa21b5b303b33316d206d61696e20e29aa01b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 157,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m conf-repo\u001b[0;37m | \u001b[0;94m󰊢\u001b[0;31m main ⚠\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636f6e662d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa21b5b303b33316d206d61696e20e29aa01b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D07_git_detached_head",
+      "category": "cwd_vcs",
+      "description": "Git detached HEAD 显示 7 位短 commit SHA",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d07",
+        "cwd": "<TEMP_FIXTURE>/det-repo"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 152,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m det-repo\u001b[0;37m | \u001b[0;94m󰊢 fb7464b ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206465742d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa2206662373436346220e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 152,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m det-repo\u001b[0;37m | \u001b[0;94m󰊢 fb7464b ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206465742d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa2206662373436346220e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D08_git_junction_into_repo",
+      "category": "cwd_vcs",
+      "description": "目录 Junction 指向仓库内子目录：ps1 GetFullPath 纯词法上溯漏掉 .git，py Path.resolve() 解析真实路径渲染 Git 段",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": "DIV-10",
+      "via_cmd_cp": null,
+      "setup": "git_junction",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d08",
+        "cwd": "<TEMP_FIXTURE>/linked_pkg"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 121,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m linked_pkg\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206c696e6b65645f706b671b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 151,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m linked_pkg\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d206c696e6b65645f706b671b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D09_branch_emoji_utf16_vs_codepoint",
+      "category": "cwd_vcs",
+      "description": "含 Emoji 的分支名（24 码点 = 25 UTF-16 码元，且第 23 UTF-16 码元切在代理对中间）：ps1 截断并产生损坏替换符 ，py 不截断",
+      "covers": [
+        "vcs.branch"
+      ],
+      "divergence_id": "DIV-11",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_d09",
+        "vcs": {
+          "branch": "aaaaaaaaaaaaaaaaaaaaaa🚀b"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 136,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 aaaaaaaaaaaaaaaaaaaaaa�… ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39346df3b08aa22061616161616161616161616161616161616161616161efbfbde280a620e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 135,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 aaaaaaaaaaaaaaaaaaaaaa🚀b ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39346df3b08aa22061616161616161616161616161616161616161616161f09f9a806220e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D10_vcs_dirty_nonbool_int",
+      "category": "cwd_vcs",
+      "description": "布尔字段传整数 1（vcs.dirty=1, sandbox.enabled=1）：ps1 -eq $true 判真，py is True 判假",
+      "covers": [
+        "vcs.branch",
+        "vcs.dirty",
+        "sandbox.enabled"
+      ],
+      "divergence_id": "DIV-12",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_d10",
+        "vcs": {
+          "branch": "main",
+          "dirty": 1
+        },
+        "sandbox": {
+          "enabled": 1
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 141,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 main ●\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;96m sandbox\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e2978f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39366def84b22073616e64626f781b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 112,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39346df3b08aa2206d61696e20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D11_cp936_non_ascii_stdin",
+      "category": "cwd_vcs",
+      "description": "简体中文默认控制台代码页 CP936 下含中文路径的 UTF-8 stdin：ps1 未设 InputEncoding 致 GBK 吞引号 JSON 解析失败输出 0 B，py 正常输出",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": "DIV-13",
+      "via_cmd_cp": 936,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_d11",
+        "cwd": "D:\\中文目录\\项目名",
+        "model": {
+          "display_name": "Gemini 4 (High)"
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 145,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 4\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m 项目名\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e6920341b5b303b33376d20c2b7201b5b303b39366d486967681b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20e9a1b9e79baee5908d1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "D12_cp437_non_ascii_git_branch",
+      "category": "cwd_vcs",
+      "description": "CP437 控制台代码页下含中文 Git 分支名：ps1 未设 StandardOutputEncoding 输出乱码，py UTF-8 解码正常",
+      "covers": [
+        "cwd"
+      ],
+      "divergence_id": "DIV-13",
+      "via_cmd_cp": 437,
+      "setup": "git_repo",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d12",
+        "cwd": "<TEMP_FIXTURE>/cn-branch-repo"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 181,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m cn-branch-repo\u001b[0;37m | \u001b[0;94m󰊢 feat/Σ╕¡µûçσêåµö» ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636e2d6272616e63682d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa220666561742fcea3e29595c2a1c2b5c3bbc3a7cf83c3aac3a5c2b5c3b6c2bb20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 168,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m cn-branch-repo\u001b[0;37m | \u001b[0;94m󰊢 feat/中文分支 ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39336df3b0898b1b5b303b39326d20636e2d6272616e63682d7265706f1b5b303b33376d207c201b5b303b39346df3b08aa220666561742fe4b8ade69687e58886e694af20e29c931b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "E01_ctx_tokens_and_cache_hit",
+      "category": "numbers_budget",
+      "description": "上下文窗口正常态（<50%）、k 缩写与缓存命中率",
+      "covers": [
+        "context_window.current_usage.input_tokens",
+        "context_window.current_usage.output_tokens",
+        "context_window.current_usage.cache_read_input_tokens",
+        "context_window.context_window_size",
+        "agent_state"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e01",
+        "agent_state": "working",
+        "context_window": {
+          "context_window_size": 1048576,
+          "current_usage": {
+            "input_tokens": 12000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 198000
+          }
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 144,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 20%\u001b[0;37m · \u001b[0;95m210k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0;37m · \u001b[0;34m94% hit\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d203230251b5b303b33376d20c2b7201b5b303b39356d3231306b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b303b33376d20c2b7201b5b303b33346d393425206869741b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 144,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 20%\u001b[0;37m · \u001b[0;95m210k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0;37m · \u001b[0;34m94% hit\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d203230251b5b303b33376d20c2b7201b5b303b39356d3231306b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b303b33376d20c2b7201b5b303b33346d393425206869741b5b306d0a"
+      }
+    },
+    {
+      "id": "E02_ctx_warn_and_crit_thresholds",
+      "category": "numbers_budget",
+      "description": "上下文窗口 50% 告警色与 >=80% 危险色及 M 缩写（1,250,000 -> 1.2M，验证两边均为 IEEE-754 ties-to-even）",
+      "covers": [
+        "context_window.current_usage.input_tokens",
+        "context_window.context_window_size"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e02",
+        "context_window": {
+          "context_window_size": 1500000,
+          "current_usage": {
+            "input_tokens": 1250000
+          }
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 119,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;31m 83%\u001b[0;37m · \u001b[0;31m1.2M tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b33316d203833251b5b303b33376d20c2b7201b5b303b33316d312e324d20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 119,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;31m 83%\u001b[0;37m · \u001b[0;31m1.2M tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b33316d203833251b5b303b33376d20c2b7201b5b303b33316d312e324d20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "E03_rounding_midpoints_ties_to_even",
+      "category": "numbers_budget",
+      "description": "核验 .NET 7+ F0/F1/F2/F3 与 Python 舍入一致性：10.5%->10%、$2.675->$2.67、quota 0.445->44%（全部零分歧）",
+      "covers": [
+        "context_window.used_percentage",
+        "context_window.context_window_size",
+        "cost",
+        "quota.*.remaining_fraction"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e03",
+        "context_window": {
+          "used_percentage": 10.5,
+          "context_window_size": 200000
+        },
+        "cost": 2.675,
+        "quota": {
+          "a": {
+            "remaining_fraction": 0.445
+          },
+          "b": {
+            "remaining_fraction": 0.01,
+            "disabled": true
+          }
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 172,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 10%\u001b[0;37m · \u001b[0;95m21k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m󰁼 44% quota\u001b[0;37m · \u001b[0;33m$2.67\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d203130251b5b303b33376d20c2b7201b5b303b39356d32316b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33336df3b081bc203434252071756f74611b5b303b33376d20c2b7201b5b303b33336d24322e36371b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 172,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 10%\u001b[0;37m · \u001b[0;95m21k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m󰁼 44% quota\u001b[0;37m · \u001b[0;33m$2.67\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d203130251b5b303b33376d20c2b7201b5b303b39356d32316b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33336df3b081bc203434252071756f74611b5b303b33376d20c2b7201b5b303b33336d24322e36371b5b306d0a"
+      }
+    },
+    {
+      "id": "E04_rounding_small_pct_and_subdollar_cost",
+      "category": "numbers_budget",
+      "description": "核验 <10% 的 F1（0.25%->0.2%）与 <$1 的 F3（$0.0625->$0.062）及 cost.total_usd 对象读法",
+      "covers": [
+        "context_window.used_percentage",
+        "cost",
+        "quota.*.remaining_fraction"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e04",
+        "context_window": {
+          "used_percentage": 0.25
+        },
+        "cost": {
+          "total_usd": 0.0625
+        },
+        "quota": {
+          "3p-5h": {
+            "remaining_fraction": 0.15
+          }
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 139,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0.2%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;31m󰁺 15% quota\u001b[0;37m · \u001b[0;33m$0.062\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b20302e32251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33316df3b081ba203135252071756f74611b5b303b33376d20c2b7201b5b303b33336d24302e3036321b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 139,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0.2%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;31m󰁺 15% quota\u001b[0;37m · \u001b[0;33m$0.062\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b20302e32251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33316df3b081ba203135252071756f74611b5b303b33376d20c2b7201b5b303b33336d24302e3036321b5b306d0a"
+      }
+    },
+    {
+      "id": "E05_cost_top_level_string",
+      "category": "numbers_budget",
+      "description": "cost 为顶层数字字符串 \"0.42\"：ps1 解析渲染 $0.420，py 只接受 dict/int/float 忽略之",
+      "covers": [
+        "cost"
+      ],
+      "divergence_id": "DIV-14",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e05",
+        "cost": "0.42"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 105,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m$0.420\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33336d24302e3432301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "E06_quota_fraction_gt_one",
+      "category": "numbers_budget",
+      "description": "quota.remaining_fraction > 1.0（如 1.2）：ps1 有 <=1.0 上限不显示配额段，py 无上限直接渲染 120% quota",
+      "covers": [
+        "quota.*.remaining_fraction"
+      ],
+      "divergence_id": "DIV-15",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e06",
+        "quota": {
+          "b": {
+            "remaining_fraction": 1.2
+          }
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 114,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;92m󰁹 120% quota\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b39326df3b081b920313230252071756f74611b5b306d0a"
+      }
+    },
+    {
+      "id": "E07_numeric_string_underscore_and_inf",
+      "category": "numbers_budget",
+      "description": "数字字符串含 \"inf\"：py 的 _to_int 抛未捕获 OverflowError 退出码 1 输出 0 B，ps1 回退为 0 正常输出",
+      "covers": [
+        "task_count"
+      ],
+      "divergence_id": "DIV-16",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_e07",
+        "task_count": "inf"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 1,
+        "byte_len": 0,
+        "utf8": "",
+        "hex": ""
+      }
+    },
+    {
+      "id": "F01_stateful_tps_from_telemetry",
+      "category": "stateful_db",
+      "description": "从 agy_telemetry_<sid>.dat 读取上一次 tok/s 与热缓存倒计时",
+      "covers": [
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "telemetry",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f01",
+        "context_window": {
+          "total_output_tokens": 500
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;37m | \u001b[0;92m 64.5 tok/s\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20333a30301b5b303b33376d207c201b5b303b39326def83a72036342e3520746f6b2f731b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;37m | \u001b[0;92m 64.5 tok/s\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20333a30301b5b303b33376d207c201b5b303b39326def83a72036342e3520746f6b2f731b5b306d0a"
+      }
+    },
+    {
+      "id": "F02_temp_vs_tmp_precedence",
+      "category": "stateful_db",
+      "description": "Windows 下 TEMP 与 TMP 指向不同目录：ps1 GetTempPath 读 TMP，py gettempdir 读 TEMP，状态文件互不可见",
+      "covers": [
+        "session_id"
+      ],
+      "divergence_id": "DIV-17",
+      "via_cmd_cp": null,
+      "setup": "temp_vs_tmp",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f02"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 113,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:59\u001b[0;37m | \u001b[0;92m 48.2 tok/s\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20333a35391b5b303b33376d207c201b5b303b39326def83a72034382e3220746f6b2f731b5b306d0a"
+      }
+    },
+    {
+      "id": "F03_db_response_model_match",
+      "category": "stateful_db",
+      "description": "会话库 gen_metadata 含常规模型（claude-opus-4-6）：两边均把 Auto 替换为 Opus 4.6",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f03",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 4:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20343a30301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 4:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20343a30301b5b306d0a"
+      }
+    },
+    {
+      "id": "F04_db_gt256kb_steps_tail",
+      "category": "stateful_db",
+      "description": "真实会话高频场景：steps 表追加 >256 KB 使 gen_metadata 距文件尾超 256 KB，ps1 漏检保留 Auto，py 查 SQLite 命中 Opus 4.6",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f04",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 81,
+        "utf8": "  \u001b[0m\u001b[0;96m Auto\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204175746f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "F05_db_wal_stale_frame",
+      "category": "stateful_db",
+      "description": "SQLite WAL RESTART 检查点后新帧覆写头部、旧帧留存尾部：ps1 倒扫读到旧模型 Opus 4.6，py 读到最新模型 Gemini 2.5 Pro",
+      "covers": [
+        "model.display_name",
+        "agent_state",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db_wal_stale",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f05",
+        "model": {
+          "display_name": "Auto"
+        },
+        "agent_state": "working",
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 91,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 2.5 Pro\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e6920322e352050726f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      }
+    },
+    {
+      "id": "F06_db_steps_table_pollution",
+      "category": "stateful_db",
+      "description": "steps 表字节中含 \\x9a\\x01 标记：ps1 不区分表扫出 Gemini 2.5 Pro，py 只查 gen_metadata 返回 Opus 4.6",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f06",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 91,
+        "utf8": "  \u001b[0m\u001b[0;96m Gemini 2.5 Pro\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca32047656d696e6920322e352050726f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "F07_db_trailing_nonmodel_field19",
+      "category": "stateful_db",
+      "description": "gen_metadata.data 内模型后跟非模型 field 19（end_turn）：py 正则过宽误把 end_turn 当模型，ps1 前缀过滤命中 Opus 4.6",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f07",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m end_turn\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca320656e645f7475726e1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "F08_db_gt600b_trailing_in_blob",
+      "category": "stateful_db",
+      "description": "gen_metadata.data 模型标记距 blob 末尾 >600 B：py 因 substr(data,-600) 截断漏检，ps1 256 KB 扫描命中 Opus 4.6",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f08",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 85,
+        "utf8": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204f70757320342e361b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 81,
+        "utf8": "  \u001b[0m\u001b[0;96m Auto\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204175746f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "F09_db_short_and_nonwhitelist_models",
+      "category": "stateful_db",
+      "description": "短模型名 o3（长 2 < 4）或两段非白名单名 mistral-large：ps1 长度/前缀过滤拒收，py 命中 o3",
+      "covers": [
+        "model.display_name",
+        "context_window.total_output_tokens"
+      ],
+      "divergence_id": "DIV-18",
+      "via_cmd_cp": null,
+      "setup": "db",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f09",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 81,
+        "utf8": "  \u001b[0m\u001b[0;96m Auto\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204175746f1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 79,
+        "utf8": "  \u001b[0m\u001b[0;96m o3\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3206f331b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33336d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "G01_line2_all_active_runtime",
+      "category": "line2_runtime",
+      "description": "第 2 行全要素同时开启：execution_mode(yolo)、运行中子代理、单数 task、queued、sandbox+net",
+      "covers": [
+        "execution_mode",
+        "subagents",
+        "task_count",
+        "pending_input_count",
+        "sandbox.enabled",
+        "sandbox.allow_network"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_g01",
+        "execution_mode": "yolo",
+        "subagents": [
+          {
+            "status": "running"
+          },
+          {
+            "status": "completed"
+          },
+          {
+            "status": "thinking"
+          }
+        ],
+        "task_count": 1,
+        "pending_input_count": 2,
+        "sandbox": {
+          "enabled": true,
+          "allow_network": true
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 283,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;91m▸▸ bypass permissions on\u001b[0;90m (shift+tab to cycle)\u001b[0;37m | \u001b[0;96m 2/3 agents running\u001b[0;37m | \u001b[0;33m 1 task\u001b[0;37m | \u001b[0;95m 2 queued\u001b[0;37m | \u001b[0;96m sandbox+net\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39316de296b8e296b820627970617373207065726d697373696f6e73206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b303b33376d207c201b5b303b39366def83a820322f33206167656e74732072756e6e696e671b5b303b33376d207c201b5b303b33336def80932031207461736b1b5b303b33376d207c201b5b303b39356def809c2032207175657565641b5b303b33376d207c201b5b303b39366def84b22073616e64626f782b6e65741b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 283,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;91m▸▸ bypass permissions on\u001b[0;90m (shift+tab to cycle)\u001b[0;37m | \u001b[0;96m 2/3 agents running\u001b[0;37m | \u001b[0;33m 1 task\u001b[0;37m | \u001b[0;95m 2 queued\u001b[0;37m | \u001b[0;96m sandbox+net\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39316de296b8e296b820627970617373207065726d697373696f6e73206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b303b33376d207c201b5b303b39366def83a820322f33206167656e74732072756e6e696e671b5b303b33376d207c201b5b303b33336def80932031207461736b1b5b303b33376d207c201b5b303b39356def809c2032207175657565641b5b303b33376d207c201b5b303b39366def84b22073616e64626f782b6e65741b5b306d0a"
+      }
+    },
+    {
+      "id": "G02_line2_confirm_pending_and_idle_agents",
+      "category": "line2_runtime",
+      "description": "tool_confirmation_pending 覆盖模式显示 approval required，外加全部完成子代理、复数 tasks、无网 sandbox",
+      "covers": [
+        "tool_confirmation_pending",
+        "cycle_mode",
+        "subagents",
+        "task_count",
+        "sandbox.enabled",
+        "sandbox.allow_network"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_g02",
+        "tool_confirmation_pending": true,
+        "cycle_mode": "auto",
+        "subagents": [
+          {
+            "status": "completed"
+          },
+          {
+            "status": "done"
+          }
+        ],
+        "task_count": 3,
+        "sandbox": {
+          "enabled": true,
+          "allow_network": false
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 245,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;33m⚠ approval required\u001b[0;90m (waiting for tool confirmation)\u001b[0;37m | \u001b[0;90m 2 agents\u001b[0;37m | \u001b[0;33m 3 tasks\u001b[0;37m | \u001b[0;96m sandbox\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b33336de29aa020617070726f76616c2072657175697265641b5b303b39306d202877616974696e6720666f7220746f6f6c20636f6e6669726d6174696f6e291b5b303b33376d207c201b5b303b39306def83a82032206167656e74731b5b303b33376d207c201b5b303b33336def80932033207461736b731b5b303b33376d207c201b5b303b39366def84b22073616e64626f781b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 245,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;33m⚠ approval required\u001b[0;90m (waiting for tool confirmation)\u001b[0;37m | \u001b[0;90m 2 agents\u001b[0;37m | \u001b[0;33m 3 tasks\u001b[0;37m | \u001b[0;96m sandbox\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b33336de29aa020617070726f76616c2072657175697265641b5b303b39306d202877616974696e6720666f7220746f6f6c20636f6e6669726d6174696f6e291b5b303b33376d207c201b5b303b39306def83a82032206167656e74731b5b303b33376d207c201b5b303b33336def80932033207461736b731b5b303b33376d207c201b5b303b39366def84b22073616e64626f781b5b306d0a"
+      }
+    },
+    {
+      "id": "G03_empty_exec_mode_blocks_cycle_mode",
+      "category": "line2_runtime",
+      "description": "execution_mode=\"\" 且 cycle_mode=\"plan\"：ps1 的 ?? 停在空串不渲染第 2 行，py 回退渲染 plan mode on",
+      "covers": [
+        "execution_mode",
+        "cycle_mode"
+      ],
+      "divergence_id": "DIV-04",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_g03",
+        "execution_mode": "",
+        "cycle_mode": "plan"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 147,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;96m▸▸ plan mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39366de296b8e296b820706c616e206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "G04_subagent_status_uppercase",
+      "category": "line2_runtime",
+      "description": "subagents[].status 大写 \"RUNNING\"：ps1 -in 不区分大小写显示 1/1 agents running，py 区分大小写显示 1 agents",
+      "covers": [
+        "subagents"
+      ],
+      "divergence_id": "DIV-19",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {},
+      "payload": {
+        "session_id": "probe_g04",
+        "subagents": [
+          {
+            "status": "RUNNING"
+          }
+        ]
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 122,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;96m 1/1 agents running\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39366def83a820312f31206167656e74732072756e6e696e671b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 112,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m 1 agents\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39306def83a82031206167656e74731b5b306d0a"
+      }
+    },
+    {
+      "id": "H01_env_theme_light",
+      "category": "env_vars",
+      "description": "AGY_THEME=light 切换浅色 SGR 调色板",
+      "covers": [
+        "AGY_THEME"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_THEME": "light"
+      },
+      "payload": {
+        "session_id": "probe_h01",
+        "cycle_mode": "accept-edits"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 150,
+        "utf8": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;35m▸▸ accept edits on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b33366deebca3204d6f64656c1b5b303b39306d207c201b5b303b33356def929b2030251b5b303b39306d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b33356de296b8e296b820616363657074206564697473206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 150,
+        "utf8": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;35m▸▸ accept edits on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b33366deebca3204d6f64656c1b5b303b39306d207c201b5b303b33356def929b2030251b5b303b39306d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b33356de296b8e296b820616363657074206564697473206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "H02_env_colorfgbg_auto_light_and_dark_override",
+      "category": "env_vars",
+      "description": "COLORFGBG=0;15 自动切浅色，且被 AGY_THEME=dark 显式覆盖回深色",
+      "covers": [
+        "AGY_THEME",
+        "COLORFGBG"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_THEME": "dark",
+        "COLORFGBG": "0;15"
+      },
+      "payload": {
+        "session_id": "probe_h02",
+        "cycle_mode": "best-of-n"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 152,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;94m▸▸ best-of-n mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39346de296b8e296b820626573742d6f662d6e206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 152,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;94m▸▸ best-of-n mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39346de296b8e296b820626573742d6f662d6e206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "H03_env_theme_trailing_space",
+      "category": "env_vars",
+      "description": "AGY_THEME=\"light \" 含尾空格（如 cmd set AGY_THEME=light && ...）：py strip() 切浅色，ps1 原样比较落回深色",
+      "covers": [
+        "AGY_THEME"
+      ],
+      "divergence_id": "DIV-20",
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_THEME": "light "
+      },
+      "payload": {
+        "session_id": "probe_h03"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b33366deebca3204d6f64656c1b5b303b39306d207c201b5b303b33356def929b2030251b5b303b39306d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a"
+      }
+    },
+    {
+      "id": "H04_env_lines_single_mode_pill",
+      "category": "env_vars",
+      "description": "AGY_STATUSLINE_LINES=1 合并为单行并追加紧凑模式胶囊 `▸▸ auto`",
+      "covers": [
+        "AGY_STATUSLINE_LINES",
+        "cycle_mode"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_h04",
+        "cycle_mode": "auto",
+        "task_count": 2
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 110,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;91m▸▸ auto\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b39316de296b8e296b8206175746f1b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 110,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;91m▸▸ auto\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b39316de296b8e296b8206175746f1b5b306d0a"
+      }
+    },
+    {
+      "id": "H05_env_lines_single_confirm",
+      "category": "env_vars",
+      "description": "AGY_STATUSLINE_LINES=1 且 tool_confirmation_pending=true 追加 `⚠ confirm`",
+      "covers": [
+        "AGY_STATUSLINE_LINES",
+        "tool_confirmation_pending"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_h05",
+        "tool_confirmation_pending": true
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 110,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m⚠ confirm\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33336de29aa020636f6e6669726d1b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 110,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m⚠ confirm\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b303b33376d207c201b5b303b33336de29aa020636f6e6669726d1b5b306d0a"
+      }
+    },
+    {
+      "id": "H06_env_indent_custom_and_empty",
+      "category": "env_vars",
+      "description": "AGY_STATUSLINE_INDENT 自定义缩进 \"    \"（两边一致）",
+      "covers": [
+        "AGY_STATUSLINE_INDENT"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_STATUSLINE_INDENT": "    "
+      },
+      "payload": {
+        "session_id": "probe_h06",
+        "cycle_mode": "auto"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 151,
+        "utf8": "    \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n    \u001b[0m\u001b[0;91m▸▸ auto mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "202020201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a202020201b5b306d1b5b303b39316de296b8e296b8206175746f206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 151,
+        "utf8": "    \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n    \u001b[0m\u001b[0;91m▸▸ auto mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n",
+        "hex": "202020201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a202020201b5b306d1b5b303b39316de296b8e296b8206175746f206d6f6465206f6e1b5b303b39306d202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "H07_env_show_default_mode",
+      "category": "env_vars",
+      "description": "AGY_SHOW_DEFAULT_MODE=1 在未知/默认模式下渲染 `▸▸ ask mode (shift+tab to cycle)`",
+      "covers": [
+        "AGY_SHOW_DEFAULT_MODE",
+        "cycle_mode"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": null,
+      "env": {
+        "AGY_SHOW_DEFAULT_MODE": "1"
+      },
+      "payload": {
+        "session_id": "probe_h07",
+        "cycle_mode": "default"
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 136,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m▸▸ ask mode (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39306de296b8e296b82061736b206d6f6465202873686966742b74616220746f206379636c65291b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 136,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m▸▸ ask mode (shift+tab to cycle)\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b39306d20636f6c641b5b306d0a20201b5b306d1b5b303b39306de296b8e296b82061736b206d6f6465202873686966742b74616220746f206379636c65291b5b306d0a"
+      }
+    },
+    {
+      "id": "H08_env_cache_relay_live_badges",
+      "category": "env_vars",
+      "description": "AGY_CACHE_RELAY 开启并读取 agy_cache_<sid>.dat 渲染保活徽标 `↻2` 与命中率",
+      "covers": [
+        "AGY_CACHE_RELAY",
+        "context_window.current_usage.input_tokens",
+        "context_window.current_usage.cache_read_input_tokens"
+      ],
+      "divergence_id": null,
+      "via_cmd_cp": null,
+      "setup": "relay",
+      "env": {
+        "AGY_CACHE_RELAY": "http://127.0.0.1:9"
+      },
+      "payload": {
+        "session_id": "probe_h08",
+        "context_window": {
+          "current_usage": {
+            "input_tokens": 4000,
+            "cache_read_input_tokens": 36000
+          }
+        }
+      },
+      "equal": true,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 154,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 0%\u001b[0;37m · \u001b[0;95m40k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;92m ↻2\u001b[0;37m · \u001b[0;34m90% hit\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d2030251b5b303b33376d20c2b7201b5b303b39356d34306b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20333a30301b5b303b39326d20e286bb321b5b303b33376d20c2b7201b5b303b33346d393025206869741b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 154,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 0%\u001b[0;37m · \u001b[0;95m40k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;92m ↻2\u001b[0;37m · \u001b[0;34m90% hit\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b1b5b303b39356d2030251b5b303b33376d20c2b7201b5b303b39356d34306b20746f6b656e731b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20333a30301b5b303b39326d20e286bb321b5b303b33376d20c2b7201b5b303b33346d393025206869741b5b306d0a"
+      }
+    },
+    {
+      "id": "H09_env_cache_relay_uppercase_OFF",
+      "category": "env_vars",
+      "description": "AGY_CACHE_RELAY=\"OFF\"（大写）：ps1 -eq 'off' 关闭保活忽略状态文件，py == 'off' 区分大小写仍当作开启渲染 `✗`",
+      "covers": [
+        "AGY_CACHE_RELAY"
+      ],
+      "divergence_id": "DIV-21",
+      "via_cmd_cp": null,
+      "setup": "relay",
+      "env": {
+        "AGY_CACHE_RELAY": "OFF"
+      },
+      "payload": {
+        "session_id": "probe_h09",
+        "agent_state": "working"
+      },
+      "equal": false,
+      "ps1": {
+        "exit_code": 0,
+        "byte_len": 82,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20353a30301b5b306d0a"
+      },
+      "py": {
+        "exit_code": 0,
+        "byte_len": 93,
+        "utf8": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 2:59\u001b[0;31m ✗\u001b[0m\n",
+        "hex": "20201b5b306d1b5b303b39366deebca3204d6f64656c1b5b303b33376d207c201b5b303b39356def929b2030251b5b303b33376d207c201b5b303b33346def87801b5b303b33346d20323a35391b5b303b33316d20e29c971b5b306d0a"
+      }
+    }
+  ]
+}

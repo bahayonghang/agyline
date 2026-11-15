@@ -1,0 +1,339 @@
+use std::ffi::{OsStr, OsString};
+use std::fs;
+use std::io;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::ptr;
+use std::thread;
+use std::time::Duration;
+
+const DETACHED_PROCESS: u32 = 0x0000_0008;
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const STD_OUTPUT_HANDLE: u32 = (-11_i32) as u32;
+const INVALID_HANDLE_VALUE: isize = -1;
+const ERROR_ACCESS_DENIED: i32 = 5;
+const ERROR_SHARING_VIOLATION: i32 = 32;
+
+type Handle = *mut core::ffi::c_void;
+
+#[repr(C)]
+struct Coord {
+    x: i16,
+    y: i16,
+}
+
+#[repr(C)]
+struct SmallRect {
+    left: i16,
+    top: i16,
+    right: i16,
+    bottom: i16,
+}
+
+#[repr(C)]
+struct ConsoleScreenBufferInfo {
+    dw_size: Coord,
+    dw_cursor_position: Coord,
+    w_attributes: u16,
+    sr_window: SmallRect,
+    dw_maximum_window_size: Coord,
+}
+
+#[repr(C)]
+struct StartupInfoW {
+    cb: u32,
+    lp_reserved: *mut u16,
+    lp_desktop: *mut u16,
+    lp_title: *mut u16,
+    dw_x: u32,
+    dw_y: u32,
+    dw_x_size: u32,
+    dw_y_size: u32,
+    dw_x_count_chars: u32,
+    dw_y_count_chars: u32,
+    dw_fill_attribute: u32,
+    dw_flags: u32,
+    w_show_window: u16,
+    cb_reserved2: u16,
+    lp_reserved2: *mut u8,
+    h_std_input: Handle,
+    h_std_output: Handle,
+    h_std_error: Handle,
+}
+
+#[repr(C)]
+struct ProcessInformation {
+    h_process: Handle,
+    h_thread: Handle,
+    dw_process_id: u32,
+    dw_thread_id: u32,
+}
+
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn CreateProcessW(
+        lp_application_name: *const u16,
+        lp_command_line: *mut u16,
+        lp_process_attributes: *const core::ffi::c_void,
+        lp_thread_attributes: *const core::ffi::c_void,
+        b_inherit_handles: i32,
+        dw_creation_flags: u32,
+        lp_environment: *const core::ffi::c_void,
+        lp_current_directory: *const u16,
+        lp_startup_info: *const StartupInfoW,
+        lp_process_information: *mut ProcessInformation,
+    ) -> i32;
+
+    fn CloseHandle(h_object: Handle) -> i32;
+
+    fn GetShortPathNameW(
+        lpsz_long_path: *const u16,
+        lpsz_short_path: *mut u16,
+        cch_buffer: u32,
+    ) -> u32;
+
+    fn GetStdHandle(n_std_handle: u32) -> Handle;
+
+    fn GetConsoleScreenBufferInfo(
+        h_console_output: Handle,
+        lp_console_screen_buffer_info: *mut ConsoleScreenBufferInfo,
+    ) -> i32;
+}
+
+pub fn host_platform() -> super::PlatformKind {
+    super::PlatformKind::Windows
+}
+
+pub fn short_path_name(path: &Path) -> Option<PathBuf> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: `wide` is NUL-terminated UTF-16; null output buffer with length 0 queries required size.
+    let needed = unsafe { GetShortPathNameW(wide.as_ptr(), ptr::null_mut(), 0) };
+    if needed == 0 {
+        return None;
+    }
+    let mut buf = vec![0u16; needed as usize];
+    // SAFETY: `buf` has length `needed` UTF-16 code units as requested by the first call.
+    let written = unsafe { GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), needed) };
+    if written == 0 || (written as usize) >= buf.len() {
+        return None;
+    }
+    Some(PathBuf::from(OsString::from_wide(&buf[..written as usize])))
+}
+
+pub fn user_home_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    for key in ["USERPROFILE", "HOME"] {
+        if let Some(val) = env_lookup(key) {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                return Some(PathBuf::from(trimmed));
+            }
+        }
+    }
+    None
+}
+
+pub fn relay_temp_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> PathBuf {
+    for key in ["TMPDIR", "TEMP", "TMP"] {
+        if let Some(val) = env_lookup(key) {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed);
+            }
+        }
+    }
+    std::env::temp_dir()
+}
+
+pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
+    let exe = std::env::current_exe()?;
+    let mut app_wide: Vec<u16> = exe.as_os_str().encode_wide().collect();
+    if app_wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "executable path contains interior NUL",
+        ));
+    }
+    app_wide.push(0);
+
+    let mut cmdline = Vec::new();
+    append_windows_arg(&mut cmdline, exe.as_os_str())?;
+    for arg in args {
+        cmdline.push(u16::from(b' '));
+        append_windows_arg(&mut cmdline, arg)?;
+    }
+    cmdline.push(0);
+
+    let si = StartupInfoW {
+        cb: core::mem::size_of::<StartupInfoW>() as u32,
+        lp_reserved: ptr::null_mut(),
+        lp_desktop: ptr::null_mut(),
+        lp_title: ptr::null_mut(),
+        dw_x: 0,
+        dw_y: 0,
+        dw_x_size: 0,
+        dw_y_size: 0,
+        dw_x_count_chars: 0,
+        dw_y_count_chars: 0,
+        dw_fill_attribute: 0,
+        dw_flags: 0,
+        w_show_window: 0,
+        cb_reserved2: 0,
+        lp_reserved2: ptr::null_mut(),
+        h_std_input: ptr::null_mut(),
+        h_std_output: ptr::null_mut(),
+        h_std_error: ptr::null_mut(),
+    };
+    let mut pi = ProcessInformation {
+        h_process: ptr::null_mut(),
+        h_thread: ptr::null_mut(),
+        dw_process_id: 0,
+        dw_thread_id: 0,
+    };
+
+    // SAFETY: `app_wide` and `cmdline` are NUL-terminated UTF-16 buffers valid for this call,
+    // `b_inherit_handles` is 0 (`FALSE`) so zero parent pipe handles leak to the detached worker,
+    // and returned process/thread handles are closed immediately on success.
+    let ok = unsafe {
+        CreateProcessW(
+            app_wide.as_ptr(),
+            cmdline.as_mut_ptr(),
+            ptr::null(),
+            ptr::null(),
+            0,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+            ptr::null(),
+            ptr::null(),
+            &si,
+            &mut pi,
+        )
+    };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    unsafe {
+        let _ = CloseHandle(pi.h_thread);
+        let _ = CloseHandle(pi.h_process);
+    }
+    Ok(())
+}
+
+fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
+    let wide: Vec<u16> = arg.encode_wide().collect();
+    if wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "argument contains interior NUL",
+        ));
+    }
+
+    let quote = wide.is_empty()
+        || wide.iter().any(|&c| {
+            c == u16::from(b' ') || c == u16::from(b'\t') || c == u16::from(b'"') || c < 0x20
+        });
+    if !quote {
+        cmdline.extend_from_slice(&wide);
+        return Ok(());
+    }
+
+    cmdline.push(u16::from(b'"'));
+    let mut backslashes: usize = 0;
+    for &ch in &wide {
+        if ch == u16::from(b'\\') {
+            backslashes += 1;
+        } else if ch == u16::from(b'"') {
+            for _ in 0..(backslashes * 2 + 1) {
+                cmdline.push(u16::from(b'\\'));
+            }
+            cmdline.push(u16::from(b'"'));
+            backslashes = 0;
+        } else {
+            for _ in 0..backslashes {
+                cmdline.push(u16::from(b'\\'));
+            }
+            cmdline.push(ch);
+            backslashes = 0;
+        }
+    }
+    for _ in 0..(backslashes * 2) {
+        cmdline.push(u16::from(b'\\'));
+    }
+    cmdline.push(u16::from(b'"'));
+    Ok(())
+}
+
+pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
+    fs::create_dir_all(path)
+}
+
+pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
+    std::os::windows::fs::symlink_file(original, link)
+}
+
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    let mut last_err = None;
+    for attempt in 0..4 {
+        match fs::rename(tmp, dst) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                let is_transient = err.kind() == io::ErrorKind::PermissionDenied
+                    || matches!(
+                        err.raw_os_error(),
+                        Some(ERROR_ACCESS_DENIED) | Some(ERROR_SHARING_VIOLATION)
+                    );
+                last_err = Some(err);
+                if !is_transient || attempt == 3 {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(3));
+            }
+        }
+    }
+    let _ = fs::remove_file(tmp);
+    Err(last_err.unwrap_or_else(|| io::Error::other("rename failed")))
+}
+
+pub fn configure_background_command(cmd: &mut Command) {
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+pub fn stdout_terminal_columns() -> Option<usize> {
+    // SAFETY: `GetStdHandle` and `GetConsoleScreenBufferInfo` take standard Win32 console arguments
+    // and write into a stack-initialized `ConsoleScreenBufferInfo`.
+    unsafe {
+        let h = GetStdHandle(STD_OUTPUT_HANDLE);
+        if !h.is_null() && (h as isize) != INVALID_HANDLE_VALUE {
+            let mut info = ConsoleScreenBufferInfo {
+                dw_size: Coord { x: 0, y: 0 },
+                dw_cursor_position: Coord { x: 0, y: 0 },
+                w_attributes: 0,
+                sr_window: SmallRect {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                },
+                dw_maximum_window_size: Coord { x: 0, y: 0 },
+            };
+            if GetConsoleScreenBufferInfo(h, &mut info) != 0
+                && info.sr_window.right >= info.sr_window.left
+            {
+                let cols =
+                    (i32::from(info.sr_window.right) - i32::from(info.sr_window.left) + 1) as usize;
+                if cols > 0 {
+                    return Some(cols);
+                }
+            }
+        }
+    }
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|&c| c > 0)
+}

@@ -1,0 +1,3276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agyline Configurator TUI Prototype — Variants A / B / C (#14)</title>
+<style>
+  :root {
+    --page-bg: #0b0e14;
+    --harness-bg: #131822;
+    --harness-border: #263042;
+    --harness-text: #cbd5e1;
+    --harness-muted: #7c8aa5;
+    --accent: #38bdf8;
+    --accent-dim: rgba(56, 189, 248, 0.14);
+    --warn: #f59e0b;
+    --crit: #ef4444;
+    --ok: #22c55e;
+    --font-mono: 'JetBrainsMono Nerd Font', 'CaskaydiaCove Nerd Font', 'Cascadia Code NF', 'FiraCode Nerd Font', 'MesloLGS NF', 'Hack Nerd Font', 'Symbols Nerd Font Mono', 'Cascadia Mono', 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 12px 16px 76px;
+    background: radial-gradient(circle at 50% 0%, #161d2b 0%, var(--page-bg) 70%);
+    color: var(--harness-text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ─── Prototype Harness (Clearly outside the TUI under evaluation) ─── */
+  .harness {
+    width: 100%;
+    max-width: 1220px;
+    background: var(--harness-bg);
+    border: 1px dashed var(--harness-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .harness-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .harness-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+
+  .harness-question {
+    color: var(--harness-muted);
+    font-size: 12px;
+  }
+
+  .harness-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .h-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(0,0,0,0.25);
+    padding: 3px 7px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .h-label {
+    color: var(--harness-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .harness select, .harness button {
+    background: #1d2535;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+
+  .harness button:hover, .harness select:hover {
+    border-color: var(--accent);
+  }
+
+  .harness button.active {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: var(--warn);
+    color: #fcd34d;
+  }
+
+  .harness-state-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--harness-muted);
+  }
+
+  .harness-state-strip b { color: #e2e8f0; font-weight: 600; }
+  .st-dirty { color: var(--warn) !important; }
+  .st-clean { color: var(--ok) !important; }
+  .st-err { color: var(--crit) !important; }
+
+  /* ─── Simulated Terminal Window ─── */
+  .term-shell {
+    width: 100%;
+    max-width: 1220px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    overflow: hidden;
+    outline: none;
+    position: relative;
+  }
+
+  .term-shell:focus-within, .term-shell:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35), 0 20px 50px rgba(0, 0, 0, 0.65);
+  }
+
+  .term-shell.tiny-mode {
+    max-width: 580px;
+  }
+
+  .term-chrome {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: #8b949e;
+    user-select: none;
+  }
+
+  .term-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .term-dots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-r { background: #ff5f56; }
+  .dot-y { background: #ffbd2e; }
+  .dot-g { background: #27c93f; }
+
+  .tui-screen {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.42;
+    padding: 10px 14px;
+    min-height: 570px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: #d1d5db;
+    background: #0d1117;
+    position: relative;
+  }
+
+  /* ─── TUI Shared Primitives (ratatui-like boxes) ─── */
+  .tui-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 2px 6px;
+    background: #161b22;
+    border: 1px solid #30363d;
+  }
+
+  .tui-brand { color: #58a6ff; font-weight: 700; }
+  .tui-dirty { color: #f59e0b; font-weight: 700; }
+  .tui-saved-flash { color: #4ade80; font-weight: 700; }
+
+  .tui-pill {
+    padding: 0 6px;
+    font-size: 11.5px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+  }
+  .tui-pill.ok { color: #4ade80; border-color: rgba(74,222,128,0.4); }
+  .tui-pill.warn { color: #fbbf24; border-color: rgba(251,191,36,0.45); }
+  .tui-pill.crit { color: #f87171; border-color: rgba(248,113,113,0.5); }
+  .tui-pill.info { color: #38bdf8; border-color: rgba(56,189,248,0.4); }
+
+  .tui-banner-err {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.55);
+    color: #fca5a5;
+    padding: 4px 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tui-box {
+    border: 1px solid #30363d;
+    position: relative;
+    padding: 10px 10px 8px;
+    background: #0d1117;
+  }
+
+  .tui-box.focused {
+    border-color: #38bdf8;
+  }
+
+  .tui-box-title {
+    position: absolute;
+    top: -9px;
+    left: 10px;
+    background: #0d1117;
+    padding: 0 5px;
+    font-size: 11.5px;
+    color: #8b949e;
+    font-weight: 600;
+  }
+
+  .tui-box.focused > .tui-box-title {
+    color: #38bdf8;
+  }
+
+  .tui-box-right-meta {
+    position: absolute;
+    top: -9px;
+    right: 10px;
+    background: #0d1117;
+    padding: 0 5px;
+    font-size: 11.5px;
+    color: #8b949e;
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ─── Live Statusline Preview Surface ─── */
+  .preview-viewport {
+    padding: 8px 10px;
+    border: 1px dashed #2d3540;
+    overflow-x: auto;
+    transition: background 0.12s ease;
+  }
+
+  .preview-viewport.term-dark {
+    background: #090c10;
+    color: #e6edf3;
+  }
+
+  .preview-viewport.term-light {
+    background: #f8fafc;
+    color: #1e293b;
+    border-color: #cbd5e1;
+  }
+
+  .preview-ruler {
+    font-size: 11px;
+    color: #6e7681;
+    white-space: pre;
+    margin-bottom: 3px;
+    user-select: none;
+  }
+
+  .term-light .preview-ruler { color: #94a3b8; }
+
+  .preview-line {
+    white-space: pre;
+    min-height: 19px;
+    font-variant-ligatures: none;
+  }
+
+  .preview-stage-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: #8b949e;
+  }
+
+  .stage-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .st-chip {
+    font-size: 10.5px;
+    padding: 0 5px;
+    border-radius: 2px;
+    border: 1px solid #30363d;
+  }
+  .st-chip.full { color: #8b949e; }
+  .st-chip.compact { color: #fbbf24; border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.08); }
+  .st-chip.dropped { color: #f87171; border-color: rgba(248,113,113,0.45); text-decoration: line-through; background: rgba(248,113,113,0.08); }
+  .st-chip.truncated { color: #f43f5e; border-color: #f43f5e; font-weight: 700; }
+
+  /* ─── Tabs & Split Grids ─── */
+  .tui-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 4px;
+  }
+
+  .tui-tab {
+    padding: 2px 10px;
+    cursor: pointer;
+    color: #8b949e;
+    border: 1px solid transparent;
+    user-select: none;
+  }
+  .tui-tab:hover { color: #e6edf3; }
+  .tui-tab.active {
+    color: #38bdf8;
+    border-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    font-weight: 700;
+  }
+
+  .workbench-grid-3 {
+    display: grid;
+    grid-template-columns: 1.1fr 1.15fr 1.15fr;
+    gap: 10px;
+    flex: 1;
+    min-height: 310px;
+  }
+
+  .workbench-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    flex: 1;
+    min-height: 310px;
+  }
+
+  .tui-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 295px;
+    overflow-y: auto;
+  }
+
+  .tui-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+
+  .tui-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .tui-row.selected {
+    background: rgba(56, 189, 248, 0.14);
+    border-left-color: #38bdf8;
+    color: #f0f6fc;
+  }
+
+  .tui-row-sec {
+    font-size: 11px;
+    color: #6e7681;
+    text-transform: uppercase;
+    padding: 4px 4px 1px;
+    letter-spacing: 0.05em;
+  }
+
+  .tui-btn {
+    background: #161b22;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .tui-btn:hover { border-color: #58a6ff; color: #fff; }
+  .tui-btn.primary { border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,0.1); }
+  .tui-btn.warn { border-color: #f59e0b; color: #fbbf24; }
+  .tui-btn.danger { border-color: #ef4444; color: #f87171; }
+
+  .tui-input, .tui-select {
+    background: #090c10;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 2px 6px;
+  }
+  .tui-input:focus, .tui-select:focus {
+    outline: none;
+    border-color: #38bdf8;
+  }
+
+  .env-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 0 4px;
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.55);
+    background: rgba(245, 158, 11, 0.14);
+    margin-left: 4px;
+  }
+
+  .tui-footer {
+    margin-top: auto;
+    padding: 4px 8px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    font-size: 11.5px;
+    color: #8b949e;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tui-footer kbd, .kbd {
+    color: #38bdf8;
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+
+  /* ─── Variant B: Menu Stack Specifics ─── */
+  .vstack-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    flex: 1;
+  }
+  .vstack-layout.with-drawer {
+    grid-template-columns: 1.25fr 0.95fr;
+  }
+  .breadcrumb-bar {
+    padding: 3px 8px;
+    background: #121820;
+    border-left: 3px solid #38bdf8;
+    color: #94a3b8;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* ─── Variant C: Visual Slot Canvas + Live TOML Split ─── */
+  .canvas-track {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #090c10;
+    border: 1px solid #262c36;
+    min-height: 38px;
+  }
+
+  .slot-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    cursor: pointer;
+    font-size: 12px;
+    user-select: none;
+  }
+  .slot-pill:hover { border-color: #8b949e; }
+  .slot-pill.selected {
+    border-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.16);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+  }
+  .slot-pill.dropped {
+    opacity: 0.55;
+    border-style: dashed;
+  }
+  .slot-prio {
+    font-size: 10px;
+    color: #8b949e;
+    padding: 0 3px;
+    background: #0d1117;
+    border: 1px solid #262c36;
+  }
+
+  .toml-pre {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11.8px;
+    line-height: 1.4;
+    white-space: pre;
+    overflow: auto;
+    max-height: 270px;
+    color: #c9d1d9;
+    background: #090c10;
+    padding: 8px;
+    border: 1px solid #21262d;
+  }
+
+  .toml-hl {
+    background: rgba(56, 189, 248, 0.16);
+    display: inline-block;
+    width: 100%;
+  }
+
+  /* ─── Modal Dialog Inside TUI ─── */
+  .tui-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 8, 13, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    padding: 16px;
+  }
+
+  .tui-modal {
+    width: 100%;
+    max-width: 680px;
+    background: #0d1117;
+    border: 2px solid #38bdf8;
+    padding: 12px 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .diff-view {
+    background: #090c10;
+    border: 1px solid #30363d;
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .diff-del { color: #f87171; background: rgba(248,113,113,0.1); display: block; }
+  .diff-add { color: #4ade80; background: rgba(74,222,128,0.1); display: block; }
+  .diff-ctx { color: #8b949e; display: block; }
+
+  /* ─── Floating Bottom Variant Switcher (prototype/UI.md spec) ─── */
+  .proto-switcher {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 6px 12px;
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 0 2px #38bdf8;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  .proto-switcher button.nav-arrow {
+    background: #e2e8f0;
+    color: #0f172a;
+    border: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .proto-switcher button.nav-arrow:hover {
+    background: #cbd5e1;
+  }
+
+  .proto-var-pills {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .proto-var-pill {
+    border: 1px solid #cbd5e1;
+    background: transparent;
+    color: #475569;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .proto-var-pill.current {
+    background: #0f172a;
+    color: #38bdf8;
+    border-color: #0f172a;
+  }
+</style>
+</head>
+<body>
+
+  <!-- PROTOTYPE HARNESS: Host Env & Edge-Case Controls -->
+  <section class="harness" aria-label="Prototype Host Simulator">
+    <div class="harness-top">
+      <div>
+        <span class="harness-badge">⚗ THROWAWAY TUI PROTOTYPE · agyline #14</span>
+        <span class="harness-question">
+          Question: Three structurally distinct TUI configurator layouts (<code>?variant=A|B|C</code>) sharing one live statusline &amp; 3-stage narrowing renderer.
+        </span>
+      </div>
+      <div class="harness-state-strip" id="harnessStateStrip"></div>
+    </div>
+
+    <div class="harness-controls">
+      <div class="h-group">
+        <span class="h-label">Disk State:</span>
+        <select id="simDiskMode">
+          <option value="valid">Valid config.toml</option>
+          <option value="missing">Missing (1st run, memory default)</option>
+          <option value="broken">Syntax Broken (line 14 err + ! config)</option>
+          <option value="conflict">External mtime Changed on Save</option>
+        </select>
+      </div>
+
+      <div class="h-group">
+        <span class="h-label">Host Term:</span>
+        <select id="simColorFgBg">
+          <option value="15;0">COLORFGBG=15;0 (Dark)</option>
+          <option value="0;15">COLORFGBG=0;15 (Light)</option>
+        </select>
+        <button type="button" id="btnTinyTerm" title="Simulate < 80x22 terminal degradation">Size &lt;80×22</button>
+      </div>
+
+      <div class="h-group">
+        <span class="h-label">AGY_* Env Overrides:</span>
+        <button type="button" data-env="AGY_THEME" data-val="light">AGY_THEME=light</button>
+        <button type="button" data-env="AGY_STATUSLINE_LINES" data-val="1">LINES=1</button>
+        <button type="button" data-env="AGY_STATUSLINE_INDENT" data-val="    ">INDENT="    "</button>
+        <button type="button" data-env="AGY_SHOW_DEFAULT_MODE" data-val="1">SHOW_DEFAULT=1</button>
+        <button type="button" data-env="AGY_CACHE_RELAY" data-val="off">RELAY=off</button>
+      </div>
+
+      <div class="h-group">
+        <span class="h-label">agy settings.json:</span>
+        <select id="simHookInit">
+          <option value="ps1">Pointing at statusline.ps1 (Migratable)</option>
+          <option value="connected">Connected to agyline</option>
+          <option value="none">No statusLine configured</option>
+          <option value="space_warn">Windows Space Path (8.3 fallback)</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIMULATED TERMINAL RUNNING `agyline` -->
+  <main class="term-shell" id="termShell" tabindex="0">
+    <div class="term-chrome">
+      <div class="term-dots">
+        <span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>
+      </div>
+      <div id="termChromeTitle">pwsh — agyline (Alternate Screen · ratatui 0.30)</div>
+      <div id="termChromeRight">Click terminal for TUI keys · ? Help</div>
+    </div>
+    <div class="tui-screen" id="tuiScreen"></div>
+  </main>
+
+  <!-- FLOATING VARIANT SWITCHER (prototype/UI.md) -->
+  <nav class="proto-switcher" aria-label="Prototype Variant Switcher">
+    <button type="button" class="nav-arrow" id="varPrev" title="Previous Variant (Alt+←)">←</button>
+    <div class="proto-var-pills" id="varPills"></div>
+    <span id="varLabel">Variant A</span>
+    <button type="button" class="nav-arrow" id="varNext" title="Next Variant (Alt+→)">→</button>
+  </nav>
+
+<script>
+/* ==========================================================================
+ * 1. PORTABLE PURE ENGINE MODULE (`AgylineEngine`)
+ *    Models config.toml (#11), 20-Item Catalog (#16), 3-Stage Narrowing (#15),
+ *    6 Built-in Scenarios (#12/#21), and settings.json Diff (#13).
+ *    Zero DOM references inside this module.
+ * ========================================================================== */
+const AgylineEngine = (() => {
+  // Detect whether local system font supports Nerd Font PUA glyphs; fallback cleanly if not
+  let hasNerdFont = false;
+  try {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const ctx = c.getContext('2d');
+    ctx.font = "16px 'JetBrainsMono Nerd Font', 'CaskaydiaCove Nerd Font', 'Cascadia Code NF', 'FiraCode Nerd Font', 'MesloLGS NF', 'Symbols Nerd Font Mono', monospace";
+    const wPua = ctx.measureText('\u{f024b}').width;
+    const wUnassigned = ctx.measureText('\u{f0fff}').width;
+    const d1 = ctx.getImageData(0, 0, 32, 32).data;
+    ctx.clearRect(0, 0, 32, 32);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('\u{f024b}', 4, 22);
+    const imgA = Array.from(ctx.getImageData(0, 0, 32, 32).data).join(',');
+    ctx.clearRect(0, 0, 32, 32);
+    ctx.fillText('\u{f8ff}', 4, 22);
+    const imgB = Array.from(ctx.getImageData(0, 0, 32, 32).data).join(',');
+    hasNerdFont = (imgA !== imgB) || (wPua !== wUnassigned);
+  } catch (_) { hasNerdFont = false; }
+
+  const nf = (pua, crispFallback) => hasNerdFont ? pua : crispFallback;
+
+  const PALETTES = {
+    'terminal': {
+      polarity: 'dual',
+      dark: {
+        bg: '#090c10', text: '#e6edf3', separator: '#c9d1d9', muted: '#6e7681',
+        model: '#39c5cf', dir_icon: '#e3b341', dir: '#56d364', git: '#58a6ff',
+        context: '#bc8cff', cache: '#388bfd', ok: '#56d364', warn: '#d29922',
+        crit: '#f85149', auto: '#ff7b72'
+      },
+      light: {
+        bg: '#f8fafc', text: '#1e293b', separator: '#64748b', muted: '#64748b',
+        model: '#0e7490', dir_icon: '#b45309', dir: '#15803d', git: '#1d4ed8',
+        context: '#7e22ce', cache: '#1d4ed8', ok: '#15803d', warn: '#b45309',
+        crit: '#dc2626', auto: '#dc2626'
+      }
+    },
+    'catppuccin-mocha': {
+      polarity: 'dark',
+      colors: {
+        bg: '#1e1e2e', text: '#cdd6f4', separator: '#6c7086', muted: '#7f849c',
+        model: '#89dceb', dir_icon: '#f9e2af', dir: '#a6e3a1', git: '#89b4fa',
+        context: '#cba6f7', cache: '#74c7ec', ok: '#a6e3a1', warn: '#f9e2af',
+        crit: '#f38ba8', auto: '#eba0ac'
+      }
+    },
+    'catppuccin-latte': {
+      polarity: 'light',
+      colors: {
+        bg: '#eff1f5', text: '#4c4f69', separator: '#8c8fa1', muted: '#7c7f93',
+        model: '#04a5e5', dir_icon: '#df8e1d', dir: '#40a02b', git: '#1e66f5',
+        context: '#8839ef', cache: '#209fb5', ok: '#40a02b', warn: '#df8e1d',
+        crit: '#d20f39', auto: '#e64553'
+      }
+    },
+    'tokyo-night': {
+      polarity: 'dark',
+      colors: {
+        bg: '#1a1b26', text: '#c0caf5', separator: '#565f89', muted: '#565f89',
+        model: '#7dcfff', dir_icon: '#e0af68', dir: '#9ece6a', git: '#7aa2f7',
+        context: '#bb9af7', cache: '#2ac3de', ok: '#9ece6a', warn: '#e0af68',
+        crit: '#f7768e', auto: '#ff9e64'
+      }
+    },
+    'nord': {
+      polarity: 'dark',
+      colors: {
+        bg: '#2e3440', text: '#eceff4', separator: '#616e88', muted: '#616e88',
+        model: '#88c0d0', dir_icon: '#ebcb8b', dir: '#a3be8c', git: '#81a1c1',
+        context: '#b48ead', cache: '#5e81ac', ok: '#a3be8c', warn: '#ebcb8b',
+        crit: '#bf616a', auto: '#d08770'
+      }
+    },
+    'gruvbox': {
+      polarity: 'dark',
+      colors: {
+        bg: '#282828', text: '#ebdbb2', separator: '#928374', muted: '#928374',
+        model: '#8ec07c', dir_icon: '#fabd2f', dir: '#b8bb26', git: '#83a598',
+        context: '#d3869b', cache: '#458588', ok: '#b8bb26', warn: '#fabd2f',
+        crit: '#fb4934', auto: '#fe8019'
+      }
+    },
+    'rose-pine': {
+      polarity: 'dark',
+      colors: {
+        bg: '#191724', text: '#e0def4', separator: '#6e6a86', muted: '#6e6a86',
+        model: '#9ccfd8', dir_icon: '#f6c177', dir: '#31748f', git: '#c4a7e7',
+        context: '#ebbcba', cache: '#31748f', ok: '#9ccfd8', warn: '#f6c177',
+        crit: '#eb6f92', auto: '#eb6f92'
+      }
+    },
+    'dracula': {
+      polarity: 'dark',
+      colors: {
+        bg: '#282a36', text: '#f8f8f2', separator: '#6272a4', muted: '#6272a4',
+        model: '#8be9fd', dir_icon: '#f1fa8c', dir: '#50fa7b', git: '#bd93f9',
+        context: '#ff79c6', cache: '#8be9fd', ok: '#50fa7b', warn: '#f1fa8c',
+        crit: '#ff5555', auto: '#ffb86c'
+      }
+    }
+  };
+
+  const TOKEN_KEYS = ['separator', 'muted', 'model', 'dir_icon', 'dir', 'git', 'context', 'cache', 'ok', 'warn', 'crit', 'auto'];
+
+  // Complete 20-Item Catalog (#16 + #15 priorities & options)
+  const ITEMS_CATALOG = [
+    { id: 'model', group: 'Default Line 1', name: 'Model & Effort', defaultPriority: 1, icons: { nerd: nf('\u{ef23}', '✦'), unicode: '◆', ascii: '' }, baseToken: 'model', options: [] },
+    { id: 'dir', group: 'Default Line 1', name: 'Workspace Dir', defaultPriority: 3, icons: { nerd: nf('\u{f024b}', '📁'), unicode: '▸', ascii: '' }, baseToken: 'dir', iconToken: 'dir_icon', options: [] },
+    { id: 'git', group: 'Default Line 1', name: 'Git Branch & Status', defaultPriority: 2, icons: { nerd: nf('\u{f02a2}', '⎇'), unicode: '⎇', ascii: '' }, baseToken: 'git', options: [] },
+    { id: 'context', group: 'Default Line 1', name: 'Context Window', defaultPriority: 1, icons: { nerd: nf('\u{f49b}', '◔'), unicode: '◔', ascii: '' }, baseToken: 'context', options: [
+      { key: 'show_remaining', type: 'bool', default: false, label: 'Show remaining % instead of used %' }
+    ]},
+    { id: 'cache', group: 'Default Line 1', name: 'Prompt Cache & Relay', defaultPriority: 4, icons: { nerd: nf('\u{f1c0}', '⛁'), unicode: '⛁', ascii: '' }, baseToken: 'cache', options: [] },
+    { id: 'speed', group: 'Default Line 1', name: 'Output Speed (tok/s)', defaultPriority: 5, icons: { nerd: nf('\u{f0e7}', '⚡'), unicode: '⚡', ascii: '' }, baseToken: 'ok', options: [] },
+    { id: 'budget', group: 'Default Line 1', name: 'Quota + Cost (Combined)', defaultPriority: 3, icons: { nerd: nf('\u{f007e}', '▮'), unicode: '▮', ascii: '' }, baseToken: 'ok', options: [
+      { key: 'bucket', type: 'select', values: ['', 'gemini-5h', 'gemini-weekly', '3p-5h', '3p-weekly'], default: '', label: 'Quota Bucket filter (empty = min)' },
+      { key: 'show_reset', type: 'bool', default: false, label: 'Show reset countdown' },
+      { key: 'show_amount', type: 'bool', default: false, label: 'Show count allowance fallback' },
+      { key: 'show_subagent', type: 'bool', default: false, label: 'Show subagent cost share' }
+    ]},
+    { id: 'mode', group: 'Default Line 2', name: 'Execution Mode', defaultPriority: 1, icons: { nerd: '▸▸', unicode: '▸▸', ascii: '>>' }, baseToken: 'auto', options: [
+      { key: 'show_default', type: 'bool', default: false, label: 'Show default ask mode' },
+      { key: 'compact', type: 'bool', default: false, label: 'Always use compact pill' }
+    ]},
+    { id: 'subagents', group: 'Default Line 2', name: 'Active Subagents', defaultPriority: 2, icons: { nerd: nf('\u{f0e8}', '☍'), unicode: '☍', ascii: '' }, baseToken: 'model', options: [
+      { key: 'show_detail', type: 'bool', default: false, label: 'Expand top-2 active name · model' }
+    ]},
+    { id: 'tasks', group: 'Default Line 2', name: 'Background Tasks', defaultPriority: 3, icons: { nerd: nf('\u{f013}', '⚙'), unicode: '⚙', ascii: '' }, baseToken: 'warn', options: [] },
+    { id: 'queue', group: 'Default Line 2', name: 'Queued User Input', defaultPriority: 2, icons: { nerd: nf('\u{f01c}', '⌸'), unicode: '⌸', ascii: '' }, baseToken: 'context', options: [] },
+    { id: 'sandbox', group: 'Default Line 2', name: 'Sandbox State', defaultPriority: 4, icons: { nerd: nf('\u{f132}', '⛨'), unicode: '⛨', ascii: '' }, baseToken: 'model', options: [] },
+    { id: 'quota', group: 'Split Atomic', name: 'Quota Bucket (Single)', defaultPriority: 3, icons: { nerd: nf('\u{f007e}', '▮'), unicode: '▮', ascii: '' }, baseToken: 'ok', allowMultiple: true, options: [
+      { key: 'bucket', type: 'select', values: ['', 'gemini-5h', 'gemini-weekly', '3p-5h', '3p-weekly'], default: '', label: 'Quota Bucket' },
+      { key: 'label', type: 'text', default: 'quota', label: 'Display label' },
+      { key: 'show_reset', type: 'bool', default: false, label: 'Show reset countdown' },
+      { key: 'show_amount', type: 'bool', default: false, label: 'Show count allowance' }
+    ]},
+    { id: 'cost', group: 'Split Atomic', name: 'Session Cost (USD)', defaultPriority: 3, icons: { nerd: '', unicode: '', ascii: '' }, baseToken: 'warn', options: [
+      { key: 'show_subagent', type: 'bool', default: false, label: 'Show subagent USD share' }
+    ]},
+    { id: 'vim', group: 'Optional New', name: 'Vim Mode', defaultPriority: 2, icons: { nerd: nf('\ue62b', 'V'), unicode: 'V', ascii: 'VIM' }, baseToken: 'ok', options: [] },
+    { id: 'title', group: 'Optional New', name: 'Conversation Title', defaultPriority: 4, icons: { nerd: nf('\u{f0b79}', '💬'), unicode: '💬', ascii: '' }, baseToken: 'muted', options: [] },
+    { id: 'agent', group: 'Optional New', name: 'Custom Agent Name', defaultPriority: 2, icons: { nerd: nf('\u{f06a9}', '@'), unicode: '@', ascii: '@' }, baseToken: 'model', options: [] },
+    { id: 'artifacts', group: 'Optional New', name: 'Artifact Count', defaultPriority: 4, icons: { nerd: nf('\uf1c9', '▤'), unicode: '▤', ascii: '' }, baseToken: 'git', options: [] },
+    { id: 'version', group: 'Optional New', name: 'agy CLI Version', defaultPriority: 5, icons: { nerd: '', unicode: '', ascii: '' }, baseToken: 'muted', options: [] },
+    { id: 'plan', group: 'Optional New', name: 'Account Plan Tier', defaultPriority: 5, icons: { nerd: nf('\u{f01a5}', '★'), unicode: '★', ascii: '' }, baseToken: 'context', options: [] }
+  ];
+
+  const SCENARIOS = {
+    normal: {
+      id: 'normal', label: 'normal (Active Turn)', defaultWidth: 112,
+      desc: 'Standard active turn in git repo with warm Prompt Cache and quota.',
+      model: 'Gemini 2.5 Pro', effort: 'High', dir: 'agyline',
+      git: { branch: 'main', state: 'dirty', ahead: 2, behind: 0 },
+      ctxPct: 24, ctxTokens: '240k',
+      cacheSec: 222, cacheHit: 96, relay: 'off', touches: 0,
+      speed: '52.4',
+      buckets: { 'gemini-5h': { pct: 68, reset: '3h12m' }, '3p-5h': { pct: 53, reset: '1h45m' }, 'gemini-weekly': { pct: 84, reset: '4d' }, '3p-weekly': { pct: 71, reset: '4d' } },
+      costUsd: null, subagentUsd: null,
+      mode: 'auto', confirmPending: false,
+      subRun: 0, subTot: 0, subDetail: [],
+      tasks: 0, queue: 0, sandbox: 'sandbox',
+      vim: '', title: 'Design Rust statusline configurator', agent: '', artifacts: 1, version: '1.5.9', plan: 'Pro'
+    },
+    pre_session: {
+      id: 'pre_session', label: 'pre_session (Startup 0ms)', defaultWidth: 112,
+      desc: 'agy startup before first conversation (empty session_id): renders immediately with cold cache & no speed (#10).',
+      model: 'Opus 4.6', effort: 'High', dir: 'agyline',
+      git: { branch: 'main', state: 'clean', ahead: 0, behind: 0 },
+      ctxPct: 0, ctxTokens: '',
+      cacheSec: -1, cacheHit: 0, relay: 'off', touches: 0,
+      speed: null,
+      buckets: { 'gemini-5h': { pct: 91, reset: '4h58m' }, '3p-5h': { pct: 82, reset: '4h40m' } },
+      costUsd: null, subagentUsd: null,
+      mode: 'auto', confirmPending: false,
+      subRun: 0, subTot: 0, subDetail: [],
+      tasks: 0, queue: 0, sandbox: '',
+      vim: '', title: '', agent: '', artifacts: 0, version: '1.5.9', plan: 'Pro'
+    },
+    cache_warm_touch: {
+      id: 'cache_warm_touch', label: 'cache_warm_touch (Relay Live)', defaultWidth: 112,
+      desc: 'Last 60s of 5-min Prompt Cache window with Cache Relay keepalive touch badge (#9/#11).',
+      model: 'Sonnet 4.5', effort: 'High', dir: 'agyline',
+      git: { branch: 'feat/cache-touch', state: 'dirty', ahead: 1, behind: 0 },
+      ctxPct: 56, ctxTokens: '112k',
+      cacheSec: 44, cacheHit: 99, relay: 'live', touches: 2,
+      speed: '74.8',
+      buckets: { '3p-5h': { pct: 41, reset: '48m' }, 'gemini-5h': { pct: 75, reset: '2h10m' } },
+      costUsd: 0.384, subagentUsd: 0.092,
+      mode: 'accept-edits', confirmPending: false,
+      subRun: 0, subTot: 2, subDetail: [],
+      tasks: 1, queue: 0, sandbox: 'sandbox+net',
+      vim: 'NORMAL', title: 'Keepalive touch native HTTP worker', agent: '', artifacts: 2, version: '1.5.9', plan: 'Pro'
+    },
+    busy_subagents: {
+      id: 'busy_subagents', label: 'busy_subagents (Parallel Swarm)', defaultWidth: 116,
+      desc: 'Multi-agent session with running subagents, background tasks, queued input, vim & artifacts (#16).',
+      model: 'Gemini 2.5 Pro', effort: 'xHigh', dir: 'agyline',
+      git: { branch: 'feat/tui-prototype', state: 'dirty', ahead: 4, behind: 1 },
+      ctxPct: 42, ctxTokens: '420k',
+      cacheSec: 275, cacheHit: 94, relay: 'live', touches: 0,
+      speed: '118',
+      buckets: { 'gemini-5h': { pct: 62, reset: '2h30m' }, '3p-5h': { pct: 58, reset: '3h05m' } },
+      costUsd: 1.42, subagentUsd: 0.64,
+      mode: 'plan', confirmPending: false,
+      subRun: 2, subTot: 4, subDetail: ['research · Flash', 'coder · Sonnet 4.5', 'reviewer · Pro'],
+      tasks: 3, queue: 2, sandbox: 'sandbox',
+      vim: 'INSERT', title: 'Prototype 3 variants for issue 14 configurator', agent: 'coordinator', artifacts: 4, version: '1.5.9', plan: 'Ultra'
+    },
+    warn_crit: {
+      id: 'warn_crit', label: 'warn_crit (Alerts & Approval)', defaultWidth: 112,
+      desc: 'Critical context (86%), critical quota (14%), failed relay badge, git conflict & tool confirmation pending.',
+      model: 'Opus 4.6 1M', effort: 'Max', dir: 'agyline',
+      git: { branch: 'hotfix/merge-conflict', state: 'conflict', ahead: 0, behind: 3 },
+      ctxPct: 86, ctxTokens: '860k',
+      cacheSec: 25, cacheHit: 88, relay: 'fail', touches: 1,
+      speed: '31.6',
+      buckets: { '3p-5h': { pct: 14, reset: '19m' }, 'gemini-5h': { pct: 33, reset: '55m' } },
+      costUsd: 4.85, subagentUsd: 1.20,
+      mode: 'yolo', confirmPending: true,
+      subRun: 1, subTot: 1, subDetail: ['runner · Haiku 4.5'],
+      tasks: 1, queue: 1, sandbox: '',
+      vim: 'VISUAL', title: 'Resolve conflict in settings.json installer', agent: 'debugger', artifacts: 1, version: '1.5.9', plan: 'Pro'
+    },
+    narrow_stress: {
+      id: 'narrow_stress', label: 'narrow_stress (74-col Narrowing)', defaultWidth: 74,
+      desc: 'Long model/branch/dir names at 74 columns to stress-test Full → Compact → Drop → Ellipsis (#15).',
+      model: 'Claude Opus 4.6 Extended', effort: 'xHigh', dir: 'antigravity-statusline-rs',
+      git: { branch: 'feat/narrowing-three-stage-pipeline', state: 'dirty', ahead: 12, behind: 3 },
+      ctxPct: 63, ctxTokens: '630k',
+      cacheSec: 185, cacheHit: 97, relay: 'live', touches: 1,
+      speed: '64.5',
+      buckets: { '3p-5h': { pct: 39, reset: '1h12m' } },
+      costUsd: 0.95, subagentUsd: null,
+      mode: 'ask', confirmPending: false,
+      subRun: 2, subTot: 3, subDetail: ['explore · Flash', 'proto · Pro'],
+      tasks: 2, queue: 1, sandbox: 'sandbox+net',
+      vim: 'NORMAL', title: 'Verify grapheme cluster safe truncation width budget', agent: 'wayfinder', artifacts: 5, version: '1.5.9', plan: 'Enterprise'
+    }
+  };
+
+  function defaultConfigDoc() {
+    return {
+      version: 1,
+      preset: 'cometix',
+      palette: 'terminal',
+      theme: 'auto',
+      glyphs: 'nerd',
+      color_depth: 'auto',
+      separator: ' | ',
+      indent: '  ',
+      single_line: false,
+      overflow: 'fit',
+      thresholds: {
+        context_warn: 50,
+        context_crit: 80,
+        quota_warn: 45,
+        quota_crit: 20,
+        cache_warn_secs: 60
+      },
+      git: { cache_ms: 2000 },
+      cache_relay: { url: '' },
+      palette_overrides: {},
+      lines: [
+        [
+          { id: 'model' }, { id: 'dir' }, { id: 'git' },
+          { id: 'context' }, { id: 'cache' }, { id: 'speed' }, { id: 'budget' }
+        ],
+        [
+          { id: 'mode' }, { id: 'subagents' }, { id: 'tasks' },
+          { id: 'queue' }, { id: 'sandbox' }
+        ]
+      ]
+    };
+  }
+
+  const PRESETS = {
+    'cometix': {
+      summary: 'Reference Line 1:1 default (2 lines, terminal plain, 7 + 5 items)',
+      build: () => defaultConfigDoc()
+    },
+    'minimal': {
+      summary: 'Single-line essentials: model, dir, git, context',
+      build: () => ({
+        ...defaultConfigDoc(),
+        preset: 'minimal',
+        single_line: true,
+        lines: [
+          [{ id: 'model' }, { id: 'dir' }, { id: 'git' }, { id: 'context' }],
+          []
+        ]
+      })
+    },
+    'dashboard': {
+      summary: 'Full telemetry with split quota buckets, vim, agent, artifacts & subagent details',
+      build: () => ({
+        ...defaultConfigDoc(),
+        preset: 'dashboard',
+        palette: 'tokyo-night',
+        lines: [
+          [
+            { id: 'model' }, { id: 'plan' }, { id: 'dir' }, { id: 'git' },
+            { id: 'context' }, { id: 'cache' }, { id: 'speed' },
+            { id: 'quota', bucket: 'gemini-5h', label: 'gem', show_reset: true },
+            { id: 'quota', bucket: '3p-5h', label: '3p', show_reset: true },
+            { id: 'cost', show_subagent: true }
+          ],
+          [
+            { id: 'mode', show_default: true }, { id: 'vim' }, { id: 'agent' },
+            { id: 'subagents', show_detail: true }, { id: 'tasks' },
+            { id: 'queue' }, { id: 'artifacts' }, { id: 'sandbox' }, { id: 'version' }
+          ]
+        ]
+      })
+    },
+    'cache-focus': {
+      summary: 'Prompt-cache & budget oriented layout with Catppuccin Mocha palette',
+      build: () => ({
+        ...defaultConfigDoc(),
+        preset: 'cache-focus',
+        palette: 'catppuccin-mocha',
+        lines: [
+          [
+            { id: 'model' }, { id: 'context', show_remaining: true },
+            { id: 'cache', priority: 1 }, { id: 'budget', show_reset: true, priority: 2 },
+            { id: 'git', priority: 4 }
+          ],
+          [
+            { id: 'mode' }, { id: 'subagents' }, { id: 'queue' }
+          ]
+        ]
+      })
+    }
+  };
+
+  function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+  function getCatalogMeta(id) {
+    return ITEMS_CATALOG.find(m => m.id === id);
+  }
+
+  // Compute EffectiveConfig with #11 AGY_* env precedence & polarity fallback
+  function resolveEffective(doc, hostEnv) {
+    const overrides = {};
+    let polarity = doc.theme;
+    if (hostEnv.AGY_THEME) {
+      polarity = hostEnv.AGY_THEME.trim().toLowerCase();
+      overrides.theme = `AGY_THEME=${hostEnv.AGY_THEME}`;
+    }
+    if (polarity === 'auto') {
+      const bgPart = (hostEnv.COLORFGBG || '15;0').split(';').pop();
+      polarity = (/^\d+$/.test(bgPart) && parseInt(bgPart, 10) >= 7) ? 'light' : 'dark';
+    }
+
+    let singleLine = doc.single_line;
+    if (hostEnv.AGY_STATUSLINE_LINES) {
+      singleLine = hostEnv.AGY_STATUSLINE_LINES.trim() === '1';
+      overrides.single_line = `AGY_STATUSLINE_LINES=${hostEnv.AGY_STATUSLINE_LINES}`;
+    }
+
+    let indent = doc.indent;
+    if (hostEnv.AGY_STATUSLINE_INDENT !== undefined && hostEnv.AGY_STATUSLINE_INDENT !== '') {
+      indent = hostEnv.AGY_STATUSLINE_INDENT;
+      overrides.indent = `AGY_STATUSLINE_INDENT="${hostEnv.AGY_STATUSLINE_INDENT}"`;
+    }
+
+    let forceShowDefaultMode = null;
+    if (hostEnv.AGY_SHOW_DEFAULT_MODE) {
+      forceShowDefaultMode = ['1', 'true', 'on'].includes(hostEnv.AGY_SHOW_DEFAULT_MODE.trim().toLowerCase());
+      overrides.show_default = `AGY_SHOW_DEFAULT_MODE=${hostEnv.AGY_SHOW_DEFAULT_MODE}`;
+    }
+
+    let relayOff = false;
+    let relayUrl = doc.cache_relay.url;
+    if (hostEnv.AGY_CACHE_RELAY) {
+      if (hostEnv.AGY_CACHE_RELAY.trim().toLowerCase() === 'off') {
+        relayOff = true;
+        relayUrl = '';
+      } else {
+        relayUrl = hostEnv.AGY_CACHE_RELAY.trim();
+      }
+      overrides.cache_relay = `AGY_CACHE_RELAY=${hostEnv.AGY_CACHE_RELAY}`;
+    }
+
+    // Palette resolution + #11 opposite-polarity fallback guard
+    const palSpec = PALETTES[doc.palette] || PALETTES['terminal'];
+    let baseColors;
+    let polarityFallbackNote = '';
+    if (palSpec.polarity === 'dual') {
+      baseColors = { ...palSpec[polarity] };
+    } else if (palSpec.polarity !== polarity) {
+      baseColors = { ...PALETTES['terminal'][polarity] };
+      polarityFallbackNote = `Palette "${doc.palette}" (${palSpec.polarity}) mismatches ${polarity} theme → auto-fell back to terminal (${polarity})`;
+    } else {
+      baseColors = { ...palSpec.colors };
+    }
+
+    for (const [k, v] of Object.entries(doc.palette_overrides || {})) {
+      if (v && v.trim()) baseColors[k] = v.trim();
+    }
+
+    // Threshold validation (#11: out-of-range or inverted falls back to group defaults)
+    const th = { ...doc.thresholds };
+    let thresholdNote = '';
+    if (th.context_warn <= 0 || th.context_crit > 100 || th.context_warn >= th.context_crit) {
+      th.context_warn = 50; th.context_crit = 80;
+      thresholdNote = 'Invalid context thresholds (warn >= crit) → using 50%/80%';
+    }
+    if (th.quota_crit <= 0 || th.quota_warn >= 100 || th.quota_crit >= th.quota_warn) {
+      th.quota_warn = 45; th.quota_crit = 20;
+      thresholdNote = 'Invalid quota thresholds (crit >= warn) → using 45%/20%';
+    }
+
+    return {
+      polarity,
+      singleLine,
+      indent,
+      separator: doc.separator ?? ' | ',
+      glyphs: doc.glyphs || 'nerd',
+      colorDepth: doc.color_depth || 'auto',
+      overflow: doc.overflow || 'fit',
+      thresholds: th,
+      forceShowDefaultMode,
+      relayOff,
+      relayUrl,
+      colors: baseColors,
+      overrides,
+      polarityFallbackNote,
+      thresholdNote,
+      lines: doc.lines
+    };
+  }
+
+  function resolveColorToken(val, colors, fallbackToken) {
+    const chosen = (val && val.trim()) ? val.trim() : fallbackToken;
+    if (colors[chosen]) return colors[chosen];
+    const ansiMap = {
+      red: '#ef4444', green: '#22c55e', yellow: '#eab308', blue: '#3b82f6',
+      magenta: '#a855f7', cyan: '#06b6d4', white: '#e5e7eb', gray: '#6b7280',
+      bright_red: '#f87171', bright_green: '#4ade80', bright_yellow: '#facc15',
+      bright_blue: '#60a5fa', bright_magenta: '#c084fc', bright_cyan: '#22d3ee'
+    };
+    if (ansiMap[chosen]) return ansiMap[chosen];
+    if (/^#[0-9a-fA-F]{3,6}$/.test(chosen)) return chosen;
+    return colors[fallbackToken] || colors.text;
+  }
+
+  function truncChars(s, max) {
+    const arr = Array.from(s);
+    if (arr.length <= max) return s;
+    return arr.slice(0, Math.max(1, max - 1)).join('') + '…';
+  }
+
+  function colWidth(str) {
+    let w = 0;
+    for (const ch of Array.from(str)) {
+      const cp = ch.codePointAt(0);
+      // Wide CJK or fullwidth/emoji presentation
+      if (
+        (cp >= 0x1100 && cp <= 0x115F) ||
+        (cp >= 0x2E80 && cp <= 0xA4CF && cp !== 0x303F) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) ||
+        (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE10 && cp <= 0xFE6F) ||
+        (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0x1F300 && cp <= 0x1FAFF)
+      ) {
+        w += 2;
+      } else {
+        w += 1;
+      }
+    }
+    return w;
+  }
+
+  function spansText(spans) {
+    return spans.map(s => s.text).join('');
+  }
+
+  function spansWidth(spans) {
+    return colWidth(spansText(spans));
+  }
+
+  // Evaluate one Item into { full: Span[], compact: Span[], hasCompactDiff: boolean, priority: number }
+  function evaluateItem(spec, sc, eff) {
+    const meta = getCatalogMeta(spec.id);
+    if (!meta) return null;
+    const c = eff.colors;
+    const dot = { text: ' · ', fg: c.separator };
+    const prio = Math.min(5, Math.max(1, spec.priority || meta.defaultPriority));
+
+    let iconStr = spec.icon !== undefined ? spec.icon : (meta.icons[eff.glyphs] ?? '');
+    const baseFg = resolveColorToken(spec.fg, c, meta.baseToken);
+    const iconFg = resolveColorToken(spec.icon_color, c, meta.iconToken || spec.fg || meta.baseToken);
+    const pfx = (ic = iconStr) => ic ? [{ text: ic + ' ', fg: iconFg }] : [];
+
+    switch (spec.id) {
+      case 'model': {
+        const fullName = sc.model || 'Model';
+        const compName = truncChars(fullName, 20);
+        const mk = (nm) => {
+          const out = [...pfx(), { text: nm, fg: baseFg }];
+          if (sc.effort) out.push(dot, { text: sc.effort, fg: baseFg });
+          return out;
+        };
+        return { full: mk(fullName), compact: mk(compName), prio };
+      }
+      case 'dir': {
+        if (!sc.dir) return null;
+        return {
+          full: [...pfx(), { text: sc.dir, fg: baseFg }],
+          compact: [...pfx(), { text: truncChars(sc.dir, 12), fg: baseFg }],
+          prio
+        };
+      }
+      case 'git': {
+        if (!sc.git || !sc.git.branch) return null;
+        const mk = (lim) => {
+          const br = truncChars(sc.git.branch, lim);
+          let ab = '';
+          if (sc.git.ahead > 0) ab += ` ↑${sc.git.ahead}`;
+          if (sc.git.behind > 0) ab += ` ↓${sc.git.behind}`;
+          if (sc.git.state === 'conflict') {
+            return [...pfx(), { text: `${br} ⚠${ab}`, fg: c.crit }];
+          }
+          const mark = sc.git.state === 'dirty' ? '●' : '✓';
+          return [...pfx(), { text: `${br} ${mark}${ab}`, fg: baseFg }];
+        };
+        return { full: mk(24), compact: mk(12), prio };
+      }
+      case 'context': {
+        const used = sc.ctxPct ?? 0;
+        const sevCol = used >= eff.thresholds.context_crit ? c.crit : (used >= eff.thresholds.context_warn ? c.warn : baseFg);
+        const pctStr = spec.show_remaining ? `${100 - used}% left` : `${used}%`;
+        const full = [...pfx(), { text: pctStr, fg: sevCol }];
+        const compact = [...pfx(), { text: pctStr, fg: sevCol }];
+        if (sc.ctxTokens) {
+          full.push(dot, { text: `${sc.ctxTokens} tokens`, fg: sevCol });
+          compact.push(dot, { text: `${sc.ctxTokens}`, fg: sevCol });
+        }
+        return { full, compact, prio };
+      }
+      case 'cache': {
+        if (sc.cacheSec < 0) {
+          return { full: [...pfx(), { text: 'cold', fg: c.muted }], compact: [...pfx(), { text: 'cold', fg: c.muted }], prio };
+        }
+        const mm = Math.floor(sc.cacheSec / 60);
+        const ss = String(sc.cacheSec % 60).padStart(2, '0');
+        const ttlTxt = sc.cacheSec > 0 ? `${mm}:${ss}` : 'cold';
+        const ttlFg = sc.cacheSec > eff.thresholds.cache_warn_secs ? baseFg : c.warn;
+        const badge = [];
+        if (!eff.relayOff) {
+          if (sc.relay === 'fail') badge.push({ text: ' ✗', fg: c.crit });
+          else if (sc.relay === 'live') badge.push({ text: sc.touches > 0 ? ` ↻${sc.touches}` : ' ↻', fg: c.ok });
+        }
+        const core = [...pfx(), { text: ttlTxt, fg: ttlFg }, ...badge];
+        const full = sc.cacheHit > 0 ? [...core, dot, { text: `${sc.cacheHit}% hit`, fg: ttlFg }] : core;
+        return { full, compact: core, prio };
+      }
+      case 'speed': {
+        if (!sc.speed) return null;
+        return {
+          full: [...pfx(), { text: `${sc.speed} tok/s`, fg: baseFg }],
+          compact: [...pfx(), { text: `${sc.speed}/s`, fg: baseFg }],
+          prio
+        };
+      }
+      case 'budget': {
+        const partsFull = [];
+        const partsComp = [];
+        const bEntries = Object.entries(sc.buckets || {});
+        let chosen = null;
+        if (spec.bucket && sc.buckets && sc.buckets[spec.bucket]) {
+          chosen = sc.buckets[spec.bucket];
+        } else if (bEntries.length > 0) {
+          chosen = bEntries.reduce((a, b) => (a[1].pct < b[1].pct ? a : b))[1];
+        }
+        if (chosen) {
+          const qCol = chosen.pct < eff.thresholds.quota_crit ? c.crit : (chosen.pct < eff.thresholds.quota_warn ? c.warn : c.ok);
+          const qIc = spec.icon !== undefined ? spec.icon : (meta.icons[eff.glyphs] ?? '');
+          const rst = spec.show_reset && chosen.reset ? ` (${chosen.reset})` : '';
+          const amt = spec.show_amount ? ' [420]' : '';
+          const qPre = qIc ? `${qIc} ` : '';
+          partsFull.push([{ text: `${qPre}${chosen.pct}% quota${amt}${rst}`, fg: qCol }]);
+          partsComp.push([{ text: `${qPre}${chosen.pct}%${ qIc ? '' : ' quota'}`, fg: qCol }]);
+        }
+        if (sc.costUsd && sc.costUsd > 0) {
+          const cf = sc.costUsd >= 1 ? `$${sc.costUsd.toFixed(2)}` : `$${sc.costUsd.toFixed(3)}`;
+          const subTxt = (spec.show_subagent && sc.subagentUsd) ? ` (sub $${sc.subagentUsd.toFixed(2)})` : '';
+          partsFull.push([{ text: cf + subTxt, fg: c.warn }]);
+          partsComp.push([{ text: cf, fg: c.warn }]);
+        }
+        if (partsFull.length === 0) return null;
+        const joinDots = (arr) => arr.reduce((acc, cur, idx) => (idx === 0 ? [...cur] : [...acc, dot, ...cur]), []);
+        return { full: joinDots(partsFull), compact: joinDots(partsComp), prio };
+      }
+      case 'quota': {
+        const bEntries = Object.entries(sc.buckets || {});
+        let chosen = null;
+        if (spec.bucket && sc.buckets && sc.buckets[spec.bucket]) chosen = sc.buckets[spec.bucket];
+        else if (bEntries.length > 0) chosen = bEntries[0][1];
+        if (!chosen) return null;
+        const qCol = chosen.pct < eff.thresholds.quota_crit ? c.crit : (chosen.pct < eff.thresholds.quota_warn ? c.warn : c.ok);
+        const lbl = spec.label !== undefined ? spec.label : 'quota';
+        const rst = spec.show_reset && chosen.reset ? ` (${chosen.reset})` : '';
+        const qPre = iconStr ? `${iconStr} ` : '';
+        const compLbl = (lbl === 'quota' && iconStr) ? '' : ` ${truncChars(lbl, 8)}`;
+        return {
+          full: [{ text: `${qPre}${chosen.pct}% ${lbl}${rst}`, fg: qCol }],
+          compact: [{ text: `${qPre}${chosen.pct}%${compLbl}`, fg: qCol }],
+          prio
+        };
+      }
+      case 'cost': {
+        if (!sc.costUsd || sc.costUsd <= 0) return null;
+        const cf = sc.costUsd >= 1 ? `$${sc.costUsd.toFixed(2)}` : `$${sc.costUsd.toFixed(3)}`;
+        const subTxt = (spec.show_subagent && sc.subagentUsd) ? ` (sub $${sc.subagentUsd.toFixed(2)})` : '';
+        return { full: [{ text: cf + subTxt, fg: c.warn }], compact: [{ text: cf, fg: c.warn }], prio };
+      }
+      case 'mode': {
+        if (sc.confirmPending) {
+          const comp = [{ text: '⚠ confirm', fg: c.warn }];
+          const full = spec.compact ? comp : [{ text: '⚠ approval required', fg: c.warn }, { text: ' (waiting for tool confirmation)', fg: c.muted }];
+          return { full, compact: comp, prio };
+        }
+        const m = (sc.mode || 'ask').toLowerCase();
+        const showDef = eff.forceShowDefaultMode !== null ? eff.forceShowDefaultMode : !!spec.show_default;
+        const chev = eff.glyphs === 'ascii' ? '>>' : '▸▸';
+        const map = {
+          yolo: [`${chev} bypass permissions on`, `${chev} bypass`, c.auto],
+          auto: [`${chev} auto mode on`, `${chev} auto`, c.auto],
+          'accept-edits': [`${chev} accept edits on`, `${chev} accept-edits`, c.context],
+          plan: [`${chev} plan mode on`, `${chev} plan`, c.model],
+          'best-of-n': [`${chev} best-of-n mode on`, `${chev} best-of-n`, c.git],
+          ask: [`${chev} ask mode`, `${chev} ask`, c.muted]
+        };
+        if (m === 'ask' && !showDef) return null;
+        const [fTxt, cTxt, mCol] = map[m] || map.ask;
+        const comp = [{ text: cTxt, fg: mCol }];
+        const full = spec.compact ? comp : [{ text: fTxt, fg: mCol }, { text: ' (shift+tab to cycle)', fg: c.muted }];
+        return { full, compact: comp, prio };
+      }
+      case 'subagents': {
+        if (!sc.subTot || sc.subTot <= 0) return null;
+        const col = sc.subRun > 0 ? c.model : c.muted;
+        const coreFull = sc.subRun > 0 ? `${sc.subRun}/${sc.subTot} agents running` : `${sc.subTot} agents`;
+        const coreComp = sc.subRun > 0 ? `${sc.subRun}/${sc.subTot} running` : `${sc.subTot} agents`;
+        let det = '';
+        if (spec.show_detail && sc.subDetail && sc.subDetail.length > 0) {
+          const top2 = sc.subDetail.slice(0, 2).join(', ');
+          const extra = sc.subDetail.length > 2 ? `, +${sc.subDetail.length - 2}` : '';
+          det = ` (${top2}${extra})`;
+        }
+        const ic = iconStr ? [{ text: iconStr + ' ', fg: col }] : [];
+        return {
+          full: [...ic, { text: coreFull, fg: col }, ...(det ? [{ text: det, fg: c.muted }] : [])],
+          compact: [...ic, { text: coreComp, fg: col }],
+          prio
+        };
+      }
+      case 'tasks': {
+        if (!sc.tasks || sc.tasks <= 0) return null;
+        const txt = `${sc.tasks} ${sc.tasks === 1 ? 'task' : 'tasks'}`;
+        return { full: [...pfx(), { text: txt, fg: baseFg }], compact: [...pfx(), { text: txt, fg: baseFg }], prio };
+      }
+      case 'queue': {
+        if (!sc.queue || sc.queue <= 0) return null;
+        const txt = `${sc.queue} queued`;
+        return { full: [...pfx(), { text: txt, fg: baseFg }], compact: [...pfx(), { text: txt, fg: baseFg }], prio };
+      }
+      case 'sandbox': {
+        if (!sc.sandbox) return null;
+        return { full: [...pfx(), { text: sc.sandbox, fg: baseFg }], compact: [...pfx(), { text: sc.sandbox, fg: baseFg }], prio };
+      }
+      case 'vim': {
+        if (!sc.vim) return null;
+        const vCol = sc.vim === 'INSERT' ? c.model : (sc.vim === 'VISUAL' ? c.context : c.ok);
+        return {
+          full: [...pfx(), { text: sc.vim, fg: vCol }],
+          compact: [...pfx(), { text: iconStr ? sc.vim[0] : sc.vim, fg: vCol }],
+          prio
+        };
+      }
+      case 'title': {
+        if (!sc.title) return null;
+        return {
+          full: [...pfx(), { text: truncChars(sc.title, 32), fg: baseFg }],
+          compact: [...pfx(), { text: truncChars(sc.title, 16), fg: baseFg }],
+          prio
+        };
+      }
+      case 'agent': {
+        if (!sc.agent) return null;
+        return {
+          full: [...pfx(), { text: sc.agent, fg: baseFg }],
+          compact: [...pfx(), { text: truncChars(sc.agent, 12), fg: baseFg }],
+          prio
+        };
+      }
+      case 'artifacts': {
+        if (!sc.artifacts || sc.artifacts <= 0) return null;
+        return {
+          full: [...pfx(), { text: `${sc.artifacts} ${sc.artifacts === 1 ? 'artifact' : 'artifacts'}`, fg: baseFg }],
+          compact: [...pfx(), { text: iconStr ? `${sc.artifacts}` : `${sc.artifacts} art`, fg: baseFg }],
+          prio
+        };
+      }
+      case 'version': {
+        if (!sc.version) return null;
+        const v = sc.version.startsWith('v') ? sc.version : `v${sc.version}`;
+        return { full: [{ text: v, fg: baseFg }], compact: [{ text: v, fg: baseFg }], prio };
+      }
+      case 'plan': {
+        if (!sc.plan) return null;
+        return {
+          full: [...pfx(), { text: sc.plan, fg: baseFg }],
+          compact: [...pfx(), { text: truncChars(sc.plan, 10), fg: baseFg }],
+          prio
+        };
+      }
+      default:
+        return null;
+    }
+  }
+
+  // Exact #15 Three-Stage Row Narrowing Pipeline:
+  // Stage 1: Full -> Compact (priority 5->1, tie right->left)
+  // Stage 2: Drop whole items keeping >=1 item (priority 5->1, tie right->left)
+  // Stage 3: Grapheme-safe right truncation with '…' (or '...' in ascii)
+  function layoutRow(evaluatedItems, eff, maxCols, appendBrokenBadge) {
+    const reports = {};
+    let active = evaluatedItems.filter(it => {
+      if (!it.eval) {
+        reports[it.slotKey] = 'empty';
+        return false;
+      }
+      reports[it.slotKey] = 'full';
+      return true;
+    }).map((it, idx) => ({ ...it, idx, mode: 'full', dropped: false }));
+
+    if (active.length === 0 && !appendBrokenBadge) {
+      return { spans: [], rawWidth: 0, finalWidth: 0, reports };
+    }
+
+    const sepSpan = { text: eff.separator, fg: eff.colors.separator };
+    const indentSpan = { text: eff.indent, fg: eff.colors.text };
+    const brokenSpan = appendBrokenBadge ? [{ text: ' ! config', fg: eff.colors.crit }] : [];
+
+    const assemble = () => {
+      const kept = active.filter(x => !x.dropped);
+      const out = [indentSpan];
+      kept.forEach((x, i) => {
+        if (i > 0) out.push(sepSpan);
+        const seg = x.mode === 'compact' ? x.eval.compact : x.eval.full;
+        out.push(...seg);
+      });
+      out.push(...brokenSpan);
+      return out;
+    };
+
+    const rawSpans = assemble();
+    const rawWidth = spansWidth(rawSpans);
+
+    if (eff.overflow === 'none' || !maxCols || maxCols <= 0 || rawWidth <= maxCols) {
+      return { spans: rawSpans, rawWidth, finalWidth: rawWidth, reports };
+    }
+
+    // Order: priority 5 down to 1, right-to-left within same priority
+    const order = [...active].sort((a, b) => (b.eval.prio - a.eval.prio) || (b.idx - a.idx));
+
+    // Stage 1: Compact
+    for (const target of order) {
+      if (spansText(target.eval.compact) !== spansText(target.eval.full)) {
+        target.mode = 'compact';
+        reports[target.slotKey] = 'compact';
+        if (spansWidth(assemble()) <= maxCols) {
+          const s = assemble();
+          return { spans: s, rawWidth, finalWidth: spansWidth(s), reports };
+        }
+      }
+    }
+
+    // Stage 2: Drop items (always retain at least 1 item)
+    for (const target of order) {
+      const remainingCount = active.filter(x => !x.dropped).length;
+      if (remainingCount <= 1) break;
+      target.dropped = true;
+      reports[target.slotKey] = 'dropped';
+      if (spansWidth(assemble()) <= maxCols) {
+        const s = assemble();
+        return { spans: s, rawWidth, finalWidth: spansWidth(s), reports };
+      }
+    }
+
+    // Stage 3: Truncate last surviving item safely
+    const surviving = active.find(x => !x.dropped);
+    if (surviving) reports[surviving.slotKey] = 'truncated';
+    const ellipsis = eff.glyphs === 'ascii' ? '...' : '…';
+    const ellW = colWidth(ellipsis);
+    const suffixW = spansWidth(brokenSpan);
+    const budget = Math.max(ellW, maxCols - suffixW);
+
+    const bodySpans = [indentSpan, ...(surviving ? surviving.eval.compact : [])];
+    const clipped = [];
+    let used = 0;
+    for (const sp of bodySpans) {
+      let acc = '';
+      for (const ch of Array.from(sp.text)) {
+        const cw = colWidth(ch);
+        if (used + cw + ellW > budget) {
+          if (acc) clipped.push({ text: acc, fg: sp.fg });
+          clipped.push({ text: ellipsis, fg: eff.colors.muted });
+          clipped.push(...brokenSpan);
+          return { spans: clipped, rawWidth, finalWidth: spansWidth(clipped), reports };
+        }
+        acc += ch;
+        used += cw;
+      }
+      if (acc) clipped.push({ text: acc, fg: sp.fg });
+    }
+    clipped.push(...brokenSpan);
+    return { spans: clipped, rawWidth, finalWidth: spansWidth(clipped), reports };
+  }
+
+  // Shared Renderer Entrypoint (`statusline::render_lines` equivalent)
+  function renderLines(sc, doc, hostEnv, simWidth, isBrokenConfig) {
+    const effDoc = isBrokenConfig ? defaultConfigDoc() : doc;
+    const eff = resolveEffective(effDoc, hostEnv);
+
+    let rawRows = eff.lines.map((row, rIdx) =>
+      row.map((spec, iIdx) => ({
+        slotKey: `${rIdx}:${iIdx}`,
+        spec,
+        eval: evaluateItem(spec, sc, eff)
+      }))
+    );
+
+    // single_line = true folds mode compact pill onto row 0 (#11 / statusline.ps1 L670)
+    if (eff.singleLine) {
+      const row0 = [...(rawRows[0] || [])];
+      const modeSpec = (eff.lines[1] || []).find(s => s.id === 'mode');
+      if (modeSpec) {
+        const mEval = evaluateItem({ ...modeSpec, compact: true }, sc, eff);
+        if (mEval) {
+          row0.push({ slotKey: `1:folded_mode`, spec: modeSpec, eval: mEval });
+        }
+      }
+      rawRows = [row0];
+    }
+
+    const outLines = [];
+    const allReports = {};
+    rawRows.forEach((rItems, idx) => {
+      const res = layoutRow(rItems, eff, simWidth, isBrokenConfig && idx === 0);
+      Object.assign(allReports, res.reports);
+      if (res.spans.length > 0) {
+        outLines.push(res);
+      }
+    });
+
+    // Apply color_depth = "none"
+    if (eff.colorDepth === 'none') {
+      outLines.forEach(l => {
+        l.spans = l.spans.map(sp => ({ ...sp, fg: eff.colors.text }));
+      });
+    }
+
+    return { lines: outLines, reports: allReports, effective: eff };
+  }
+
+  // Serialize ConfigDoc -> clean config.toml (#11 schema)
+  function serializeToml(doc) {
+    const out = [];
+    out.push(`version = ${doc.version}`);
+    if (doc.preset) out.push(`preset = "${doc.preset}"`);
+    out.push(`palette = "${doc.palette}"`);
+    out.push(`theme = "${doc.theme}"`);
+    out.push(`glyphs = "${doc.glyphs}"`);
+    out.push(`color_depth = "${doc.color_depth}"`);
+    out.push(`separator = ${JSON.stringify(doc.separator)}`);
+    out.push(`indent = ${JSON.stringify(doc.indent)}`);
+    out.push(`single_line = ${doc.single_line}`);
+    out.push(`overflow = "${doc.overflow}"`);
+    out.push('');
+    out.push('[thresholds]');
+    out.push(`context_warn = ${doc.thresholds.context_warn}`);
+    out.push(`context_crit = ${doc.thresholds.context_crit}`);
+    out.push(`quota_warn = ${doc.thresholds.quota_warn}`);
+    out.push(`quota_crit = ${doc.thresholds.quota_crit}`);
+    out.push(`cache_warn_secs = ${doc.thresholds.cache_warn_secs}`);
+    out.push('');
+    out.push('[git]');
+    out.push(`cache_ms = ${doc.git.cache_ms}`);
+    out.push('');
+    out.push('[cache_relay]');
+    out.push(`url = ${JSON.stringify(doc.cache_relay.url || '')}`);
+
+    const ovEntries = Object.entries(doc.palette_overrides || {}).filter(([, v]) => v && v.trim());
+    if (ovEntries.length > 0) {
+      out.push('');
+      out.push('[palette_overrides]');
+      for (const [k, v] of ovEntries) out.push(`${k} = ${JSON.stringify(v.trim())}`);
+    }
+
+    for (const row of doc.lines) {
+      out.push('');
+      out.push('[[line]]');
+      if (row.length === 0) {
+        out.push('items = []');
+      } else {
+        out.push('items = [');
+        row.forEach((it) => {
+          const meta = getCatalogMeta(it.id);
+          const pairs = [];
+          if (it.icon !== undefined) pairs.push(`icon = ${JSON.stringify(it.icon)}`);
+          if (it.fg) pairs.push(`fg = ${JSON.stringify(it.fg)}`);
+          if (it.icon_color) pairs.push(`icon_color = ${JSON.stringify(it.icon_color)}`);
+          if (it.priority !== undefined && meta && it.priority !== meta.defaultPriority) {
+            pairs.push(`priority = ${it.priority}`);
+          }
+          (meta ? meta.options : []).forEach(opt => {
+            if (it[opt.key] !== undefined && it[opt.key] !== opt.default) {
+              const val = typeof it[opt.key] === 'string' ? JSON.stringify(it[opt.key]) : String(it[opt.key]);
+              pairs.push(`${opt.key} = ${val}`);
+            }
+          });
+          if (pairs.length === 0) {
+            out.push(`  "${it.id}",`);
+          } else {
+            out.push(`  { id = "${it.id}", ${pairs.join(', ')} },`);
+          }
+        });
+        out.push(']');
+      }
+    }
+    return out.join('\n');
+  }
+
+  // Compute settings.json diff (#13)
+  function computeSettingsDiff(action, hookState) {
+    const cmdStr = hookState.mode === 'space_warn'
+      ? 'C:/Users/JOHNDO~1/.cargo/bin/agyline.exe'
+      : '~/.cargo/bin/agyline.exe';
+
+    if (action === 'install') {
+      const oldLines = [];
+      if (hookState.current === 'ps1') {
+        oldLines.push(
+          '  "statusLine": {',
+          '    "type": "command",',
+          '-   "command": "pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ~/.gemini/antigravity-cli/statusline.ps1",',
+          '+   "command": "' + cmdStr + '",',
+          '    "enabled": true',
+          '  }'
+        );
+      } else if (hookState.current === 'none') {
+        oldLines.push(
+          '+ "statusLine": {',
+          '+   "type": "command",',
+          '+   "command": "' + cmdStr + '",',
+          '+   "enabled": true',
+          '+ }'
+        );
+      } else {
+        oldLines.push('  (Already connected to agyline — idempotent no-op)');
+      }
+      return {
+        targetPath: '~/.gemini/antigravity-cli/settings.json',
+        backupNote: hookState.current === 'ps1'
+          ? 'Snapshots prior statusline.ps1 object → ~/.gemini/agyline/state/previous_statusline.json (never deletes .ps1)'
+          : (hookState.mode === 'space_warn' ? 'Windows path contained spaces → resolved via Win32 8.3 short path (cmd /c safe, zero quotes)' : 'Preserves top-level key order via serde_json preserve_order'),
+        lines: oldLines
+      };
+    } else {
+      // uninstall
+      const lines = [];
+      if (hookState.snapshot === 'ps1') {
+        lines.push(
+          '  "statusLine": {',
+          '    "type": "command",',
+          '-   "command": "' + cmdStr + '",',
+          '+   "command": "pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ~/.gemini/antigravity-cli/statusline.ps1",',
+          '    "enabled": true',
+          '  }'
+        );
+      } else {
+        lines.push(
+          '- "statusLine": {',
+          '-   "type": "command",',
+          '-   "command": "' + cmdStr + '",',
+          '-   "enabled": true',
+          '- }'
+        );
+      }
+      return {
+        targetPath: '~/.gemini/antigravity-cli/settings.json',
+        backupNote: hookState.snapshot === 'ps1'
+          ? 'Restores prior statusLine from state/previous_statusline.json (config.toml kept)'
+          : 'No prior snapshot → removes statusLine key to restore built-in agy bar (config.toml kept)',
+        lines
+      };
+    }
+  }
+
+  return {
+    PALETTES, TOKEN_KEYS, ITEMS_CATALOG, SCENARIOS, PRESETS,
+    defaultConfigDoc, clone, getCatalogMeta, resolveEffective,
+    renderLines, serializeToml, computeSettingsDiff
+  };
+})();
+
+/* ==========================================================================
+ * 2. SHARED CONFIGURATOR APP STATE & INTERACTION CONTROLLER
+ * ========================================================================== */
+const VARIANTS = {
+  A: { key: 'A', name: '单屏分栏工作台 (Tabbed Workbench)', short: 'Workbench' },
+  B: { key: 'B', name: 'CCometixLine 层级菜单栈 (Menu Stack)', short: 'Menu Stack' },
+  C: { key: 'C', name: '可视化行槽画布 + 实时 TOML 抽屉 (Canvas & TOML Split)', short: 'Canvas + TOML' }
+};
+
+const params = new URLSearchParams(window.location.search);
+const initialVariant = ['A', 'B', 'C'].includes((params.get('variant') || '').toUpperCase())
+  ? params.get('variant').toUpperCase()
+  : 'A';
+
+const state = {
+  variant: initialVariant,
+  doc: AgylineEngine.defaultConfigDoc(),
+  savedToml: AgylineEngine.serializeToml(AgylineEngine.defaultConfigDoc()),
+  undoStack: [],
+  redoStack: [],
+  lastSaveMsg: '',
+
+  // Preview Controls
+  scenarioId: 'normal',
+  simWidth: 112,
+  previewIgnoreEnv: false,
+
+  // Host Simulation (Harness)
+  diskMode: 'valid', // 'valid' | 'missing' | 'broken' | 'conflict'
+  tinyTerm: false,
+  hostEnv: {
+    COLORFGBG: '15;0',
+    AGY_THEME: '',
+    AGY_STATUSLINE_LINES: '',
+    AGY_STATUSLINE_INDENT: '',
+    AGY_SHOW_DEFAULT_MODE: '',
+    AGY_CACHE_RELAY: ''
+  },
+  hookState: {
+    mode: 'ps1',
+    current: 'ps1', // 'ps1' | 'connected' | 'none'
+    snapshot: 'ps1'
+  },
+
+  // Variant A navigation state
+  tabA: 0, // 0: Lines & Items, 1: Appearance, 2: Behavior & Thresholds, 3: agy Hook, 4: TOML & Env
+  paneA: 0, // 0: Canvas, 1: Catalog, 2: Inspector
+  showTomlDrawerA: false,
+  selLine: 0,
+  selSlotIdx: 0,
+  selCatalogIdx: 0,
+  selPresetKey: 'cometix',
+
+  // Variant B navigation stack
+  stackB: ['root'], // 'root' | 'line0' | 'line1' | 'style' | 'thresholds' | 'runtime' | 'hook' | 'item_detail'
+  cursorB: 0,
+  showTomlDrawerB: true,
+
+  // Variant C canvas state
+  paneC: 0, // 0: Line 0 slots, 1: Line 1 slots, 2: Add Pool
+  addPoolOpenRow: null,
+
+  // Modal Dialog ('diff_install' | 'diff_uninstall' | 'quit_dirty' | 'broken_overwrite' | 'mtime_conflict' | 'preset_scope' | 'help' | null)
+  modal: null,
+  pendingPresetKey: null,
+  exitedMessage: null
+};
+
+function isDirty() {
+  if (state.diskMode === 'missing') {
+    return AgylineEngine.serializeToml(state.doc) !== AgylineEngine.serializeToml(AgylineEngine.defaultConfigDoc());
+  }
+  return AgylineEngine.serializeToml(state.doc) !== state.savedToml;
+}
+
+function mutateDoc(mutator) {
+  state.undoStack.push(AgylineEngine.clone(state.doc));
+  if (state.undoStack.length > 100) state.undoStack.shift();
+  state.redoStack = [];
+  state.exitedMessage = null;
+  state.lastSaveMsg = '';
+  mutator(state.doc);
+  clampSelections();
+  renderAll();
+}
+
+function undo() {
+  if (state.undoStack.length === 0) return;
+  state.redoStack.push(AgylineEngine.clone(state.doc));
+  state.doc = state.undoStack.pop();
+  clampSelections();
+  renderAll();
+}
+
+function redo() {
+  if (state.redoStack.length === 0) return;
+  state.undoStack.push(AgylineEngine.clone(state.doc));
+  state.doc = state.redoStack.pop();
+  clampSelections();
+  renderAll();
+}
+
+function clampSelections() {
+  if (!state.doc.lines[0]) state.doc.lines[0] = [];
+  if (!state.doc.lines[1]) state.doc.lines[1] = [];
+  state.selLine = Math.max(0, Math.min(1, state.selLine));
+  const row = state.doc.lines[state.selLine];
+  state.selSlotIdx = Math.max(0, Math.min(Math.max(0, row.length - 1), state.selSlotIdx));
+}
+
+function setVariant(v) {
+  if (!VARIANTS[v]) return;
+  state.variant = v;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('variant', v);
+    window.history.replaceState({}, '', url.toString());
+  } catch (_) {}
+  renderAll();
+}
+
+function cycleScenario(dir = 1) {
+  const keys = Object.keys(AgylineEngine.SCENARIOS);
+  const idx = keys.indexOf(state.scenarioId);
+  const next = keys[(idx + dir + keys.length) % keys.length];
+  state.scenarioId = next;
+  state.simWidth = AgylineEngine.SCENARIOS[next].defaultWidth;
+  renderAll();
+}
+
+function adjustWidth(delta) {
+  if (state.simWidth === 0) state.simWidth = 100;
+  state.simWidth = Math.max(40, Math.min(140, state.simWidth + delta));
+  renderAll();
+}
+
+function triggerSave(force = false) {
+  if (state.diskMode === 'broken' && !force) {
+    state.modal = 'broken_overwrite';
+    renderAll();
+    return;
+  }
+  if (state.diskMode === 'conflict' && !force) {
+    state.modal = 'mtime_conflict';
+    renderAll();
+    return;
+  }
+  if (state.diskMode === 'missing' && !isDirty()) {
+    state.lastSaveMsg = 'Default unchanged — skipped creating redundant config.toml';
+    renderAll();
+    return;
+  }
+  state.savedToml = AgylineEngine.serializeToml(state.doc);
+  if (state.diskMode === 'broken' || state.diskMode === 'missing' || state.diskMode === 'conflict') {
+    state.diskMode = 'valid';
+    document.getElementById('simDiskMode').value = 'valid';
+  }
+  state.modal = null;
+  state.lastSaveMsg = 'Saved ~/.gemini/agyline/config.toml (atomic rename)';
+  renderAll();
+}
+
+function triggerQuit() {
+  if (isDirty()) {
+    state.modal = 'quit_dirty';
+    renderAll();
+  } else {
+    state.exitedMessage = 'Exited TUI cleanly (exit code 0, Alternate Screen restored). Click [Reopen agyline] to resume.';
+    renderAll();
+  }
+}
+
+function applyPresetWithScope(presetKey, scope) {
+  const p = AgylineEngine.PRESETS[presetKey];
+  if (!p) return;
+  const built = p.build();
+  mutateDoc(d => {
+    d.preset = presetKey;
+    if (scope === 'all' || scope === 'layout') {
+      d.lines = built.lines;
+      d.single_line = built.single_line;
+    }
+    if (scope === 'all' || scope === 'style') {
+      d.palette = built.palette;
+      d.theme = built.theme;
+      d.glyphs = built.glyphs;
+      d.color_depth = built.color_depth;
+      d.separator = built.separator;
+      d.indent = built.indent;
+      d.palette_overrides = built.palette_overrides;
+    }
+  });
+  state.modal = null;
+  renderAll();
+}
+
+/* ==========================================================================
+ * 3. HTML ESCAPING & SHARED PREVIEW COMPONENT
+ * ========================================================================== */
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildRuler(cols) {
+  if (!cols || cols <= 0) return '1·······10········20········30········40········50········60········70········80 (∞ unbounded)';
+  let s = '';
+  for (let i = 1; i <= cols; i++) {
+    if (i % 10 === 0) {
+      const label = String(i);
+      s = s.slice(0, Math.max(0, s.length - (label.length - 1))) + label;
+    } else if (i % 5 === 0) {
+      s += '┼';
+    } else {
+      s += '─';
+    }
+  }
+  return s + '┤';
+}
+
+function renderSharedPreviewBox(compactHeader = false) {
+  const sc = AgylineEngine.SCENARIOS[state.scenarioId];
+  const envToUse = state.previewIgnoreEnv ? { COLORFGBG: state.hostEnv.COLORFGBG } : state.hostEnv;
+  const isBroken = state.diskMode === 'broken';
+  const rendered = AgylineEngine.renderLines(sc, state.doc, envToUse, state.simWidth, isBroken);
+  const eff = rendered.effective;
+
+  const termClass = eff.polarity === 'light' ? 'term-light' : 'term-dark';
+  const customBg = eff.colors.bg ? `style="background:${esc(eff.colors.bg)}"` : '';
+
+  const linesHtml = rendered.lines.map(l => {
+    const spansHtml = l.spans.map(sp => `<span style="color:${esc(sp.fg)}">${esc(sp.text)}</span>`).join('');
+    return `<div class="preview-line">${spansHtml}</div>`;
+  }).join('');
+
+  // Stage telemetry chips
+  const stageChips = [];
+  state.doc.lines.forEach((row, rIdx) => {
+    row.forEach((it, iIdx) => {
+      const st = rendered.reports[`${rIdx}:${iIdx}`];
+      if (st === 'compact' || st === 'dropped' || st === 'truncated') {
+        stageChips.push(`<span class="st-chip ${st}">L${rIdx + 1}:${esc(it.id)} → ${st.toUpperCase()}</span>`);
+      }
+    });
+  });
+
+  const envCount = Object.keys(eff.overrides).length;
+
+  return `
+    <div class="tui-box">
+      <div class="tui-box-title">Live Shared Renderer (statusline::render_lines)</div>
+      <div class="tui-box-right-meta">
+        <span>Scenario <kbd>[p]</kbd>:
+          <select class="tui-select" onchange="window._act('setScenario', this.value)">
+            ${Object.values(AgylineEngine.SCENARIOS).map(s =>
+              `<option value="${s.id}" ${s.id === state.scenarioId ? 'selected' : ''}>${esc(s.label)}</option>`
+            ).join('')}
+          </select>
+        </span>
+        <span>Width <kbd>[ / ]</kbd>:
+          <button class="tui-btn" onclick="window._act('width', -4)">[ -4</button>
+          <strong style="color:#38bdf8">${state.simWidth === 0 ? '∞' : state.simWidth + 'c'}</strong>
+          <button class="tui-btn" onclick="window._act('width', 4)">+4 ]</button>
+          <button class="tui-btn" onclick="window._act('toggleUnbounded')">${state.simWidth === 0 ? 'Fit' : '∞'}</button>
+        </span>
+        ${envCount > 0 ? `<button class="tui-btn warn" onclick="window._act('togglePreviewEnv')" title="Toggle Effective vs Pure File preview">${state.previewIgnoreEnv ? 'File-Only' : `Effective (+${envCount} ENV)`}</button>` : ''}
+      </div>
+
+      <div class="preview-viewport ${termClass}" ${customBg}>
+        <div class="preview-ruler">${esc(buildRuler(state.simWidth))}</div>
+        ${linesHtml || '<div class="preview-line" style="color:#6e7681">(empty output — 0 lines)</div>'}
+      </div>
+
+      ${!compactHeader ? `
+      <div class="preview-stage-strip">
+        <span>${esc(sc.desc)}</span>
+        <div class="stage-badges">
+          ${stageChips.length > 0
+            ? stageChips.join('')
+            : `<span class="st-chip full">All visible items FULL (${rendered.lines.map(l => l.finalWidth + 'c').join(' / ')})</span>`}
+          ${eff.polarityFallbackNote ? `<span class="st-chip compact">${esc(eff.polarityFallbackNote)}</span>` : ''}
+          ${eff.thresholdNote ? `<span class="st-chip compact">${esc(eff.thresholdNote)}</span>` : ''}
+        </div>
+      </div>` : ''}
+    </div>
+  `;
+}
+
+function renderTopStatusBar(eff) {
+  const dirty = isDirty();
+  const envCount = Object.keys(eff.overrides).length;
+  const hookPill = state.hookState.current === 'connected'
+    ? `<span class="tui-pill ok" onclick="window._act('openHook')" style="cursor:pointer">● agy Connected</span>`
+    : `<span class="tui-pill warn" onclick="window._act('openInstallDiff')" style="cursor:pointer">○ agy Not Linked [i]</span>`;
+
+  return `
+    <div class="tui-topbar">
+      <div>
+        <span class="tui-brand">agyline</span>
+        <span style="color:#8b949e">~/.gemini/agyline/config.toml</span>
+        ${state.diskMode === 'missing' ? '<span class="tui-pill info">new (memory default)</span>' : ''}
+        ${dirty ? '<span class="tui-dirty">* [unsaved]</span>' : ''}
+        ${state.lastSaveMsg ? `<span class="tui-saved-flash">✓ ${esc(state.lastSaveMsg)}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="tui-pill">Undo:${state.undoStack.length}</span>
+        ${envCount > 0 ? `<span class="tui-pill warn" title="${esc(Object.values(eff.overrides).join(', '))}">⚠ ${envCount} AGY_* Override${envCount > 1 ? 's' : ''}</span>` : ''}
+        ${hookPill}
+        <button class="tui-btn primary" onclick="window._act('save')">[s/^S] Save</button>
+        <button class="tui-btn" onclick="window._act('presetModal')">[r] Preset</button>
+        <button class="tui-btn" onclick="window._act('help')">[?] Keys</button>
+        <button class="tui-btn" onclick="window._act('quit')">[q] Quit</button>
+      </div>
+    </div>
+    ${state.diskMode === 'broken' ? `
+      <div class="tui-banner-err">
+        <span><strong>! Broken config.toml:</strong> TOML parse error at line 14, col 9 (expected <code>=</code>, found <code>]</code>). Live statusline currently renders fallback + <code>! config</code>; original file will NOT be overwritten unless confirmed.</span>
+        <button class="tui-btn danger" onclick="window._act('save')">Backup &amp; Overwrite…</button>
+      </div>
+    ` : ''}
+  `;
+}
+
+/* ==========================================================================
+ * 4. SHARED ITEM INSPECTOR & SUB-PANELS
+ * ========================================================================== */
+function renderSelectedItemInspector(rowIdx, slotIdx) {
+  const row = state.doc.lines[rowIdx] || [];
+  const spec = row[slotIdx];
+  if (!spec) {
+    return `<div style="color:#6e7681;padding:8px">Line ${rowIdx + 1} is empty. Select an item from the Catalog and press <kbd>Enter</kbd> / <kbd>Space</kbd> to add it.</div>`;
+  }
+  const meta = AgylineEngine.getCatalogMeta(spec.id);
+  const curPrio = spec.priority ?? meta.defaultPriority;
+  const curIcon = spec.icon !== undefined ? spec.icon : meta.icons[state.doc.glyphs] || '';
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #21262d;padding-bottom:4px">
+        <span><strong style="color:#38bdf8">${esc(spec.id)}</strong> — ${esc(meta.name)}</span>
+        <span style="color:#6e7681">Line ${rowIdx + 1} #${slotIdx + 1}</span>
+      </div>
+
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Narrowing Priority <kbd>[1-5]</kbd>:</span>
+        <select class="tui-select" onchange="window._act('setItemProp', ${rowIdx}, ${slotIdx}, 'priority', Number(this.value))">
+          ${[1,2,3,4,5].map(n => `<option value="${n}" ${curPrio === n ? 'selected' : ''}>P${n} ${n === 1 ? '(Keep longest)' : (n === 5 ? '(Shrink/drop first)' : '')}${n === meta.defaultPriority ? ' [default]' : ''}</option>`).join('')}
+        </select>
+      </label>
+
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Custom Icon (<code>""</code> hides):</span>
+        <span style="display:flex;gap:4px">
+          <input class="tui-input" style="width:76px" value="${esc(spec.icon !== undefined ? spec.icon : '')}" placeholder="${esc(curIcon || '(none)')}" onchange="window._act('setItemIcon', ${rowIdx}, ${slotIdx}, this.value)">
+          <button class="tui-btn" onclick="window._act('setItemProp', ${rowIdx}, ${slotIdx}, 'icon', '')">Hide</button>
+          <button class="tui-btn" onclick="window._act('delItemProp', ${rowIdx}, ${slotIdx}, 'icon')">Def</button>
+        </span>
+      </label>
+
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Text Color (<code>fg</code>):</span>
+        <input class="tui-input" style="width:130px" value="${esc(spec.fg || '')}" placeholder="token / #rrggbb" onchange="window._act('setItemStr', ${rowIdx}, ${slotIdx}, 'fg', this.value)">
+      </label>
+
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Icon Color (<code>icon_color</code>):</span>
+        <input class="tui-input" style="width:130px" value="${esc(spec.icon_color || '')}" placeholder="token / #rrggbb" onchange="window._act('setItemStr', ${rowIdx}, ${slotIdx}, 'icon_color', this.value)">
+      </label>
+
+      ${meta.options.length > 0 ? `<div class="tui-row-sec">Item-Specific Options (#11 / #16)</div>` : ''}
+      ${meta.options.map(opt => {
+        const val = spec[opt.key] !== undefined ? spec[opt.key] : opt.default;
+        const envKey = (spec.id === 'mode' && opt.key === 'show_default' && state.hostEnv.AGY_SHOW_DEFAULT_MODE)
+          ? '<span class="env-badge">AGY_SHOW_DEFAULT_MODE</span>' : '';
+        if (opt.type === 'bool') {
+          return `
+            <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+              <span>${esc(opt.label)}${envKey}</span>
+              <input type="checkbox" ${val ? 'checked' : ''} onchange="window._act('setItemProp', ${rowIdx}, ${slotIdx}, '${opt.key}', this.checked)">
+            </label>`;
+        } else if (opt.type === 'select') {
+          return `
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>${esc(opt.label)}</span>
+              <select class="tui-select" onchange="window._act('setItemProp', ${rowIdx}, ${slotIdx}, '${opt.key}', this.value)">
+                ${opt.values.map(v => `<option value="${v}" ${val === v ? 'selected' : ''}>${v || '(auto min)'}</option>`).join('')}
+              </select>
+            </label>`;
+        } else {
+          return `
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              <span>${esc(opt.label)}</span>
+              <input class="tui-input" style="width:110px" value="${esc(val)}" onchange="window._act('setItemProp', ${rowIdx}, ${slotIdx}, '${opt.key}', this.value)">
+            </label>`;
+        }
+      }).join('')}
+
+      <div style="display:flex;gap:6px;margin-top:4px;padding-top:6px;border-top:1px solid #21262d">
+        <button class="tui-btn" onclick="window._act('moveSlot', ${rowIdx}, ${slotIdx}, -1)">↑ Up</button>
+        <button class="tui-btn" onclick="window._act('moveSlot', ${rowIdx}, ${slotIdx}, 1)">↓ Down</button>
+        <button class="tui-btn" onclick="window._act('moveOtherLine', ${rowIdx}, ${slotIdx})">⇄ To Line ${rowIdx === 0 ? 2 : 1}</button>
+        <button class="tui-btn danger" onclick="window._act('removeSlot', ${rowIdx}, ${slotIdx})">x Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAppearanceFields(eff) {
+  return `
+    <div class="workbench-grid-2">
+      <div class="tui-box">
+        <div class="tui-box-title">Presets &amp; Visual Style</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <div class="tui-row-sec">Built-in Presets (Apply All / Layout / Style)</div>
+          ${Object.entries(AgylineEngine.PRESETS).map(([k, p]) => `
+            <div class="tui-row ${state.doc.preset === k ? 'selected' : ''}" onclick="window._act('askPreset', '${k}')">
+              <span><strong>${esc(k)}</strong> — <span style="color:#8b949e">${esc(p.summary)}</span></span>
+              <span class="tui-pill">Apply…</span>
+            </div>
+          `).join('')}
+
+          <div class="tui-row-sec">Global Style Keys</div>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>palette</span>
+            <select class="tui-select" onchange="window._act('setTop', 'palette', this.value)">
+              ${Object.keys(AgylineEngine.PALETTES).map(p => `<option value="${p}" ${state.doc.palette === p ? 'selected' : ''}>${p}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>theme ${eff.overrides.theme ? `<span class="env-badge">${esc(eff.overrides.theme)}</span>` : ''}</span>
+            <select class="tui-select" onchange="window._act('setTop', 'theme', this.value)">
+              ${['auto', 'dark', 'light'].map(t => `<option value="${t}" ${state.doc.theme === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>glyphs</span>
+            <select class="tui-select" onchange="window._act('setTop', 'glyphs', this.value)">
+              ${['nerd', 'unicode', 'ascii'].map(g => `<option value="${g}" ${state.doc.glyphs === g ? 'selected' : ''}>${g}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>color_depth</span>
+            <select class="tui-select" onchange="window._act('setTop', 'color_depth', this.value)">
+              ${['auto', 'truecolor', '256', '16', 'none'].map(c => `<option value="${c}" ${state.doc.color_depth === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>separator (v1 plain skin)</span>
+            <input class="tui-input" style="width:110px" value="${esc(state.doc.separator)}" onchange="window._act('setTop', 'separator', this.value)">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>indent ${eff.overrides.indent ? `<span class="env-badge">${esc(eff.overrides.indent)}</span>` : ''}</span>
+            <input class="tui-input" style="width:110px" value="${esc(state.doc.indent)}" onchange="window._act('setTop', 'indent', this.value)">
+          </label>
+        </div>
+      </div>
+
+      <div class="tui-box">
+        <div class="tui-box-title">[palette_overrides] (12 Semantic &amp; Category Tokens)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          ${AgylineEngine.TOKEN_KEYS.map(tk => {
+            const cur = state.doc.palette_overrides[tk] || '';
+            const resolved = eff.colors[tk];
+            return `
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:4px;padding:2px 4px;border:1px solid #21262d">
+                <span style="display:inline-flex;align-items:center;gap:5px">
+                  <span style="width:11px;height:11px;display:inline-block;background:${esc(resolved)};border:1px solid #555"></span>
+                  <span>${tk}</span>
+                </span>
+                <input class="tui-input" style="width:88px" value="${esc(cur)}" placeholder="default" onchange="window._act('setTokenOverride', '${tk}', this.value)">
+              </label>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderThresholdsAndRuntime(eff) {
+  const th = state.doc.thresholds;
+  return `
+    <div class="workbench-grid-2">
+      <div class="tui-box">
+        <div class="tui-box-title">Layout &amp; [thresholds]</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>single_line ${eff.overrides.single_line ? `<span class="env-badge">${esc(eff.overrides.single_line)}</span>` : ''}</span>
+            <input type="checkbox" ${state.doc.single_line ? 'checked' : ''} onchange="window._act('setTop', 'single_line', this.checked)">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>overflow (auto row narrowing #15)</span>
+            <select class="tui-select" onchange="window._act('setTop', 'overflow', this.value)">
+              <option value="fit" ${state.doc.overflow === 'fit' ? 'selected' : ''}>fit (Full → Compact → Drop → …)</option>
+              <option value="none" ${state.doc.overflow === 'none' ? 'selected' : ''}>none (Unbounded)</option>
+            </select>
+          </label>
+          <div class="tui-row-sec">[thresholds] Alert Levels</div>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>context_warn (%)</span>
+            <input type="number" class="tui-input" style="width:74px" min="1" max="99" value="${th.context_warn}" onchange="window._act('setThreshold', 'context_warn', Number(this.value))">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>context_crit (%)</span>
+            <input type="number" class="tui-input" style="width:74px" min="1" max="100" value="${th.context_crit}" onchange="window._act('setThreshold', 'context_crit', Number(this.value))">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>quota_warn (% remaining)</span>
+            <input type="number" class="tui-input" style="width:74px" min="1" max="99" value="${th.quota_warn}" onchange="window._act('setThreshold', 'quota_warn', Number(this.value))">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>quota_crit (% remaining)</span>
+            <input type="number" class="tui-input" style="width:74px" min="1" max="99" value="${th.quota_crit}" onchange="window._act('setThreshold', 'quota_crit', Number(this.value))">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>cache_warn_secs (visual warn only; touch stays 60s)</span>
+            <input type="number" class="tui-input" style="width:74px" min="5" max="299" value="${th.cache_warn_secs}" onchange="window._act('setThreshold', 'cache_warn_secs', Number(this.value))">
+          </label>
+        </div>
+      </div>
+
+      <div class="tui-box">
+        <div class="tui-box-title">[git] &amp; [cache_relay] Runtime</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>[git].cache_ms (SWR fresh window; print path never waits)</span>
+            <input type="number" class="tui-input" style="width:90px" step="500" min="0" value="${state.doc.git.cache_ms}" onchange="window._act('setGitMs', Number(this.value))">
+          </label>
+          <label style="display:flex;justify-content:space-between;align-items:center">
+            <span>[cache_relay].url ${eff.overrides.cache_relay ? `<span class="env-badge">${esc(eff.overrides.cache_relay)}</span>` : ''}</span>
+            <input class="tui-input" style="width:190px" value="${esc(state.doc.cache_relay.url)}" placeholder="http://127.0.0.1:8787" onchange="window._act('setRelayUrl', this.value)">
+          </label>
+          <div style="color:#8b949e;padding-top:6px;line-height:1.5">
+            • Keepalive Touch security (#21): only loopback <code>127.0.0.1</code> / <code>[::1]</code> / <code>localhost</code> HTTP URLs are accepted.<br>
+            • Session state &amp; Git cache live under <code>~/.gemini/agyline/state/</code>; <code>cache_relay.py</code> files in OS temp stay read-only.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAgyHookPanel() {
+  const hs = state.hookState;
+  const instDiff = AgylineEngine.computeSettingsDiff('install', hs);
+  return `
+    <div class="tui-box" style="flex:1">
+      <div class="tui-box-title">agy Integration (~/.gemini/antigravity-cli/settings.json · shared src/install.rs)</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#161b22;border:1px solid #30363d">
+          <div>
+            <strong>Current Hook Status:</strong>
+            ${hs.current === 'connected'
+              ? '<span style="color:#4ade80">● Connected to agyline</span>'
+              : (hs.current === 'ps1' ? '<span style="color:#fbbf24">● Pointing at legacy statusline.ps1 (Ready to migrate)</span>' : '<span style="color:#94a3b8">○ Not configured</span>')}
+            <div style="color:#8b949e;margin-top:2px">Prior snapshot in <code>state/previous_statusline.json</code>: <strong>${hs.snapshot || 'none'}</strong></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="tui-btn primary" onclick="window._act('openInstallDiff')">[i] Preview &amp; Connect agyline…</button>
+            <button class="tui-btn warn" onclick="window._act('openUninstallDiff')">[u] Uninstall / Restore Prior…</button>
+          </div>
+        </div>
+
+        <div style="color:#8b949e">${esc(instDiff.backupNote)}</div>
+        <div class="diff-view">${instDiff.lines.map(l => {
+          const cls = l.startsWith('+') ? 'diff-add' : (l.startsWith('-') ? 'diff-del' : 'diff-ctx');
+          return `<span class="${cls}">${esc(l)}</span>`;
+        }).join('')}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+ * 5. THREE STRUCTURALLY DISTINCT TUI VARIANTS (A / B / C)
+ * ========================================================================== */
+
+// ─── VARIANT A: Single-Screen Tabbed Workbench (3-Pane Master/Detail) ───
+function renderVariantA(eff) {
+  const tabs = [
+    '1: Lines & Items',
+    '2: Appearance & Presets',
+    '3: Thresholds & Runtime',
+    '4: agy Hook',
+    '5: TOML & Env'
+  ];
+
+  let bodyHtml = '';
+  if (state.tabA === 0) {
+    // 3-Pane Layout: Active Lines Canvas | 20-Item Catalog | Selected Item Inspector
+    const activeIds = new Set(state.doc.lines.flat().map(x => x.id));
+    let groupsShown = new Set();
+
+    bodyHtml = `
+      <div class="workbench-grid-3">
+        <!-- Pane 0: Active Lines -->
+        <div class="tui-box ${state.paneA === 0 ? 'focused' : ''}" onclick="window._act('focusPaneA', 0)">
+          <div class="tui-box-title">Active Rows ([[line]].items)</div>
+          <div class="tui-list">
+            ${[0, 1].map(rIdx => `
+              <div class="tui-row-sec" style="display:flex;justify-content:space-between;align-items:center">
+                <span>Line ${rIdx + 1} ${rIdx === 1 && state.doc.single_line ? '(folded into L1)' : ''}</span>
+                <button class="tui-btn" style="padding:0 5px;font-size:10.5px" onclick="event.stopPropagation();window._act('selectLine', ${rIdx})">Target</button>
+              </div>
+              ${(state.doc.lines[rIdx] || []).length === 0
+                ? `<div class="tui-row ${state.selLine === rIdx ? 'selected' : ''}" onclick="event.stopPropagation();window._act('selectSlot', ${rIdx}, 0)"><span style="color:#6e7681">(empty row)</span></div>`
+                : state.doc.lines[rIdx].map((it, sIdx) => {
+                  const m = AgylineEngine.getCatalogMeta(it.id);
+                  const p = it.priority ?? m.defaultPriority;
+                  const isSel = state.selLine === rIdx && state.selSlotIdx === sIdx;
+                  return `
+                    <div class="tui-row ${isSel ? 'selected' : ''}" onclick="event.stopPropagation();window._act('selectSlot', ${rIdx}, ${sIdx})">
+                      <span>${esc(m.icons[state.doc.glyphs] || '·')} <strong>${esc(it.id)}</strong>${it.bucket ? `<span style="color:#8b949e">:${esc(it.bucket)}</span>` : ''}</span>
+                      <span style="color:#8b949e;font-size:11px">P${p}</span>
+                    </div>
+                  `;
+                }).join('')}
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Pane 1: 20-Item Catalog -->
+        <div class="tui-box ${state.paneA === 1 ? 'focused' : ''}" onclick="window._act('focusPaneA', 1)">
+          <div class="tui-box-title">20-Item Catalog (Space/Enter → Line ${state.selLine + 1})</div>
+          <div class="tui-list">
+            ${AgylineEngine.ITEMS_CATALOG.map((m, cIdx) => {
+              let hdr = '';
+              if (!groupsShown.has(m.group)) {
+                groupsShown.add(m.group);
+                hdr = `<div class="tui-row-sec">${esc(m.group)}</div>`;
+              }
+              const inCurrent = (state.doc.lines[state.selLine] || []).some(x => x.id === m.id);
+              const inAny = activeIds.has(m.id);
+              return `
+                ${hdr}
+                <div class="tui-row ${state.selCatalogIdx === cIdx && state.paneA === 1 ? 'selected' : ''}"
+                     onclick="event.stopPropagation();window._act('catalogToggle', ${cIdx})">
+                  <span>${inCurrent ? '<span style="color:#4ade80">[✓]</span>' : (inAny ? '<span style="color:#38bdf8">[•]</span>' : '<span style="color:#6e7681">[ ]</span>')} <strong>${esc(m.id)}</strong> <span style="color:#8b949e">${esc(m.name)}</span></span>
+                  <span style="color:#6e7681;font-size:11px">${m.allowMultiple ? '+multi' : `P${m.defaultPriority}`}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Pane 2: Selected Item Inspector -->
+        <div class="tui-box ${state.paneA === 2 ? 'focused' : ''}" onclick="window._act('focusPaneA', 2)">
+          <div class="tui-box-title">Item Inspector</div>
+          ${renderSelectedItemInspector(state.selLine, state.selSlotIdx)}
+        </div>
+      </div>
+    `;
+  } else if (state.tabA === 1) {
+    bodyHtml = renderAppearanceFields(eff);
+  } else if (state.tabA === 2) {
+    bodyHtml = renderThresholdsAndRuntime(eff);
+  } else if (state.tabA === 3) {
+    bodyHtml = renderAgyHookPanel();
+  } else {
+    const tomlStr = AgylineEngine.serializeToml(state.doc);
+    bodyHtml = `
+      <div class="workbench-grid-2">
+        <div class="tui-box">
+          <div class="tui-box-title">Generated config.toml (Read-only Preview)</div>
+          <pre class="toml-pre">${esc(tomlStr)}</pre>
+        </div>
+        <div class="tui-box">
+          <div class="tui-box-title">Environment Precedence (AGY_* &gt; config.toml &gt; COLORFGBG)</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+            <div>1. <code>AGY_THEME</code>: <strong>${esc(state.hostEnv.AGY_THEME || '(unset)')}</strong> → Effective polarity: <strong>${eff.polarity}</strong></div>
+            <div>2. <code>AGY_STATUSLINE_LINES</code>: <strong>${esc(state.hostEnv.AGY_STATUSLINE_LINES || '(unset)')}</strong> → Effective single_line: <strong>${eff.singleLine}</strong></div>
+            <div>3. <code>AGY_STATUSLINE_INDENT</code>: <strong>${state.hostEnv.AGY_STATUSLINE_INDENT ? JSON.stringify(state.hostEnv.AGY_STATUSLINE_INDENT) : '(unset)'}</strong></div>
+            <div>4. <code>AGY_SHOW_DEFAULT_MODE</code>: <strong>${esc(state.hostEnv.AGY_SHOW_DEFAULT_MODE || '(unset)')}</strong></div>
+            <div>5. <code>AGY_CACHE_RELAY</code>: <strong>${esc(state.hostEnv.AGY_CACHE_RELAY || '(unset)')}</strong></div>
+            <div>6. <code>COLORFGBG</code>: <strong>${esc(state.hostEnv.COLORFGBG)}</strong> (used only when <code>theme = "auto"</code>)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    ${renderTopStatusBar(eff)}
+    ${renderSharedPreviewBox(false)}
+    <div class="tui-tabs" style="justify-content:space-between;align-items:center">
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${tabs.map((t, idx) => `<div class="tui-tab ${state.tabA === idx ? 'active' : ''}" onclick="window._act('setTabA', ${idx})">${esc(t)}</div>`).join('')}
+      </div>
+      <button class="tui-btn" onclick="window._act('toggleTomlA')">[t] ${state.showTomlDrawerA ? 'Hide' : 'Show'} Side TOML</button>
+    </div>
+    ${state.showTomlDrawerA && state.tabA !== 4 ? `
+      <div style="display:grid;grid-template-columns:1.65fr 0.85fr;gap:10px;flex:1">
+        <div style="display:flex;flex-direction:column">${bodyHtml}</div>
+        <div class="tui-box">
+          <div class="tui-box-title">Live config.toml Side Panel</div>
+          <pre class="toml-pre" style="max-height:310px">${esc(AgylineEngine.serializeToml(state.doc))}</pre>
+        </div>
+      </div>
+    ` : bodyHtml}
+    <div class="tui-footer">
+      <span><kbd>Tab/S-Tab</kbd> Pane · <kbd>{ / }</kbd> Page Tab · <kbd>↑↓/jk</kbd> Select · <kbd>Space/Enter</kbd> Toggle · <kbd>J/K</kbd> Order · <kbd>1-5</kbd> Priority</span>
+      <span><kbd>p</kbd> Scenario · <kbd>[ / ]</kbd> Width · <kbd>t</kbd> TOML · <kbd>i</kbd> Hook · <kbd>s</kbd> Save · <kbd>r</kbd> Preset · <kbd>q/Esc</kbd> Quit</span>
+    </div>
+  `;
+}
+
+// ─── VARIANT B: Hierarchical Menu Stack (Drill-Down + Optional TOML Drawer) ───
+function renderVariantB(eff) {
+  const curScreen = state.stackB[state.stackB.length - 1];
+  const crumbs = ['Home', ...state.stackB.slice(1).map(s => ({
+    line0: 'Edit Line 1', line1: 'Edit Line 2', style: 'Visual Style & Presets',
+    thresholds: 'Overflow & Thresholds', runtime: 'Git & Cache Relay',
+    hook: 'agy settings.json Hook', item_detail: `Item: ${(state.doc.lines[state.selLine][state.selSlotIdx] || {}).id || ''}`
+  }[s] || s))].join(' ▸ ');
+
+  let mainPane = '';
+  if (curScreen === 'root') {
+    const entries = [
+      { key: '1', label: 'Edit Line 1 Items', summary: `[${state.doc.lines[0].map(x => x.id).join(', ') || 'empty'}]`, go: 'line0' },
+      { key: '2', label: 'Edit Line 2 Items', summary: `${state.doc.single_line ? '(folded: single_line=true) ' : ''}[${state.doc.lines[1].map(x => x.id).join(', ') || 'empty'}]`, go: 'line1' },
+      { key: '3', label: 'Presets, Palette & Glyphs', summary: `preset=${state.doc.preset} · palette=${state.doc.palette} · theme=${state.doc.theme} · glyphs=${state.doc.glyphs}`, go: 'style' },
+      { key: '4', label: 'Width Overflow & Thresholds', summary: `overflow=${state.doc.overflow} · ctx=${state.doc.thresholds.context_warn}/${state.doc.thresholds.context_crit}% · quota=${state.doc.thresholds.quota_warn}/${state.doc.thresholds.quota_crit}%`, go: 'thresholds' },
+      { key: '5', label: 'Git SWR & Cache Relay', summary: `git.cache_ms=${state.doc.git.cache_ms} · relay=${state.doc.cache_relay.url || '(none)'}`, go: 'runtime' },
+      { key: '6', label: 'Connect / Restore agy settings.json', summary: state.hookState.current === 'connected' ? '● Connected' : '○ Not connected (statusline.ps1)', go: 'hook' },
+      { key: 's', label: 'Save config.toml & Exit', summary: isDirty() ? '* Has unsaved edits' : 'No unsaved changes', go: '__save_exit' }
+    ];
+    mainPane = `
+      <div class="tui-box focused">
+        <div class="tui-box-title">Configurator Main Menu (Enter or 1-6 to drill down)</div>
+        <div class="tui-list">
+          ${entries.map((e, idx) => `
+            <div class="tui-row ${state.cursorB === idx ? 'selected' : ''}" style="padding:6px 8px"
+                 onclick="window._act('pushB', '${e.go}', ${idx})">
+              <span><kbd>[${e.key}]</kbd> <strong>${esc(e.label)}</strong></span>
+              <span style="color:#8b949e;font-size:11.5px">${esc(e.summary)} ▸</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (curScreen === 'line0' || curScreen === 'line1') {
+    const rIdx = curScreen === 'line0' ? 0 : 1;
+    state.selLine = rIdx;
+    const row = state.doc.lines[rIdx];
+    mainPane = `
+      <div class="tui-box focused">
+        <div class="tui-box-title">Line ${rIdx + 1} Checklist &amp; Order (Space toggle · J/K move · Enter inspect · Esc back)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div class="tui-row-sec">Enabled on Line ${rIdx + 1} (Display Order)</div>
+            <div class="tui-list">
+              ${row.length === 0 ? '<div style="color:#6e7681;padding:6px">(No items enabled)</div>' : row.map((it, sIdx) => `
+                <div class="tui-row ${state.selSlotIdx === sIdx ? 'selected' : ''}"
+                     onclick="window._act('selectSlot', ${rIdx}, ${sIdx})">
+                  <span>${sIdx + 1}. <strong>${esc(it.id)}</strong> (P${it.priority ?? AgylineEngine.getCatalogMeta(it.id).defaultPriority})</span>
+                  <span>
+                    <button class="tui-btn" style="padding:0 5px" onclick="event.stopPropagation();window._act('moveSlot', ${rIdx}, ${sIdx}, -1)">↑</button>
+                    <button class="tui-btn" style="padding:0 5px" onclick="event.stopPropagation();window._act('moveSlot', ${rIdx}, ${sIdx}, 1)">↓</button>
+                    <button class="tui-btn primary" style="padding:0 5px" onclick="event.stopPropagation();window._act('selectSlot', ${rIdx}, ${sIdx});window._act('pushB', 'item_detail', 0)">Edit▸</button>
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div>
+            <div class="tui-row-sec">Toggle from 20-Item Catalog</div>
+            <div class="tui-list">
+              ${AgylineEngine.ITEMS_CATALOG.map((m, cIdx) => {
+                const on = row.some(x => x.id === m.id);
+                return `
+                  <div class="tui-row" onclick="window._act('catalogToggle', ${cIdx})">
+                    <span>${on ? '<span style="color:#4ade80">[×]</span>' : '[ ]'} ${esc(m.id)}</span>
+                    <span style="color:#6e7681;font-size:11px">${esc(m.group)}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (curScreen === 'item_detail') {
+    mainPane = `
+      <div class="tui-box focused">
+        <div class="tui-box-title">Item Options (Esc to return to Line ${state.selLine + 1})</div>
+        ${renderSelectedItemInspector(state.selLine, state.selSlotIdx)}
+      </div>
+    `;
+  } else if (curScreen === 'style') {
+    mainPane = renderAppearanceFields(eff);
+  } else if (curScreen === 'thresholds' || curScreen === 'runtime') {
+    mainPane = renderThresholdsAndRuntime(eff);
+  } else if (curScreen === 'hook') {
+    mainPane = renderAgyHookPanel();
+  }
+
+  return `
+    ${renderTopStatusBar(eff)}
+    ${renderSharedPreviewBox(true)}
+    <div class="breadcrumb-bar">
+      <span>${esc(crumbs)}</span>
+      <div style="display:flex;gap:6px">
+        ${state.stackB.length > 1 ? `<button class="tui-btn" onclick="window._act('popB')">← Esc Back</button>` : ''}
+        <button class="tui-btn" onclick="window._act('toggleTomlB')">[t] ${state.showTomlDrawerB ? 'Hide' : 'Show'} TOML Drawer</button>
+      </div>
+    </div>
+    <div class="vstack-layout ${state.showTomlDrawerB ? 'with-drawer' : ''}">
+      ${mainPane}
+      ${state.showTomlDrawerB ? `
+        <div class="tui-box">
+          <div class="tui-box-title">Live config.toml Output</div>
+          <pre class="toml-pre">${esc(AgylineEngine.serializeToml(state.doc))}</pre>
+        </div>
+      ` : ''}
+    </div>
+    <div class="tui-footer">
+      <span><kbd>↑↓/jk</kbd> Navigate · <kbd>Enter</kbd> Sub-screen · <kbd>Esc</kbd> Back/Quit · <kbd>t</kbd> TOML Drawer</span>
+      <span><kbd>p</kbd> Scenario · <kbd>[ / ]</kbd> Width · <kbd>i</kbd> Hook · <kbd>s</kbd> Save · <kbd>r</kbd> Preset</span>
+    </div>
+  `;
+}
+
+// ─── VARIANT C: Visual Pill Canvas + Always-On Bottom TOML Split ───
+function renderVariantC(eff) {
+  const sc = AgylineEngine.SCENARIOS[state.scenarioId];
+  const rendered = AgylineEngine.renderLines(sc, state.doc, state.hostEnv, state.simWidth, state.diskMode === 'broken');
+  const tomlLines = AgylineEngine.serializeToml(state.doc).split('\n');
+  const selSpec = (state.doc.lines[state.selLine] || [])[state.selSlotIdx];
+
+  const highlightedToml = tomlLines.map(ln => {
+    if (selSpec && (ln.includes(`"${selSpec.id}"`) || ln.includes(`id = "${selSpec.id}"`))) {
+      return `<span class="toml-hl">${esc(ln)}</span>`;
+    }
+    return esc(ln);
+  }).join('\n');
+
+  return `
+    ${renderTopStatusBar(eff)}
+    ${renderSharedPreviewBox(false)}
+
+    <!-- Visual Slot Canvas -->
+    <div class="tui-box focused">
+      <div class="tui-box-title">Visual Row Slot Canvas (Click chip to inspect · H/L move left/right · 1-5 priority)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;font-size:11.5px">
+        <span>Quick Bar:</span>
+        <select class="tui-select" onchange="window._act('askPreset', this.value)">
+          ${Object.keys(AgylineEngine.PRESETS).map(p => `<option value="${p}" ${state.doc.preset === p ? 'selected' : ''}>Preset: ${p}</option>`).join('')}
+        </select>
+        <select class="tui-select" onchange="window._act('setTop', 'palette', this.value)">
+          ${Object.keys(AgylineEngine.PALETTES).map(p => `<option value="${p}" ${state.doc.palette === p ? 'selected' : ''}>Palette: ${p}</option>`).join('')}
+        </select>
+        <select class="tui-select" onchange="window._act('setTop', 'theme', this.value)">
+          ${['auto', 'dark', 'light'].map(t => `<option value="${t}" ${state.doc.theme === t ? 'selected' : ''}>Theme: ${t}</option>`).join('')}
+        </select>
+        <select class="tui-select" onchange="window._act('setTop', 'glyphs', this.value)">
+          ${['nerd', 'unicode', 'ascii'].map(g => `<option value="${g}" ${state.doc.glyphs === g ? 'selected' : ''}>Glyphs: ${g}</option>`).join('')}
+        </select>
+        <select class="tui-select" onchange="window._act('setTop', 'overflow', this.value)">
+          <option value="fit" ${state.doc.overflow === 'fit' ? 'selected' : ''}>Overflow: fit</option>
+          <option value="none" ${state.doc.overflow === 'none' ? 'selected' : ''}>Overflow: none</option>
+        </select>
+        <button class="tui-btn" onclick="window._act('setTop', 'single_line', !${state.doc.single_line})">single_line: ${state.doc.single_line}</button>
+        <button class="tui-btn primary" onclick="window._act('openInstallDiff')">[i] agy Hook</button>
+      </div>
+
+      ${[0, 1].map(rIdx => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="width:62px;color:#8b949e;font-size:11.5px">Line ${rIdx + 1}${rIdx === 1 && state.doc.single_line ? '*' : ''}:</span>
+          <div class="canvas-track" style="flex:1">
+            ${(state.doc.lines[rIdx] || []).map((it, sIdx) => {
+              const m = AgylineEngine.getCatalogMeta(it.id);
+              const p = it.priority ?? m.defaultPriority;
+              const st = rendered.reports[`${rIdx}:${sIdx}`] || 'full';
+              const isSel = state.selLine === rIdx && state.selSlotIdx === sIdx;
+              return `
+                <div class="slot-pill ${isSel ? 'selected' : ''} ${st === 'dropped' ? 'dropped' : ''}"
+                     onclick="window._act('selectSlot', ${rIdx}, ${sIdx})">
+                  <span>${esc(m.icons[state.doc.glyphs] || '')} <strong>${esc(it.id)}</strong></span>
+                  <span class="slot-prio">P${p}${st === 'compact' ? '·C' : (st === 'dropped' ? '·DROP' : '')}</span>
+                </div>
+              `;
+            }).join('')}
+            <select class="tui-select" onchange="if(this.value){window._act('addChipToRow', ${rIdx}, this.value);this.value='';}">
+              <option value="">+ Add Item…</option>
+              ${AgylineEngine.ITEMS_CATALOG.map(m => `<option value="${m.id}">${m.id} (${m.group})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Bottom 50/50 Split: Selected Chip Inspector + Highlighted Live TOML -->
+    <div class="workbench-grid-2" style="min-height:240px">
+      <div class="tui-box">
+        <div class="tui-box-title">Selected Chip Properties &amp; Thresholds</div>
+        ${renderSelectedItemInspector(state.selLine, state.selSlotIdx)}
+      </div>
+      <div class="tui-box">
+        <div class="tui-box-title">Synchronized config.toml (Selected Item Highlighted)</div>
+        <pre class="toml-pre">${highlightedToml}</pre>
+      </div>
+    </div>
+
+    <div class="tui-footer">
+      <span><kbd>←→/hl</kbd> Select Chip · <kbd>H/L</kbd> Move Chip · <kbd>↑↓/jk</kbd> Switch Row · <kbd>x</kbd> Remove · <kbd>1-5</kbd> Priority</span>
+      <span><kbd>p</kbd> Scenario · <kbd>[ / ]</kbd> Width · <kbd>i</kbd> Hook · <kbd>s</kbd> Save · <kbd>r</kbd> Preset · <kbd>q/Esc</kbd> Quit</span>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+ * 6. MODAL OVERLAYS & DEGRADATION VIEWS
+ * ========================================================================== */
+function renderModalOverlay() {
+  if (!state.modal) return '';
+
+  if (state.modal === 'diff_install' || state.modal === 'diff_uninstall') {
+    const isInst = state.modal === 'diff_install';
+    const d = AgylineEngine.computeSettingsDiff(isInst ? 'install' : 'uninstall', state.hookState);
+    return `
+      <div class="tui-modal-backdrop" onclick="window._act('closeModal')">
+        <div class="tui-modal" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between">
+            <strong style="color:#38bdf8">${isInst ? 'Connect agyline to agy (settings.json Diff)' : 'Uninstall / Restore Prior statusLine'}</strong>
+            <span style="color:#8b949e">src/install.rs</span>
+          </div>
+          <div style="font-size:12px;color:#8b949e">Target: <code>${esc(d.targetPath)}</code><br>${esc(d.backupNote)}</div>
+          <div class="diff-view">${d.lines.map(l => {
+            const cls = l.startsWith('+') ? 'diff-add' : (l.startsWith('-') ? 'diff-del' : 'diff-ctx');
+            return `<span class="${cls}">${esc(l)}</span>`;
+          }).join('')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="tui-btn primary" onclick="window._act('${isInst ? 'confirmInstall' : 'confirmUninstall'}')">[Y / Enter] Apply Atomically</button>
+            <button class="tui-btn" onclick="window._act('closeModal')">[Esc] Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.modal === 'quit_dirty') {
+    return `
+      <div class="tui-modal-backdrop">
+        <div class="tui-modal" style="max-width:480px;border-color:#f59e0b">
+          <strong style="color:#fbbf24">Unsaved Changes in config.toml</strong>
+          <div style="font-size:12.5px">You have unsaved in-memory edits. Save to <code>~/.gemini/agyline/config.toml</code> before exiting?</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="tui-btn primary" onclick="window._act('saveAndQuit')">[S] Save &amp; Quit</button>
+            <button class="tui-btn danger" onclick="window._act('discardAndQuit')">[D] Discard Changes</button>
+            <button class="tui-btn" onclick="window._act('closeModal')">[Esc] Stay</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.modal === 'broken_overwrite') {
+    return `
+      <div class="tui-modal-backdrop">
+        <div class="tui-modal" style="max-width:540px;border-color:#ef4444">
+          <strong style="color:#f87171">Broken config.toml Overwrite Guard (#11)</strong>
+          <div style="font-size:12.5px">Disk <code>config.toml</code> failed to parse at startup (line 14, col 9). Saving now will replace the broken file with your current clean configuration.</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="tui-btn primary" onclick="window._act('forceSaveWithBak')">[B] Backup .bak &amp; Save</button>
+            <button class="tui-btn warn" onclick="window._act('forceSave')">[O] Overwrite Directly</button>
+            <button class="tui-btn" onclick="window._act('closeModal')">[Esc] Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.modal === 'mtime_conflict') {
+    return `
+      <div class="tui-modal-backdrop">
+        <div class="tui-modal" style="max-width:520px;border-color:#f59e0b">
+          <strong style="color:#fbbf24">External File Change Detected (mtime mismatch)</strong>
+          <div style="font-size:12.5px"><code>config.toml</code> was modified outside the configurator since you opened it.</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="tui-btn warn" onclick="window._act('forceSave')">[O] Overwrite Disk</button>
+            <button class="tui-btn primary" onclick="window._act('reloadDisk')">[R] Reload Disk</button>
+            <button class="tui-btn" onclick="window._act('closeModal')">[Esc] Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.modal === 'preset_scope') {
+    const pk = state.pendingPresetKey || 'cometix';
+    return `
+      <div class="tui-modal-backdrop" onclick="window._act('closeModal')">
+        <div class="tui-modal" style="max-width:520px" onclick="event.stopPropagation()">
+          <strong style="color:#38bdf8">Apply Preset "${esc(pk)}"</strong>
+          <div style="font-size:12px;color:#8b949e">${esc(AgylineEngine.PRESETS[pk].summary)}<br>Thresholds, [git], and [cache_relay] stay untouched (matching CCometixLine 2.x).</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${Object.keys(AgylineEngine.PRESETS).map(k =>
+              `<button class="tui-btn ${k === pk ? 'primary' : ''}" onclick="window._act('askPreset', '${k}')">${esc(k)}</button>`
+            ).join('')}
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:6px;border-top:1px solid #21262d">
+            <button class="tui-btn primary" onclick="window._act('applyPreset', '${pk}', 'all')">[A] All (Layout + Style)</button>
+            <button class="tui-btn" onclick="window._act('applyPreset', '${pk}', 'layout')">[L] Layout Only</button>
+            <button class="tui-btn" onclick="window._act('applyPreset', '${pk}', 'style')">[S] Style Only</button>
+            <button class="tui-btn" onclick="window._act('closeModal')">[Esc] Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.modal === 'help') {
+    return `
+      <div class="tui-modal-backdrop" onclick="window._act('closeModal')">
+        <div class="tui-modal" onclick="event.stopPropagation()">
+          <strong style="color:#38bdf8">Keyboard Shortcuts Reference</strong>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+            <div><kbd>s</kbd> / <kbd>^S</kbd> Save <code>config.toml</code></div>
+            <div><kbd>^Z</kbd> / <kbd>^Y</kbd> Undo / Redo (in-memory)</div>
+            <div><kbd>p</kbd> / <kbd>P</kbd> Next / Prev built-in <code>Scenario</code></div>
+            <div><kbd>[</kbd> / <kbd>]</kbd> (or <kbd>-/+</kbd>) <code>terminal_width</code> ±4 cols</div>
+            <div><kbd>i</kbd> Open <code>settings.json</code> Connect diff</div>
+            <div><kbd>r</kbd> / <kbd>^R</kbd> Apply / Reset to Preset</div>
+            <div><kbd>1-5</kbd> Set selected Item <code>priority</code></div>
+            <div><kbd>J/K</kbd> or <kbd>Alt+↑/↓</kbd> Move Item order</div>
+            <div><kbd>t</kbd> Toggle live <code>config.toml</code> side panel</div>
+            <div><kbd>q</kbd> / <kbd>Esc</kbd> Quit (prompts if dirty)</div>
+            <div><kbd>{</kbd> / <kbd>}</kbd> Switch Page Tab (Variant A)</div>
+            <div><kbd>Alt+←/→</kbd> Flip Prototype Variant A / B / C</div>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="tui-btn primary" onclick="window._act('closeModal')">[Esc / Enter] Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  return '';
+}
+
+function renderAll() {
+  const shell = document.getElementById('termShell');
+  const screen = document.getElementById('tuiScreen');
+  shell.classList.toggle('tiny-mode', state.tinyTerm);
+
+  const eff = AgylineEngine.resolveEffective(
+    state.diskMode === 'broken' ? AgylineEngine.defaultConfigDoc() : state.doc,
+    state.hostEnv
+  );
+
+  // Harness state readout (SKILL.md Rule 5: Surface the state)
+  document.getElementById('harnessStateStrip').innerHTML = `
+    <span>Variant: <b>${state.variant}</b></span>
+    <span>Config: <b class="${isDirty() ? 'st-dirty' : 'st-clean'}">${isDirty() ? 'DIRTY*' : 'CLEAN'}</b></span>
+    <span>Lines: <b>L1(${state.doc.lines[0].length}) / L2(${state.doc.lines[1].length})</b></span>
+    <span>Polarity: <b>${eff.polarity}</b></span>
+    <span>Hook: <b>${state.hookState.current}</b></span>
+  `;
+
+  document.getElementById('termChromeTitle').textContent =
+    `agyline — Variant ${state.variant}: ${VARIANTS[state.variant].short}${isDirty() ? ' *' : ''}`;
+
+  if (state.exitedMessage) {
+    screen.innerHTML = `
+      <div style="margin:auto;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center">
+        <div style="color:#4ade80">${esc(state.exitedMessage)}</div>
+        <button class="tui-btn primary" onclick="window._act('reopen')">Reopen agyline Configurator</button>
+      </div>
+    `;
+  } else if (state.tinyTerm) {
+    screen.innerHTML = `
+      <div style="margin:auto;text-align:center;padding:24px;border:1px dashed #f59e0b;max-width:440px">
+        <div style="color:#fbbf24;font-weight:700;margin-bottom:6px">Terminal too small (68×18 &lt; minimum 80×22)</div>
+        <div style="color:#8b949e;font-size:12px;margin-bottom:12px">Resize your terminal window to at least 80 columns × 22 rows, or press <kbd>q</kbd> / <kbd>Esc</kbd> to exit cleanly (exit code 0).</div>
+        <button class="tui-btn primary" onclick="document.getElementById('btnTinyTerm').click()">Restore 120×34 Terminal</button>
+      </div>
+    `;
+  } else {
+    const content = state.variant === 'A'
+      ? renderVariantA(eff)
+      : (state.variant === 'B' ? renderVariantB(eff) : renderVariantC(eff));
+    screen.innerHTML = content + renderModalOverlay();
+  }
+
+  // Update floating bottom variant switcher
+  document.getElementById('varLabel').textContent = `${VARIANTS[state.variant].name}`;
+  document.getElementById('varPills').innerHTML = ['A', 'B', 'C'].map(k =>
+    `<button type="button" class="proto-var-pill ${state.variant === k ? 'current' : ''}" onclick="window._act('variant', '${k}')">${k}</button>`
+  ).join('');
+}
+
+/* ==========================================================================
+ * 7. ACTIONS & KEYBOARD DISPATCH
+ * ========================================================================== */
+window._act = (type, a, b, c, d) => {
+  switch (type) {
+    case 'variant': setVariant(a); break;
+    case 'reopen': state.exitedMessage = null; renderAll(); break;
+    case 'setScenario':
+      state.scenarioId = a;
+      state.simWidth = AgylineEngine.SCENARIOS[a].defaultWidth;
+      renderAll();
+      break;
+    case 'width': adjustWidth(a); break;
+    case 'toggleUnbounded': state.simWidth = state.simWidth === 0 ? 100 : 0; renderAll(); break;
+    case 'togglePreviewEnv': state.previewIgnoreEnv = !state.previewIgnoreEnv; renderAll(); break;
+    case 'setTabA': state.tabA = a; renderAll(); break;
+    case 'focusPaneA': state.paneA = a; renderAll(); break;
+    case 'selectLine': state.selLine = a; state.selSlotIdx = 0; renderAll(); break;
+    case 'selectSlot': state.selLine = a; state.selSlotIdx = b; state.paneA = 0; renderAll(); break;
+    case 'catalogToggle': {
+      state.selCatalogIdx = a;
+      const meta = AgylineEngine.ITEMS_CATALOG[a];
+      mutateDoc(doc => {
+        const row = doc.lines[state.selLine];
+        const existIdx = row.findIndex(x => x.id === meta.id);
+        if (existIdx >= 0 && !meta.allowMultiple) {
+          row.splice(existIdx, 1);
+        } else {
+          row.push({ id: meta.id });
+          state.selSlotIdx = row.length - 1;
+        }
+      });
+      break;
+    }
+    case 'addChipToRow': {
+      mutateDoc(doc => {
+        doc.lines[a].push({ id: b });
+        state.selLine = a;
+        state.selSlotIdx = doc.lines[a].length - 1;
+      });
+      break;
+    }
+    case 'setItemProp':
+      mutateDoc(doc => { if (doc.lines[a][b]) doc.lines[a][b][c] = d; });
+      break;
+    case 'setItemIcon':
+      mutateDoc(doc => { if (doc.lines[a][b]) doc.lines[a][b].icon = c; });
+      break;
+    case 'setItemStr':
+      mutateDoc(doc => {
+        if (!doc.lines[a][b]) return;
+        if (!d || !d.trim()) delete doc.lines[a][b][c];
+        else doc.lines[a][b][c] = d.trim();
+      });
+      break;
+    case 'delItemProp':
+      mutateDoc(doc => { if (doc.lines[a][b]) delete doc.lines[a][b][c]; });
+      break;
+    case 'moveSlot': {
+      mutateDoc(doc => {
+        const row = doc.lines[a];
+        const target = b + c;
+        if (target < 0 || target >= row.length) return;
+        const [moved] = row.splice(b, 1);
+        row.splice(target, 0, moved);
+        state.selLine = a;
+        state.selSlotIdx = target;
+      });
+      break;
+    }
+    case 'moveOtherLine': {
+      mutateDoc(doc => {
+        const other = a === 0 ? 1 : 0;
+        const [moved] = doc.lines[a].splice(b, 1);
+        if (moved) {
+          doc.lines[other].push(moved);
+          state.selLine = other;
+          state.selSlotIdx = doc.lines[other].length - 1;
+        }
+      });
+      break;
+    }
+    case 'removeSlot':
+      mutateDoc(doc => { doc.lines[a].splice(b, 1); });
+      break;
+    case 'setTop':
+      mutateDoc(doc => { doc[a] = b; });
+      break;
+    case 'setTokenOverride':
+      mutateDoc(doc => {
+        if (!b || !b.trim()) delete doc.palette_overrides[a];
+        else doc.palette_overrides[a] = b.trim();
+      });
+      break;
+    case 'setThreshold':
+      mutateDoc(doc => { doc.thresholds[a] = b; });
+      break;
+    case 'setGitMs':
+      mutateDoc(doc => { doc.git.cache_ms = Math.max(0, a || 0); });
+      break;
+    case 'setRelayUrl':
+      mutateDoc(doc => { doc.cache_relay.url = a.trim(); });
+      break;
+    case 'pushB':
+      state.cursorB = b ?? 0;
+      if (a === '__save_exit') {
+        triggerSave();
+        if (!state.modal) state.exitedMessage = 'Saved ~/.gemini/agyline/config.toml and exited cleanly (code 0).';
+        renderAll();
+      } else {
+        state.stackB.push(a);
+        renderAll();
+      }
+      break;
+    case 'popB':
+      if (state.stackB.length > 1) state.stackB.pop();
+      renderAll();
+      break;
+    case 'toggleTomlA':
+      state.showTomlDrawerA = !state.showTomlDrawerA;
+      renderAll();
+      break;
+    case 'toggleTomlB':
+      state.showTomlDrawerB = !state.showTomlDrawerB;
+      renderAll();
+      break;
+    case 'openHook':
+      if (state.variant === 'A') { state.tabA = 3; renderAll(); }
+      else if (state.variant === 'B') { state.stackB = ['root', 'hook']; renderAll(); }
+      else { state.modal = 'diff_install'; renderAll(); }
+      break;
+    case 'openInstallDiff': state.modal = 'diff_install'; renderAll(); break;
+    case 'openUninstallDiff': state.modal = 'diff_uninstall'; renderAll(); break;
+    case 'confirmInstall':
+      if (state.hookState.current === 'ps1') state.hookState.snapshot = 'ps1';
+      state.hookState.current = 'connected';
+      document.getElementById('simHookInit').value = 'connected';
+      state.modal = null;
+      state.lastSaveMsg = 'Updated settings.json (statusLine → agyline; restart active agy session)';
+      renderAll();
+      break;
+    case 'confirmUninstall':
+      state.hookState.current = state.hookState.snapshot === 'ps1' ? 'ps1' : 'none';
+      document.getElementById('simHookInit').value = state.hookState.current;
+      state.modal = null;
+      state.lastSaveMsg = state.hookState.current === 'ps1'
+        ? 'Restored prior statusline.ps1 in settings.json'
+        : 'Removed statusLine from settings.json';
+      renderAll();
+      break;
+    case 'presetModal':
+      state.pendingPresetKey = state.doc.preset || 'cometix';
+      state.modal = 'preset_scope';
+      renderAll();
+      break;
+    case 'askPreset':
+      state.pendingPresetKey = a;
+      state.modal = 'preset_scope';
+      renderAll();
+      break;
+    case 'applyPreset': applyPresetWithScope(a, b); break;
+    case 'save': triggerSave(false); break;
+    case 'forceSave': triggerSave(true); break;
+    case 'forceSaveWithBak':
+      triggerSave(true);
+      state.lastSaveMsg = 'Backed up config.toml.bak & saved clean config.toml';
+      renderAll();
+      break;
+    case 'reloadDisk':
+      state.doc = AgylineEngine.defaultConfigDoc();
+      state.savedToml = AgylineEngine.serializeToml(state.doc);
+      state.diskMode = 'valid';
+      document.getElementById('simDiskMode').value = 'valid';
+      state.modal = null;
+      state.lastSaveMsg = 'Reloaded config.toml from disk';
+      renderAll();
+      break;
+    case 'saveAndQuit':
+      triggerSave(true);
+      state.exitedMessage = 'Saved config.toml and exited TUI (code 0).';
+      renderAll();
+      break;
+    case 'discardAndQuit':
+      state.doc = AgylineEngine.defaultConfigDoc();
+      state.savedToml = AgylineEngine.serializeToml(state.doc);
+      state.modal = null;
+      state.exitedMessage = 'Discarded unsaved edits and exited TUI (code 0).';
+      renderAll();
+      break;
+    case 'help': state.modal = 'help'; renderAll(); break;
+    case 'quit': triggerQuit(); break;
+    case 'closeModal': state.modal = null; renderAll(); break;
+  }
+};
+
+// Wire Prototype Harness controls
+document.getElementById('simDiskMode').addEventListener('change', (e) => {
+  state.diskMode = e.target.value;
+  state.lastSaveMsg = '';
+  renderAll();
+});
+
+document.getElementById('simColorFgBg').addEventListener('change', (e) => {
+  state.hostEnv.COLORFGBG = e.target.value;
+  renderAll();
+});
+
+document.getElementById('btnTinyTerm').addEventListener('click', (e) => {
+  state.tinyTerm = !state.tinyTerm;
+  e.currentTarget.classList.toggle('active', state.tinyTerm);
+  renderAll();
+});
+
+document.querySelectorAll('[data-env]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const k = btn.getAttribute('data-env');
+    const v = btn.getAttribute('data-val');
+    state.hostEnv[k] = state.hostEnv[k] ? '' : v;
+    btn.classList.toggle('active', !!state.hostEnv[k]);
+    renderAll();
+  });
+});
+
+document.getElementById('simHookInit').addEventListener('change', (e) => {
+  const v = e.target.value;
+  state.hookState.mode = v;
+  if (v === 'space_warn') {
+    state.hookState.current = 'ps1';
+    state.hookState.snapshot = 'ps1';
+  } else {
+    state.hookState.current = v;
+    state.hookState.snapshot = v === 'none' ? '' : 'ps1';
+  }
+  renderAll();
+});
+
+document.getElementById('varPrev').addEventListener('click', () => {
+  const order = ['A', 'B', 'C'];
+  setVariant(order[(order.indexOf(state.variant) + 2) % 3]);
+});
+document.getElementById('varNext').addEventListener('click', () => {
+  const order = ['A', 'B', 'C'];
+  setVariant(order[(order.indexOf(state.variant) + 1) % 3]);
+});
+
+// Global Keyboard Handling
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+  const inForm = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
+
+  // Alt + Left/Right always cycles Prototype Variants A/B/C
+  if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    const order = ['A', 'B', 'C'];
+    const dir = e.key === 'ArrowRight' ? 1 : 2;
+    setVariant(order[(order.indexOf(state.variant) + dir) % 3]);
+    return;
+  }
+
+  // Ctrl+S / Ctrl+Z / Ctrl+Y / Ctrl+R
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    triggerSave(false);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
+    e.preventDefault();
+    window._act('presetModal');
+    return;
+  }
+
+  if (inForm) {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+
+  // Modal active keys
+  if (state.modal) {
+    if (e.key === 'Escape') { e.preventDefault(); window._act('closeModal'); return; }
+    const k = e.key.toLowerCase();
+    if (state.modal === 'diff_install' && (k === 'y' || e.key === 'Enter')) { e.preventDefault(); window._act('confirmInstall'); return; }
+    if (state.modal === 'diff_uninstall' && (k === 'y' || e.key === 'Enter')) { e.preventDefault(); window._act('confirmUninstall'); return; }
+    if (state.modal === 'quit_dirty') {
+      if (k === 's') { e.preventDefault(); window._act('saveAndQuit'); }
+      if (k === 'd') { e.preventDefault(); window._act('discardAndQuit'); }
+      return;
+    }
+    if (state.modal === 'broken_overwrite') {
+      if (k === 'b') { e.preventDefault(); window._act('forceSaveWithBak'); }
+      if (k === 'o') { e.preventDefault(); window._act('forceSave'); }
+      return;
+    }
+    if (state.modal === 'mtime_conflict') {
+      if (k === 'o') { e.preventDefault(); window._act('forceSave'); }
+      if (k === 'r') { e.preventDefault(); window._act('reloadDisk'); }
+      return;
+    }
+    if (state.modal === 'preset_scope') {
+      const pk = state.pendingPresetKey || 'cometix';
+      if (k === 'a') { e.preventDefault(); applyPresetWithScope(pk, 'all'); }
+      if (k === 'l') { e.preventDefault(); applyPresetWithScope(pk, 'layout'); }
+      if (k === 's') { e.preventDefault(); applyPresetWithScope(pk, 'style'); }
+      return;
+    }
+    if (state.modal === 'help' && (e.key === 'Enter' || k === '?')) { e.preventDefault(); window._act('closeModal'); }
+    return;
+  }
+
+  // Outside terminal focus: Left/Right switches Variant per prototype/UI.md
+  const termFocused = document.getElementById('termShell').contains(document.activeElement);
+  if (!termFocused && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    const order = ['A', 'B', 'C'];
+    setVariant(order[(order.indexOf(state.variant) + (e.key === 'ArrowRight' ? 1 : 2)) % 3]);
+    return;
+  }
+
+  // Shared global TUI keys
+  if (e.key === '?') { e.preventDefault(); window._act('help'); return; }
+  if (e.key === 'p') { e.preventDefault(); cycleScenario(1); return; }
+  if (e.key === 'P') { e.preventDefault(); cycleScenario(-1); return; }
+  if (e.key === '[' || e.key === '-' || e.key === '_') { e.preventDefault(); adjustWidth(-4); return; }
+  if (e.key === ']' || e.key === '=' || e.key === '+') { e.preventDefault(); adjustWidth(4); return; }
+  if (e.key === 'i') { e.preventDefault(); window._act('openInstallDiff'); return; }
+  if (e.key === 's') { e.preventDefault(); triggerSave(false); return; }
+  if (e.key === 'r') { e.preventDefault(); window._act('presetModal'); return; }
+  if (e.key === 'q') { e.preventDefault(); triggerQuit(); return; }
+
+  // Priority quick keys 1..5 when not on Variant B root menu
+  if (['1','2','3','4','5'].includes(e.key) && !(state.variant === 'B' && state.stackB[state.stackB.length - 1] === 'root')) {
+    e.preventDefault();
+    window._act('setItemProp', state.selLine, state.selSlotIdx, 'priority', Number(e.key));
+    return;
+  }
+
+  // Reorder selected item with Shift+J / Shift+K or Alt+ArrowUp / Alt+ArrowDown
+  if (e.key === 'J' || (e.altKey && e.key === 'ArrowDown')) { e.preventDefault(); window._act('moveSlot', state.selLine, state.selSlotIdx, 1); return; }
+  if (e.key === 'K' || (e.altKey && e.key === 'ArrowUp')) { e.preventDefault(); window._act('moveSlot', state.selLine, state.selSlotIdx, -1); return; }
+  if (e.key === 'x') { e.preventDefault(); window._act('removeSlot', state.selLine, state.selSlotIdx); return; }
+
+  // Variant-specific navigation
+  if (state.variant === 'A') {
+    if (e.key === 't') { e.preventDefault(); window._act('toggleTomlA'); return; }
+    if (e.key === '{') { e.preventDefault(); state.tabA = (state.tabA + 4) % 5; renderAll(); return; }
+    if (e.key === '}') { e.preventDefault(); state.tabA = (state.tabA + 1) % 5; renderAll(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      state.paneA = (state.paneA + (e.shiftKey ? 2 : 1)) % 3;
+      renderAll();
+      return;
+    }
+    if (state.tabA === 0) {
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault();
+        if (state.paneA === 1) {
+          state.selCatalogIdx = Math.min(AgylineEngine.ITEMS_CATALOG.length - 1, state.selCatalogIdx + 1);
+        } else {
+          const row = state.doc.lines[state.selLine];
+          if (state.selSlotIdx < row.length - 1) state.selSlotIdx++;
+          else if (state.selLine === 0) { state.selLine = 1; state.selSlotIdx = 0; }
+        }
+        renderAll();
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault();
+        if (state.paneA === 1) {
+          state.selCatalogIdx = Math.max(0, state.selCatalogIdx - 1);
+        } else {
+          if (state.selSlotIdx > 0) state.selSlotIdx--;
+          else if (state.selLine === 1) { state.selLine = 0; state.selSlotIdx = Math.max(0, state.doc.lines[0].length - 1); }
+        }
+        renderAll();
+      } else if ((e.key === ' ' || e.key === 'Enter') && state.paneA === 1) {
+        e.preventDefault();
+        window._act('catalogToggle', state.selCatalogIdx);
+      }
+    }
+    if (e.key === 'Escape') { e.preventDefault(); triggerQuit(); }
+  } else if (state.variant === 'B') {
+    const cur = state.stackB[state.stackB.length - 1];
+    if (e.key === 't') { e.preventDefault(); window._act('toggleTomlB'); return; }
+    if (e.key === 'Escape' || e.key === 'Backspace') {
+      e.preventDefault();
+      if (state.stackB.length > 1) window._act('popB');
+      else triggerQuit();
+      return;
+    }
+    if (cur === 'root') {
+      const targets = ['line0', 'line1', 'style', 'thresholds', 'runtime', 'hook', '__save_exit'];
+      if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); state.cursorB = (state.cursorB + 1) % targets.length; renderAll(); }
+      if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); state.cursorB = (state.cursorB + targets.length - 1) % targets.length; renderAll(); }
+      if (e.key === 'Enter') { e.preventDefault(); window._act('pushB', targets[state.cursorB], state.cursorB); }
+      if (['1','2','3','4','5','6'].includes(e.key)) {
+        const idx = Number(e.key) - 1;
+        e.preventDefault();
+        window._act('pushB', targets[idx], idx);
+      }
+    }
+  } else if (state.variant === 'C') {
+    if (e.key === 'ArrowRight' || e.key === 'l') {
+      e.preventDefault();
+      const row = state.doc.lines[state.selLine];
+      if (row.length > 0) state.selSlotIdx = (state.selSlotIdx + 1) % row.length;
+      renderAll();
+    } else if (e.key === 'ArrowLeft' || e.key === 'h') {
+      e.preventDefault();
+      const row = state.doc.lines[state.selLine];
+      if (row.length > 0) state.selSlotIdx = (state.selSlotIdx + row.length - 1) % row.length;
+      renderAll();
+    } else if (e.key === 'L') {
+      e.preventDefault();
+      window._act('moveSlot', state.selLine, state.selSlotIdx, 1);
+    } else if (e.key === 'H') {
+      e.preventDefault();
+      window._act('moveSlot', state.selLine, state.selSlotIdx, -1);
+    } else if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      state.selLine = state.selLine === 0 ? 1 : 0;
+      clampSelections();
+      renderAll();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      triggerQuit();
+    }
+  }
+});
+
+renderAll();
+</script>
+</body>
+</html>
