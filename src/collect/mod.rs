@@ -1,9 +1,14 @@
 use std::ffi::OsStr;
 
+pub use self::git::{
+    ParsedGitStatus, parse_porcelain_v2, refresh_git_at, resolve_git_frame, run_hidden_refresh_git,
+};
 use crate::config::EffectiveConfig;
 use crate::input::Payload;
 use crate::platform;
 use crate::statusline::RenderEnv;
+
+pub mod git;
 
 pub trait Spawner: Send + Sync {
     fn spawn_refresh_git(&self, cwd: &str);
@@ -74,24 +79,10 @@ pub struct FrameData {
     pub response_model: Option<String>,
 }
 
-pub fn collect_frame(
-    payload: Payload,
-    _config: &EffectiveConfig,
-    env: &RenderEnv<'_>,
-) -> FrameData {
+pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv<'_>) -> FrameData {
     let now_sec = (env.now_ms / 1000) as i64;
-
-    let git = if !payload.vcs_branch.is_empty() {
-        Some(GitFrameState {
-            branch: payload.vcs_branch.clone(),
-            dirty: payload.vcs_dirty,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
-        })
-    } else {
-        None
-    };
+    let delta_out = 0;
+    let git = git::resolve_git_frame(&payload, config, env, delta_out);
 
     let mut cache = CacheFrameState::default();
     if !payload.is_pre_session() {

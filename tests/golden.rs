@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use agyline::{
-    CacheFrameState, EffectiveConfig, FrameData, GitFrameState, NoopSpawner, RelayStatus,
-    RenderEnv, emit_ansi, emit_plain, parse_stdin_payload, render_lines, run_live_frame,
+    CacheFrameState, EffectiveConfig, FrameData, GitCacheEntry, GitFrameState, NoopSpawner,
+    RelayStatus, RenderEnv, emit_ansi, emit_plain, parse_stdin_payload, render_lines,
+    run_live_frame, write_git_cache,
 };
 use serde::Deserialize;
 
@@ -147,4 +150,165 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
         emit_ansi(&h08_rendered, &config),
         "  \x1b[0m\x1b[0;96m\u{ef23} Opus 4.6\x1b[0;37m | \x1b[0;95m\u{f49b}\x1b[0;95m 0%\x1b[0;37m \u{00b7} \x1b[0;95m40k tokens\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;34m 3:00\x1b[0;92m \u{21bb}2\x1b[0;37m \u{00b7} \x1b[0;34m90% hit\x1b[0;37m | \x1b[0;92m\u{f0e7} 64.5 tok/s\x1b[0m\n"
     );
+}
+
+#[test]
+fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let home_dir =
+        std::env::temp_dir().join(format!("agyline_golden_git_{}_{nanos}", std::process::id()));
+    fs::create_dir_all(&home_dir).expect("create temp golden home");
+
+    let now_ms = 1_700_000_000_000_u64;
+    let spawner = NoopSpawner;
+
+    let cases: &[(&str, serde_json::Value, GitCacheEntry, &str, &str)] = &[
+        (
+            "D04_git_clean_repo",
+            serde_json::json!({
+                "session_id": "probe_d04",
+                "vcs": { "type": "git" },
+                "cwd": "D:\\Temp\\clean-repo"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\clean-repo".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "main".to_string(),
+                dirty: false,
+                has_conflict: false,
+                ahead: 0,
+                behind: 0,
+            },
+            "  \u{ef23} Model | \u{f024b} clean-repo | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m clean-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+        (
+            "D05_git_dirty_ahead_behind",
+            serde_json::json!({
+                "session_id": "probe_d05",
+                "vcs": { "dirty": true },
+                "cwd": "D:\\Temp\\ab-repo"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\ab-repo".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "feature/twenty-five-chars".to_string(),
+                dirty: false,
+                has_conflict: false,
+                ahead: 2,
+                behind: 1,
+            },
+            "  \u{ef23} Model | \u{f024b} ab-repo | \u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1 | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m ab-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+        (
+            "D06_git_conflict_and_detached",
+            serde_json::json!({
+                "session_id": "probe_d06",
+                "cwd": "D:\\Temp\\conf-repo"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\conf-repo".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "main".to_string(),
+                dirty: true,
+                has_conflict: true,
+                ahead: 0,
+                behind: 0,
+            },
+            "  \u{ef23} Model | \u{f024b} conf-repo | \u{f02a2} main \u{26a0} | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m conf-repo\x1b[0;37m | \x1b[0;94m\u{f02a2}\x1b[0;31m main \u{26a0}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+        (
+            "D07_git_detached_head",
+            serde_json::json!({
+                "session_id": "probe_d07",
+                "cwd": "D:\\Temp\\det-repo"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\det-repo".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "fb7464b".to_string(),
+                dirty: false,
+                has_conflict: false,
+                ahead: 0,
+                behind: 0,
+            },
+            "  \u{ef23} Model | \u{f024b} det-repo | \u{f02a2} fb7464b \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m det-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} fb7464b \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+        (
+            "D08_git_junction_into_repo",
+            serde_json::json!({
+                "session_id": "probe_d08",
+                "cwd": "D:\\Temp\\outer_plain\\linked_pkg"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\outer_plain\\linked_pkg".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "main".to_string(),
+                dirty: false,
+                has_conflict: false,
+                ahead: 0,
+                behind: 0,
+            },
+            "  \u{ef23} Model | \u{f024b} linked_pkg | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m linked_pkg\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+        (
+            "D12_cp437_non_ascii_git_branch",
+            serde_json::json!({
+                "session_id": "probe_d12",
+                "cwd": "D:\\Temp\\cn-branch-repo"
+            }),
+            GitCacheEntry {
+                version: 1,
+                cwd: "D:\\Temp\\cn-branch-repo".to_string(),
+                updated_at_ms: now_ms - 500,
+                is_repo: true,
+                branch: "feat/中文分支".to_string(),
+                dirty: false,
+                has_conflict: false,
+                ahead: 0,
+                behind: 0,
+            },
+            "  \u{ef23} Model | \u{f024b} cn-branch-repo | \u{f02a2} feat/中文分支 \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
+            "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m cn-branch-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feat/中文分支 \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
+        ),
+    ];
+
+    for (id, payload_json, cache_entry, expected_plain, expected_ansi) in cases {
+        write_git_cache(&home_dir, cache_entry).expect("seed golden git cache");
+        let stdin_bytes = serde_json::to_vec(payload_json).expect("serialize");
+        let env = RenderEnv {
+            home_dir: home_dir.clone(),
+            temp_dir: PathBuf::from("nonexistent_temp_dir"),
+            conversations_dir: PathBuf::from("nonexistent_conversations_dir"),
+            env_vars: BTreeMap::new(),
+            now_ms,
+            spawner: &spawner,
+        };
+        let out = run_live_frame(&stdin_bytes, &env);
+        assert_eq!(&out.plain, expected_plain, "plain mismatch on {id}");
+        assert_eq!(
+            out.ansi.as_bytes(),
+            expected_ansi.as_bytes(),
+            "ANSI mismatch on {id}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&home_dir);
 }

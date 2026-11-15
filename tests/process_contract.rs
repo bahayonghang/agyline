@@ -1,16 +1,32 @@
 use std::ffi::OsString;
+use std::fs;
 use std::io::{Cursor, Write};
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use agyline::{CliStreams, MAX_STDIN_BYTES, run_cli};
+
+static SANDBOX_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn bin_path() -> &'static str {
     env!("CARGO_BIN_EXE_agyline")
 }
 
 fn run_with_stdin_and_env(args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str)]) -> Output {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let seq = SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let isolated_home = std::env::temp_dir().join(format!(
+        "agyline_proc_contract_{}_{nanos}_{seq}",
+        std::process::id()
+    ));
+
     let mut cmd = Command::new(bin_path());
     cmd.args(args)
+        .env("AGYLINE_HOME", &isolated_home)
         .env_remove("AGY_THEME")
         .env_remove("AGY_STATUSLINE_LINES")
         .env_remove("AGY_STATUSLINE_INDENT")
@@ -30,7 +46,9 @@ fn run_with_stdin_and_env(args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str
         let _ = stdin.write_all(stdin_bytes);
     }
 
-    child.wait_with_output().expect("wait agyline")
+    let output = child.wait_with_output().expect("wait agyline");
+    let _ = fs::remove_dir_all(&isolated_home);
+    output
 }
 
 fn run_with_stdin(args: &[&str], stdin_bytes: &[u8]) -> Output {

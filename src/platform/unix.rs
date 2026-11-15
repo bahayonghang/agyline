@@ -36,3 +36,9 @@ pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }
+
+pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<()> {
+    fs::rename(tmp_path, dst_path)
+}
+
+pub fn configure_background_command(_cmd: &mut Command) {}
