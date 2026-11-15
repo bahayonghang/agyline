@@ -1,3 +1,8 @@
+//! Config layer. `ConfigDoc` is the TOML document as written, round-trippable for the
+//! configurator; `EffectiveConfig` is that doc plus env overrides, resolved polarity, palette and
+//! color depth, ready to render. Explicit `AGY_*` vars beat config.toml, `COLORFGBG` applies only
+//! when `theme = "auto"`, and a broken file still renders the default line with a warning badge.
+
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
@@ -10,6 +15,9 @@ use crate::render::palette::{
 
 pub mod presets;
 
+/// `AGYLINE_HOME` relocates the whole config home (config.toml, presets, palettes, state); unset
+/// or blank falls back to `~/.gemini/agyline`. `lookup` is injected so tests and background
+/// workers can resolve a home without touching process-wide env.
 pub(crate) fn resolve_home_dir(
     lookup: &dyn Fn(&str) -> Option<String>,
     user_home: &Path,
@@ -21,6 +29,7 @@ pub(crate) fn resolve_home_dir(
         .unwrap_or_else(|| user_home.join(".gemini").join("agyline"))
 }
 
+/// The `theme` key. `auto` defers to `COLORFGBG`; `dark` and `light` pin polarity and ignore it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeSetting {
     Auto,
@@ -47,12 +56,15 @@ impl ThemeSetting {
     }
 }
 
+/// Resolved light/dark. Palettes are keyed by it: an RGB palette whose polarity disagrees falls
+/// back to `terminal` rather than printing unreadable colors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemePolarity {
     Dark,
     Light,
 }
 
+/// Icon vocabulary: `nerd` needs a patched font, `unicode` and `ascii` are the portable fallbacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GlyphSet {
     Nerd,
@@ -79,6 +91,8 @@ impl GlyphSet {
     }
 }
 
+/// The `color_depth` key. `auto` probes NO_COLOR / TERM / COLORTERM; the others pin the ANSI level
+/// every color is quantized to, and `none` prints plain text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorDepth {
     Auto,
@@ -99,6 +113,7 @@ impl ColorDepth {
         }
     }
 
+    /// Also accepts the aliases `24bit`, `ansi256`, `ansi16`, `plain` and `off`; `None` otherwise.
     pub fn from_key(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "auto" => Some(Self::Auto),
@@ -111,6 +126,8 @@ impl ColorDepth {
     }
 }
 
+/// `fit` narrows a row to the frame's `terminal_width` (compact first, then drop by priority);
+/// `none` prints full length. With no width in the payload, `fit` also prints full length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverflowMode {
     Fit,
@@ -134,6 +151,7 @@ impl OverflowMode {
     }
 }
 
+/// What `presets::apply_preset` replaces: rows only, style only, or both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresetScope {
     All,
@@ -141,6 +159,8 @@ pub enum PresetScope {
     Style,
 }
 
+/// The 20-item catalog. `Quota` is the only repeatable id (one slot per bucket); the parser does
+/// not enforce uniqueness, the configurator's catalog does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemId {
     Model,
@@ -166,6 +186,7 @@ pub enum ItemId {
 }
 
 impl ItemId {
+    /// Picker order, grouped Workspace, Usage, Runtime, then Session/Identity.
     pub const ALL: [Self; 20] = [
         Self::Model,
         Self::Dir,
@@ -240,6 +261,7 @@ impl ItemId {
         }
     }
 
+    /// Narrowing rank when a slot sets no valid `priority`: 1 survives longest, 5 drops first.
     pub const fn default_priority(self) -> u8 {
         match self {
             Self::Model | Self::Context | Self::Mode => 1,
@@ -251,21 +273,36 @@ impl ItemId {
     }
 }
 
+/// One `[[line]].items` entry. Options are `None` when the file omits them, so the item's own
+/// default applies; only the options an item understands have any effect.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItemSlot {
     pub id: ItemId,
+    /// Replaces the glyph-set icon; `Some("")` renders no icon at all.
     pub icon: Option<String>,
+    /// Color spec text (palette token, ANSI index or `#rrggbb`), resolved and quantized at render.
     pub fg: Option<String>,
+    /// Icon color spec, kept separate so the icon can differ from the body.
     pub icon_color: Option<String>,
+    /// Narrowing rank 1..=5; out of range falls back to `ItemId::default_priority`.
     pub priority: Option<u8>,
+    /// Context: show remaining percent instead of used percent.
     pub show_remaining: Option<bool>,
+    /// Quota/budget: bucket name filter, exact then substring; unset picks the lowest remaining.
     pub bucket: Option<String>,
+    /// Quota: label after the percentage, default `quota`.
     pub label: Option<String>,
+    /// Quota/budget: append the bucket's reset countdown.
     pub show_reset: Option<bool>,
+    /// Quota/budget: show a count allowance when the bucket has one.
     pub show_amount: Option<bool>,
+    /// Cost/budget: append the subagent share of the USD cost.
     pub show_subagent: Option<bool>,
+    /// Mode: print the default ask pill when no special mode is active.
     pub show_default: Option<bool>,
+    /// Mode: always use the compact pill, even at full width.
     pub compact: Option<bool>,
+    /// Subagents: expand up to two running names and models.
     pub show_detail: Option<bool>,
 }
 
@@ -289,6 +326,7 @@ impl ItemSlot {
         }
     }
 
+    /// True when no option is set, so serialization can write a bare `"id"` instead of a table.
     pub fn is_shorthand(&self) -> bool {
         self.icon.is_none()
             && self.fg.is_none()
@@ -305,6 +343,8 @@ impl ItemSlot {
             && self.show_detail.is_none()
     }
 
+    /// The slot's priority when it is inside 1..=5, else the item default; bad values are ignored,
+    /// not clamped.
     pub fn effective_priority(&self) -> u8 {
         self.priority
             .filter(|p| (1..=5).contains(p))
@@ -318,6 +358,8 @@ impl From<ItemId> for ItemSlot {
     }
 }
 
+/// Per-token colors layered over the chosen palette. `BTreeMap` keeps token order stable so
+/// repeated saves do not reshuffle the file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PaletteOverrides {
     entries: BTreeMap<ColorToken, String>,
@@ -332,6 +374,7 @@ impl PaletteOverrides {
         self.entries.get(&token).map(String::as_str)
     }
 
+    /// A blank spec removes the token: clearing a field deletes the key rather than writing "".
     pub fn set(&mut self, token: ColorToken, spec: impl Into<String>) {
         let s = spec.into();
         if s.trim().is_empty() {
@@ -354,30 +397,45 @@ impl PaletteOverrides {
     }
 }
 
+/// Coloring thresholds. The pairs run in opposite directions: context counts used percent up,
+/// quota counts remaining percent down.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThresholdsConfig {
+    /// Used percent, 0..=100, where context turns warn; must stay below `context_crit`.
     pub context_warn: f64,
+    /// Used percent, 0..=100, where context turns crit.
     pub context_crit: f64,
+    /// Remaining percent, 0..=100, where quota turns warn; must stay above `quota_crit`.
     pub quota_warn: i32,
+    /// Remaining percent, 0..=100, where quota turns crit.
     pub quota_crit: i32,
+    /// Cache countdown seconds at or below which the TTL turns warn; capped at one day.
     pub cache_warn_secs: u64,
 }
 
 impl Default for ThresholdsConfig {
     fn default() -> Self {
         Self {
+            // statusline.ps1: used percent >= 80 is crit, >= 50 is warn.
             context_warn: 50.0,
             context_crit: 80.0,
+            // statusline.ps1: remaining percent < 20 is crit, < 45 is warn.
             quota_warn: 45,
             quota_crit: 20,
+            // statusline.py turns the countdown warn inside the last 60 s of the 300 s window.
             cache_warn_secs: 60,
         }
     }
 }
 
+/// The TOML document as written: every field is a config.toml key and survives a parse/serialize
+/// round trip. Nothing is resolved here and `preset` is already expanded into `lines`; see
+/// `EffectiveConfig` for what actually renders.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigDoc {
+    /// Only 1 is understood; another value warns and is still read as v1.
     pub version: u32,
+    /// Name recorded for the picker; it is not re-applied at render time.
     pub preset: String,
     pub palette: String,
     pub theme: ThemeSetting,
@@ -387,14 +445,20 @@ pub struct ConfigDoc {
     pub indent: String,
     pub single_line: bool,
     pub overflow: OverflowMode,
+    /// Freshness window for the cached git state, in ms. The render reads that cache and never
+    /// waits on git; a detached `__refresh-git` worker refills it.
     pub git_cache_ms: u64,
+    /// Empty or `off` disables the relay state read, the keepalive mark and the touch.
     pub cache_relay_url: String,
     pub thresholds: ThresholdsConfig,
     pub palette_overrides: PaletteOverrides,
+    /// One entry per `[[line]]`, in print order; an empty row prints nothing.
     pub lines: Vec<Vec<ItemSlot>>,
 }
 
 impl ConfigDoc {
+    /// The default document, reproducing `ref/agy-patch/statusline.ps1` (`cometix` preset,
+    /// `terminal` palette, plain skin). Every parse starts here and overlays only the keys set.
     pub fn cometix_base() -> Self {
         Self {
             version: 1,
@@ -403,10 +467,13 @@ impl ConfigDoc {
             theme: ThemeSetting::Auto,
             glyphs: GlyphSet::Nerd,
             color_depth: ColorDepth::Auto,
+            // statusline.ps1 joins items with $SEP_PIPE = " | ".
             separator: " | ".to_string(),
+            // Both reference scripts default the indent to two spaces.
             indent: "  ".to_string(),
             single_line: false,
             overflow: OverflowMode::Fit,
+            // statusline.py reuses its vcs cache while it is under 2 s old.
             git_cache_ms: 2000,
             cache_relay_url: String::new(),
             thresholds: ThresholdsConfig::default(),
@@ -422,6 +489,8 @@ impl Default for ConfigDoc {
     }
 }
 
+/// Why config.toml could not be used. `line`/`column` are 1-based and `None` when there is no span
+/// (an unreadable file); the text feeds the CLI warning and the configurator's recovery UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigSyntaxError {
     pub line: Option<usize>,
@@ -439,6 +508,8 @@ impl std::fmt::Display for ConfigSyntaxError {
     }
 }
 
+/// Outcome of a load that never fails: `doc` is usable even when `syntax_error` is set.
+/// `config_exists` separates "no file yet" from "broken file", which decides the save/backup path.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigLoadResult {
     pub doc: ConfigDoc,
@@ -447,13 +518,19 @@ pub struct ConfigLoadResult {
     pub warnings: Vec<String>,
 }
 
+/// One legacy `AGY_*` variable that is actually in force, so the configurator can badge the field
+/// it shadows and offer a File-Only preview without it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveEnvOverride {
     pub var_name: &'static str,
     pub raw_value: String,
+    /// Badge key, not always a literal TOML path: `mode.show_default` is a per-slot option.
     pub target_key: &'static str,
 }
 
+/// Must list exactly what `EffectiveConfig::from_doc` applies, or a badge would promise an
+/// override that is ignored: unparseable `AGY_THEME` / `AGY_SHOW_DEFAULT_MODE` and a
+/// `AGY_STATUSLINE_LINES` other than 1, 2 or auto are skipped. Indent and relay always win.
 pub fn inspect_env_overrides(env_vars: &BTreeMap<String, String>) -> Vec<ActiveEnvOverride> {
     let mut out = Vec::new();
     if let Some(v) = env_vars.get("AGY_THEME")
@@ -501,10 +578,14 @@ pub fn inspect_env_overrides(env_vars: &BTreeMap<String, String>) -> Vec<ActiveE
     out
 }
 
+/// Parses with no config home, so custom presets and palettes cannot be discovered; prefer
+/// `parse_config_doc_with_home` whenever a home is known.
 pub fn parse_config_doc(raw: &str) -> Result<(ConfigDoc, Vec<String>), ConfigSyntaxError> {
     parse_config_doc_with_home(raw, None)
 }
 
+/// Tolerant overlay onto `cometix_base`: bad values become warnings and only TOML syntax errors
+/// are `Err`, so a typo never costs the user their line.
 pub fn parse_config_doc_with_home(
     raw: &str,
     home_dir: Option<&Path>,
@@ -524,6 +605,8 @@ pub fn parse_config_doc_with_home(
     Ok((doc, warnings))
 }
 
+/// Reads `<home>/config.toml`. Missing, unreadable and unparsable all return the reference default
+/// with diagnostics set, never an error.
 pub fn load_config_doc(home_dir: &Path) -> ConfigLoadResult {
     let config_path = home_dir.join("config.toml");
     if !config_path.exists() {
@@ -567,6 +650,9 @@ pub fn load_config_doc(home_dir: &Path) -> ConfigLoadResult {
     }
 }
 
+/// Regenerates the whole file in a fixed key order for the configurator's live TOML drawer and
+/// for saving. The thresholds, git and cache_relay tables are always written; comments and
+/// unknown keys in the user's original file are not preserved.
 pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
     let mut out = String::with_capacity(512);
     let _ = writeln!(out, "version = {}", doc.version);
@@ -614,6 +700,7 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
 
     for row in &doc.lines {
         out.push_str("\n[[line]]\n");
+        // An empty row must still be written, or reloading would lose a [[line]] slot.
         if row.is_empty() {
             out.push_str("items = []\n");
             continue;
@@ -636,6 +723,8 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
     out
 }
 
+/// Fully resolved render input: the doc plus env overrides, polarity, palette and color depth.
+/// The live line and the configurator preview both build this, so they share one renderer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffectiveConfig {
     pub preset: String,
@@ -644,19 +733,25 @@ pub struct EffectiveConfig {
     pub polarity: ThemePolarity,
     pub glyphs: GlyphSet,
     pub color_depth: ColorDepth,
+    /// What `color_depth` resolved to; the renderer quantizes every color with this.
     pub effective_color_depth: EffectiveColorDepth,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
     pub overflow: OverflowMode,
+    /// True when any mode slot asks for the default pill; the env force below still wins.
     pub show_default_mode: bool,
+    /// `Some` only when `AGY_SHOW_DEFAULT_MODE` parsed; `None` leaves the decision to the slots.
     pub force_show_default_mode: Option<bool>,
     pub git_cache_ms: u64,
+    /// `None` when disabled by the file or `AGY_CACHE_RELAY`; the relay file is then not read.
     pub cache_relay_url: Option<String>,
     pub thresholds: ThresholdsConfig,
     pub palette_overrides: PaletteOverrides,
     pub resolved_palette: ResolvedPalette,
     pub lines: Vec<Vec<ItemSlot>>,
+    /// config.toml failed to parse: the renderer appends ` ! config` to the first printed row
+    /// instead of failing, so a broken file still shows a line.
     pub config_broken: bool,
 }
 
@@ -667,11 +762,14 @@ impl Default for EffectiveConfig {
 }
 
 impl EffectiveConfig {
+    /// Render-path entry: load `<home>/config.toml` and apply env overrides, dropping diagnostics.
     pub fn resolve(home_dir: &Path, env_vars: &BTreeMap<String, String>) -> Self {
         let (cfg, _) = Self::resolve_with_diagnostics(home_dir, env_vars);
         cfg
     }
 
+    /// Same resolution plus the load result, so the CLI can warn on stderr and still print the
+    /// fallback line.
     pub fn resolve_with_diagnostics(
         home_dir: &Path,
         env_vars: &BTreeMap<String, String>,
@@ -684,6 +782,8 @@ impl EffectiveConfig {
         (cfg, loaded)
     }
 
+    /// Pure resolution of an already-parsed doc. `apply_env_overrides = false` is the
+    /// configurator's File-Only preview; `home_dir` is needed only to discover custom palettes.
     pub fn from_doc(
         doc: &ConfigDoc,
         home_dir: Option<&Path>,
@@ -694,6 +794,7 @@ impl EffectiveConfig {
         let mut single_line = doc.single_line;
         let mut indent = doc.indent.clone();
         let mut force_show_default_mode = None;
+        // Empty or "off" disables the relay read, keepalive mark and touch (AGY_CACHE_RELAY=off).
         let mut cache_relay_url = if doc.cache_relay_url.trim().is_empty()
             || doc.cache_relay_url.trim().eq_ignore_ascii_case("off")
         {
@@ -702,6 +803,7 @@ impl EffectiveConfig {
             Some(doc.cache_relay_url.trim().to_string())
         };
 
+        // Precedence: an explicit AGY_* var beats the file; COLORFGBG is consulted only for auto.
         if apply_env_overrides {
             if let Some(raw_theme) = env_vars.get("AGY_THEME")
                 && let Some(parsed) = ThemeSetting::from_key(raw_theme)
@@ -709,6 +811,7 @@ impl EffectiveConfig {
                 theme_setting = parsed;
             }
 
+            // The reference only tests == "1"; "2" and "auto" explicitly restore two lines.
             if let Some(raw_lines) = env_vars.get("AGY_STATUSLINE_LINES").map(|s| s.trim()) {
                 if raw_lines == "1" {
                     single_line = true;
@@ -746,6 +849,7 @@ impl EffectiveConfig {
             resolve_palette(&doc.palette, polarity, &doc.palette_overrides, home_dir);
         let effective_color_depth = resolve_effective_color_depth(doc.color_depth, env_vars);
 
+        // One mode slot asking for the default enables it line-wide; the env force still wins.
         let any_slot_shows_default = doc
             .lines
             .iter()
@@ -777,12 +881,14 @@ impl EffectiveConfig {
         }
     }
 
+    /// Palette lookup then quantization; `None` at depth `none`, meaning print no color at all.
     pub fn resolve_span_color(&self, spec: impl Into<ColorSpec>) -> Option<ResolvedColor> {
         let resolved = self.resolved_palette.resolve_spec(spec.into());
         resolved.quantize(self.effective_color_depth)
     }
 }
 
+/// Overlay without a config home, used for preset files; `allow_preset = false` blocks chaining.
 pub(crate) fn parse_config_overlay(
     tbl: &toml::map::Map<String, toml::Value>,
     doc: &mut ConfigDoc,
@@ -799,6 +905,7 @@ fn parse_config_overlay_with_home(
     allow_preset: bool,
     home_dir: Option<&Path>,
 ) {
+    // Expand the preset first so the explicit keys below win, whatever order the file lists them.
     if allow_preset && let Some(preset_val) = tbl.get("preset") {
         if let Some(preset_name) = preset_val.as_str() {
             let trimmed = preset_name.trim();
@@ -829,6 +936,7 @@ fn parse_config_overlay_with_home(
                     warnings.push("invalid 'version': expected integer".to_string());
                 }
             }
+            // Already applied above; applying it again here would wipe the keys parsed so far.
             "preset" => {}
             "palette" => {
                 if let Some(s) = val.as_str() {
@@ -933,6 +1041,7 @@ fn parse_config_overlay_with_home(
                             parsed_lines.push(Vec::new());
                         }
                     }
+                    // [[line]] replaces the preset's rows wholesale rather than merging into them.
                     doc.lines = parsed_lines;
                 } else {
                     warnings.push("invalid '[[line]]': expected array of tables".to_string());
@@ -950,6 +1059,8 @@ fn parse_thresholds_table(
     thresholds: &mut ThresholdsConfig,
     warnings: &mut Vec<String>,
 ) {
+    // Stage each pair and commit it only if both values are valid and ordered, so a half-valid
+    // edit cannot leave warn and crit inverted.
     let mut cand_ctx_warn = thresholds.context_warn;
     let mut cand_ctx_crit = thresholds.context_crit;
     let mut ctx_touched = false;
@@ -1007,6 +1118,7 @@ fn parse_thresholds_table(
                 }
             }
             "cache_warn_secs" => {
+                // Bounded to one day; the reference countdown never exceeds 300 s.
                 if let Some(secs) = v
                     .as_integer()
                     .and_then(|i| u64::try_from(i).ok())
@@ -1021,6 +1133,7 @@ fn parse_thresholds_table(
         }
     }
 
+    // Context counts up: warn must stay below crit, else both keep their defaults.
     if ctx_touched {
         if ctx_valid && cand_ctx_warn < cand_ctx_crit {
             thresholds.context_warn = cand_ctx_warn;
@@ -1033,6 +1146,7 @@ fn parse_thresholds_table(
         }
     }
 
+    // Quota counts down: warn must stay above crit, else both keep their defaults.
     if q_touched {
         if q_valid && cand_q_warn > cand_q_crit {
             thresholds.quota_warn = cand_q_warn;
@@ -1111,6 +1225,7 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
             }
         }
         toml::Value::Table(tbl) => {
+            // "item" is an accepted alias for "id"; serialization always writes "id".
             let raw_id = tbl
                 .get("id")
                 .or_else(|| tbl.get("item"))
@@ -1206,6 +1321,8 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
 }
 
 fn normalize_color_toml_value(val: &toml::Value) -> Option<String> {
+    // Validate as a color, then store text: an integer index becomes "31" so every saved color is
+    // a string the drawer and the next parse both understand.
     let _ = toml_value_to_color_spec(val)?;
     match val {
         toml::Value::String(s) => {
@@ -1224,6 +1341,7 @@ fn normalize_color_toml_value(val: &toml::Value) -> Option<String> {
 
 fn toml_as_f64(val: &toml::Value) -> Option<f64> {
     match val {
+        // NaN or inf would poison threshold comparisons, so only finite floats are accepted.
         toml::Value::Float(f) if f.is_finite() => Some(*f),
         toml::Value::Integer(i) => Some(*i as f64),
         toml::Value::Float(_)
@@ -1240,6 +1358,7 @@ fn toml_error_to_syntax_error(raw: &str, err: &toml::de::Error) -> ConfigSyntaxE
         Some(span) => byte_offset_to_line_col(raw, span.start),
         None => (None, None),
     };
+    // The TOML error message is multi-line; the banner and the stderr warning need one line.
     let message = err
         .message()
         .lines()
@@ -1255,6 +1374,7 @@ fn toml_error_to_syntax_error(raw: &str, err: &toml::de::Error) -> ConfigSyntaxE
 }
 
 fn byte_offset_to_line_col(raw: &str, offset: usize) -> (Option<usize>, Option<usize>) {
+    // 1-based and counted in chars, not bytes, so columns match what an editor shows.
     let clamped = offset.min(raw.len());
     let mut line = 1usize;
     let mut col = 1usize;
@@ -1273,6 +1393,8 @@ fn byte_offset_to_line_col(raw: &str, offset: usize) -> (Option<usize>, Option<u
 }
 
 fn format_item_slot_toml(slot: &ItemSlot) -> String {
+    // Only set options are written, in a fixed order: emitting defaults would turn a shorthand
+    // row into tables and churn the drawer on every save.
     if slot.is_shorthand() {
         return quote_toml_str(slot.id.as_key());
     }
@@ -1321,6 +1443,7 @@ fn format_item_slot_toml(slot: &ItemSlot) -> String {
 }
 
 fn quote_toml_str(s: &str) -> String {
+    // Control characters are escaped too: a raw one would make the saved file unparsable.
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for ch in s.chars() {
@@ -1348,6 +1471,7 @@ fn quote_toml_str(s: &str) -> String {
 }
 
 fn format_toml_num(v: f64) -> String {
+    // Integral thresholds stay integers in the file; toml_as_f64 reads both forms back.
     if v.fract() == 0.0 {
         format!("{v:.0}")
     } else {
@@ -1356,6 +1480,7 @@ fn format_toml_num(v: f64) -> String {
 }
 
 fn parse_env_bool(raw: &str) -> Option<bool> {
+    // A superset of the reference's == "1" test; None leaves the file's value in force.
     let trimmed = raw.trim();
     if trimmed == "1"
         || trimmed.eq_ignore_ascii_case("true")
@@ -1375,6 +1500,8 @@ fn parse_env_bool(raw: &str) -> Option<bool> {
 }
 
 fn resolve_auto_polarity(env_vars: &BTreeMap<String, String>) -> ThemePolarity {
+    // Both reference scripts read the last ';'-separated COLORFGBG field: >= 7 means a light
+    // background. Non-numeric or absent stays dark, matching their default palette.
     if let Some(colorfgbg) = env_vars
         .get("COLORFGBG")
         .map(|s| s.trim())

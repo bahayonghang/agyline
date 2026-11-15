@@ -1,3 +1,8 @@
+//! Item catalog and the pure evaluation seam: each segment turns already-collected `FrameData`
+//! into styled spans with no I/O, no shell and no `git` wait on the printing path. Labels, colors
+//! and thresholds reproduce `ref/agy-patch/statusline.ps1` and `statusline.py`. Every item yields
+//! a full and a compact form so layout can narrow a row without evaluating it twice.
+
 use crate::collect::FrameData;
 use crate::config::{EffectiveConfig, GlyphSet, ItemId, ItemSlot};
 use crate::render::{ColorSpec, ColorToken, StyledItem, StyledSpan, glyphs, parse_color_spec};
@@ -6,6 +11,7 @@ pub mod runtime;
 pub mod usage;
 pub mod workspace;
 
+/// Configurator picker grouping only; a category never changes what the line prints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemCategory {
     Workspace,
@@ -14,12 +20,16 @@ pub enum ItemCategory {
     Session,
 }
 
+/// How the inspector edits an option: `Bool` toggles in place, `Text` opens a value editor.
+/// Matches the TOML value type the config loader accepts for that key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemOptionKind {
     Bool,
     Text,
 }
 
+/// One per-item option as the catalog declares it. `key` is the `[[line]]` TOML key the loader
+/// parses and the configurator inspector edits, so all three must use the same spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ItemOptionSpec {
     pub key: &'static str,
@@ -27,18 +37,26 @@ pub struct ItemOptionSpec {
     pub summary: &'static str,
 }
 
+/// Static catalog metadata for the configurator and the public API. The renderer reads config
+/// slots instead, so nothing here changes the printed line on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ItemCatalogEntry {
     pub id: ItemId,
     pub key: &'static str,
     pub category: ItemCategory,
+    /// 1..=5 and equal to `ItemId::default_priority()`. Narrowing drops 5 first and keeps 1 last.
     pub default_priority: u8,
+    /// Base palette token; warn/crit and per-mode colors are chosen by the evaluator instead.
     pub default_color: ColorToken,
+    /// Only `quota` repeats: one bucket per slot, so a row can carry several.
     pub allow_multiple: bool,
     pub summary: &'static str,
+    /// Option keys beyond the shared `icon` / `fg` / `icon_color` / `priority`.
     pub options: &'static [ItemOptionSpec],
 }
 
+// These tables declare the per-item TOML option keys. The loader parses the same keys and the
+// configurator inspector edits them through its own `InspectorField` table.
 const CONTEXT_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     key: "show_remaining",
     kind: ItemOptionKind::Bool,
@@ -116,6 +134,8 @@ const COST_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     summary: "Append subagent USD cost share",
 }];
 
+// All 20 items in `ItemId::ALL` order, which the catalog test pins; the picker groups them by
+// category. Base colors are the reference segment colors, priorities the narrowing order.
 const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
     ItemCatalogEntry {
         id: ItemId::Model,
@@ -319,10 +339,13 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
     },
 ];
 
+/// The whole catalog in `ItemId::ALL` order, for item pickers and preset defaults.
 pub fn catalog() -> &'static [ItemCatalogEntry] {
     &ITEM_CATALOG
 }
 
+/// One slot's content in both widths. An evaluator returns `None` to omit the item entirely, so
+/// no empty segment or stray separator is printed. `priority` is 1..=5; 5 is narrowed away first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvaluatedItem {
     pub id: ItemId,
@@ -337,6 +360,9 @@ impl EvaluatedItem {
     }
 }
 
+/// Dispatches one configured slot to its evaluator and returns both widths. Pure: everything it
+/// reads is already in `FrameData`, so the render waits on no git, shell or database. `None` omits
+/// the item from the row.
 pub fn evaluate_slot_dual(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -366,6 +392,8 @@ pub fn evaluate_slot_dual(
     }
 }
 
+/// Full-width wrapper for callers that do not narrow. The live render and the configurator preview
+/// both use `evaluate_slot_dual`, so a row can shrink without evaluating its items again.
 pub fn evaluate_slot(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -375,6 +403,8 @@ pub fn evaluate_slot(
     Some(StyledItem::new(eval.id, eval.full_spans))
 }
 
+/// Slot `fg` override, else the item's reference default token. An unparseable color string falls
+/// back to the token instead of failing the render.
 pub(crate) fn slot_fg_color(slot: &ItemSlot, default_token: ColorToken) -> ColorSpec {
     slot.fg
         .as_deref()
@@ -382,10 +412,14 @@ pub(crate) fn slot_fg_color(slot: &ItemSlot, default_token: ColorToken) -> Color
         .unwrap_or(ColorSpec::Token(default_token))
 }
 
+/// Explicit `icon_color` only. `None` leaves the choice to the caller: most segments paint the
+/// icon with the body color, `dir` uses the reference's separate folder-icon color.
 pub(crate) fn slot_custom_icon_color(slot: &ItemSlot) -> Option<ColorSpec> {
     slot.icon_color.as_deref().and_then(parse_color_spec)
 }
 
+/// One span when icon and body share a color, two when `icon_color` differs: the emitter writes an
+/// SGR per span. An empty icon drops the separating space, as the reference segments do.
 pub(crate) fn coalesced_icon_body_spans(
     icon: &str,
     custom_icon_col: Option<ColorSpec>,
@@ -406,6 +440,8 @@ pub(crate) fn coalesced_icon_body_spans(
     }
 }
 
+/// Cuts to `max_chars` characters including the ellipsis, as the reference does for a long branch
+/// (23 kept plus one ellipsis). Counts chars, not columns; a limit below 2 still keeps one char.
 pub(crate) fn truncate_chars_with_ellipsis(
     text: &str,
     max_chars: usize,
@@ -414,6 +450,7 @@ pub(crate) fn truncate_chars_with_ellipsis(
     if text.chars().count() <= max_chars {
         return text.to_string();
     }
+    // Keep one character even at a tiny limit, so the ellipsis never stands alone.
     let keep = max_chars.saturating_sub(1).max(1);
     let mut out: String = text.chars().take(keep).collect();
     out.push_str(glyphs::ellipsis(glyphs));

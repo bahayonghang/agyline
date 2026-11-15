@@ -1,3 +1,8 @@
+//! Workspace segments: model plus effort, directory leaf, and git state. Effort labels, model-slug
+//! cleanup and the dirty/conflict marks reproduce Segments 1-3 of `ref/agy-patch/statusline.ps1`
+//! and `statusline.py`. Compact widths are agyline's own; the reference prints a single width. Git
+//! state is already resolved in `FrameData`: nothing here runs `git` or reads the filesystem.
+
 use crate::collect::FrameData;
 use crate::config::{EffectiveConfig, ItemId, ItemSlot};
 use crate::items::{
@@ -6,12 +11,15 @@ use crate::items::{
 };
 use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
 
+/// Model segment: picker display name, else `model.id`, else the literal `Model`, plus effort
+/// joined by the reference's middle dot. Never `None`; the compact form shortens the name only.
 pub fn eval_model(
     slot: &ItemSlot,
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
     let payload = &frame.payload;
+    // Reference `$modelKeySource`: display_name, then model.id, then the literal `Model`.
     let raw_source = if !payload.model_display_name.trim().is_empty() {
         payload.model_display_name.as_str()
     } else if !payload.model_id.trim().is_empty() {
@@ -21,6 +29,7 @@ pub fn eval_model(
     };
 
     let (base_model, extracted_effort) = split_model_and_effort(raw_source);
+    // `model.effort` (already merged with `thinkingLevel`) outranks a suffix parsed from the name.
     let raw_effort = if !payload.model_effort.trim().is_empty() {
         payload.model_effort.as_str()
     } else {
@@ -29,6 +38,8 @@ pub fn eval_model(
     let effort_label = format_effort_label(raw_effort);
     let mut pretty_base = format_pretty_model_slug(base_model);
 
+    // The DB-resolved upstream model wins only when it differs and is not already contained in the
+    // picker name, so a shorter upstream id cannot cut down the displayed model.
     if let Some(resp_model) = &frame.response_model {
         let trimmed_resp = resp_model.trim();
         if !trimmed_resp.is_empty() {
@@ -51,6 +62,7 @@ pub fn eval_model(
 
     let build = |name: String| -> Vec<StyledSpan> {
         let mut spans = coalesced_icon_body_spans(icon, custom_ic, body_col, name);
+        // Effort joins through the separator-colored dot, both parts in the model color.
         if !effort_label.is_empty() {
             spans.push(StyledSpan::new(
                 ColorToken::Separator,
@@ -69,6 +81,8 @@ pub fn eval_model(
     })
 }
 
+/// Directory leaf of `cwd`; `None` when cwd is blank or yields no leaf. The icon keeps the
+/// reference's separate folder color while the text uses the dir color.
 pub fn eval_dir(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -78,6 +92,7 @@ pub fn eval_dir(
     if cwd.trim().is_empty() {
         return None;
     }
+    // Trailing separators go first; a root path trims to empty and keeps the original text.
     let trimmed = cwd.trim_end_matches(['\\', '/']);
     let leaf = if trimmed.is_empty() {
         cwd.as_str()
@@ -118,13 +133,17 @@ pub fn eval_dir(
     })
 }
 
+/// Git segment from the cached frame state; `None` when no branch is known. A conflict paints the
+/// whole body crit, otherwise the reference's dirty/clean mark follows the branch.
 pub fn eval_git(
     slot: &ItemSlot,
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
+    // Branch and status come from the async git cache, so the render never waits on `git`.
     let git = frame.git.as_ref().filter(|g| !g.branch.trim().is_empty())?;
 
+    // Reference order: ahead then behind, both appended after the status mark.
     let mut ab_txt = String::new();
     if git.ahead > 0 {
         ab_txt.push_str(&format!(
@@ -150,6 +169,7 @@ pub fn eval_git(
 
     let build = |branch_limit: usize| -> Vec<StyledSpan> {
         let br_short = truncate_chars_with_ellipsis(&git.branch, branch_limit, config.glyphs);
+        // Conflict: warn mark and crit body, while the icon keeps the git color.
         if git.has_conflict {
             let body = format!("{} {}{ab_txt}", br_short, glyphs::warn_mark(config.glyphs));
             if icon.is_empty() {
@@ -162,6 +182,7 @@ pub fn eval_git(
                 ]
             }
         } else {
+            // Reference marks: filled circle when dirty, check when clean.
             let mark = if git.dirty {
                 glyphs::git_dirty_mark(config.glyphs)
             } else {
@@ -175,11 +196,14 @@ pub fn eval_git(
     Some(EvaluatedItem {
         id: ItemId::Git,
         priority: slot.effective_priority(),
+        // 24 chars is the reference's 23 plus ellipsis; 12 is agyline's compact width.
         full_spans: build(24),
         compact_spans: build(12),
     })
 }
 
+/// Splits a trailing `(High)` or middle-dot effort suffix off the display name, as the reference
+/// does before formatting. Returns the input unchanged with no effort when neither shape matches.
 fn split_model_and_effort(raw: &str) -> (&str, &str) {
     let trimmed = raw.trim();
     if let Some(without_close) = trimmed.strip_suffix(')')
@@ -190,6 +214,7 @@ fn split_model_and_effort(raw: &str) -> (&str, &str) {
             return (without_close[..open_idx].trim(), inner.trim());
         }
     }
+    // No spaces required around the dot, following `statusline.ps1`; `statusline.py` wants them.
     if let Some((left, right)) = raw.split_once('\u{00b7}') {
         let right_trimmed = right.trim();
         if !right_trimmed.is_empty() {
@@ -199,6 +224,8 @@ fn split_model_and_effort(raw: &str) -> (&str, &str) {
     (raw, "")
 }
 
+/// Reference effort labels: `Low`, `Med`, `High`, `xHigh`, `Max`. An unknown value passes through
+/// trimmed; blank yields an empty string so the model segment prints no effort part.
 pub fn format_effort_label(raw: &str) -> String {
     let s = raw.trim();
     if s.is_empty() {
@@ -214,12 +241,16 @@ pub fn format_effort_label(raw: &str) -> String {
     }
 }
 
+/// Reference slug cleanup: drop `models/`, a `-20YYYYMMDD` stamp, `-preview[-MM-DD]`, `-latest`,
+/// then apply the Claude/GPT short forms or generic kebab title case. Blank input yields `Model`.
 pub fn format_pretty_model_slug(slug: &str) -> String {
     let mut s = slug.trim();
     if s.is_empty() {
         return "Model".to_string();
     }
 
+    // Affixes match case-insensitively like PowerShell `-replace`, and each is verified ASCII
+    // before the byte slice, so slicing stays on char boundaries.
     if s.len() >= 7 && s.as_bytes()[..7].eq_ignore_ascii_case(b"models/") {
         s = &s[7..];
     }
@@ -265,6 +296,7 @@ pub fn format_pretty_model_slug(slug: &str) -> String {
         })
     {
         let mut words = Vec::new();
+        // Number-unit parts (`16k`, `4.5`) stay verbatim; `v2` uppercases; others capitalize once.
         for part in s.split('-') {
             if part.is_empty() {
                 continue;
@@ -291,6 +323,8 @@ pub fn format_pretty_model_slug(slug: &str) -> String {
     s.to_string()
 }
 
+/// Both reference Claude shapes, `claude-opus-4-6` and `claude-4-6-opus`, with an optional `1m`
+/// rendered as a ` 1M` suffix. `None` when the parts fit neither shape.
 fn try_format_claude(s: &str) -> Option<String> {
     let parts: Vec<&str> = s.split('-').collect();
     if parts.len() < 3 || !parts[0].eq_ignore_ascii_case("claude") {
@@ -361,6 +395,8 @@ fn claude_family_title(part: &str) -> Option<&'static str> {
     }
 }
 
+/// `gpt-5.1-codex-max` becomes `GPT-5.1 Codex Max`: the version keeps its dot and the remaining
+/// words are title-cased. `None` unless the slug starts with `gpt-` and a digit.
 fn try_format_gpt(s: &str) -> Option<String> {
     if s.len() < 5 || !s.as_bytes()[..4].eq_ignore_ascii_case(b"gpt-") {
         return None;
@@ -399,6 +435,8 @@ fn try_format_gpt(s: &str) -> Option<String> {
     }
 }
 
+/// The PowerShell reference's .NET `ToTitleCase` word rule: lowercase, then capitalize the first
+/// letter. `statusline.py` uses `str.title()`, which also capitalizes after an apostrophe.
 fn dotnet_titlecase_word(word: &str) -> String {
     let lower = word.to_lowercase();
     let mut out = String::with_capacity(lower.len());
@@ -446,6 +484,8 @@ fn is_lower_letters_then_digits(part: &str) -> bool {
     letters > 0 && letters < bytes.len() && bytes[letters..].iter().all(u8::is_ascii_digit)
 }
 
+/// Comparison key for the upstream-model check: spaces and punctuation are ignored, so
+/// `Gemini 3 Pro` and `gemini-3-pro` compare equal.
 fn normalize_alnum_lower(s: &str) -> String {
     s.chars()
         .filter(|c| c.is_ascii_alphanumeric())

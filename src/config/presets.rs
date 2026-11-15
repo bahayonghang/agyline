@@ -1,8 +1,13 @@
+//! Preset catalog: four built-ins plus custom TOML files under `<home>/presets`. A preset is a
+//! whole `ConfigDoc` applied by `PresetScope`, so the configurator can swap layout without
+//! restyling. `cometix` is the reference-parity default: it must keep matching statusline.ps1.
+
 use std::fs;
 use std::path::Path;
 
 use crate::config::{ConfigDoc, ItemId, ItemSlot, PresetScope, parse_config_overlay};
 
+/// Picker entry: `name` is the value written to the `preset` key, `summary` is display text only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PresetInfo {
     pub name: &'static str,
@@ -32,6 +37,9 @@ pub fn builtin_presets() -> &'static [PresetInfo] {
     &BUILTIN_PRESETS
 }
 
+/// Built-in names first (in catalog order), then custom preset file stems sorted. A custom
+/// file whose stem matches a built-in case-insensitively is shadowed, so a built-in cannot be
+/// overridden by file. A missing directory yields just the built-ins.
 pub fn discover_presets(home_dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = BUILTIN_PRESETS.iter().map(|p| p.name.to_string()).collect();
     let dir = home_dir.join("presets");
@@ -54,6 +62,8 @@ pub fn discover_presets(home_dir: &Path) -> Vec<String> {
     names
 }
 
+/// The reference layout: `statusline.ps1`'s `$line1` (7 items) then `$line2` (5), in that order.
+/// `budget` is the reference's quota-plus-cost pair drawn as one segment, not two.
 pub fn default_cometix_lines() -> Vec<Vec<ItemSlot>> {
     vec![
         vec![
@@ -75,6 +85,9 @@ pub fn default_cometix_lines() -> Vec<Vec<ItemSlot>> {
     ]
 }
 
+/// Whole document for `name`, or `None` when it is unknown. Built-ins ignore `home_dir`; other
+/// names are read from `<home>/presets/<name>.toml`, so `None` also covers a missing home or file.
+/// Each built-in starts from `cometix_base`, keeping reference defaults for keys it does not set.
 pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc> {
     let key = name.trim().to_ascii_lowercase();
     match key.as_str() {
@@ -90,6 +103,7 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
                     ItemSlot::new(ItemId::Git),
                     ItemSlot::new(ItemId::Context),
                 ],
+                // Serialized even when empty, so turning single_line off still yields two rows.
                 Vec::new(),
             ];
             Some(doc)
@@ -99,6 +113,7 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
             doc.preset = "dashboard".to_string();
             doc.palette = "tokyo-night".to_string();
 
+            // Two quota slots pin separate buckets by name; the reference default shows only one.
             let mut q_gem = ItemSlot::new(ItemId::Quota);
             q_gem.bucket = Some("gemini-5h".to_string());
             q_gem.label = Some("gem".to_string());
@@ -113,6 +128,7 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
             cost.show_subagent = Some(true);
 
             let mut mode = ItemSlot::new(ItemId::Mode);
+            // Bakes in what AGY_SHOW_DEFAULT_MODE=1 does for the reference line.
             mode.show_default = Some(true);
 
             let mut subagents = ItemSlot::new(ItemId::Subagents);
@@ -153,6 +169,7 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
             let mut ctx = ItemSlot::new(ItemId::Context);
             ctx.show_remaining = Some(true);
 
+            // Narrowing drops priority 5 first: cache at 1 survives longest, git at 4 goes early.
             let mut cache = ItemSlot::new(ItemId::Cache);
             cache.priority = Some(1);
 
@@ -180,6 +197,9 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
     }
 }
 
+/// Copies only the fields in `scope` and always renames `doc.preset`; returns false for an unknown
+/// preset, leaving `doc` untouched. `All` means layout plus style, not the whole file: `overflow`,
+/// `thresholds`, `git` and `cache_relay` stay user-owned under every scope.
 pub fn apply_preset(
     doc: &mut ConfigDoc,
     preset_name: &str,
@@ -221,6 +241,7 @@ pub fn apply_preset(
 
 fn load_custom_preset_doc(home_dir: &Path, name: &str) -> Option<ConfigDoc> {
     let trimmed = name.trim();
+    // Reject separators, drive letters and ".." so a preset name cannot escape <home>/presets.
     if trimmed.is_empty()
         || trimmed == "."
         || trimmed == ".."
@@ -236,6 +257,7 @@ fn load_custom_preset_doc(home_dir: &Path, name: &str) -> Option<ConfigDoc> {
     let mut doc = ConfigDoc::cometix_base();
     doc.preset = trimmed.to_string();
     let mut ignored_warnings = Vec::new();
+    // allow_preset = false: a custom file may not name another preset, so chaining cannot recurse.
     parse_config_overlay(tbl, &mut doc, &mut ignored_warnings, false);
     Some(doc)
 }

@@ -1,3 +1,8 @@
+//! Runtime and session segments. Mode labels, the shift+tab hint and the subagent/task/queue/
+//! sandbox wording reproduce `ref/agy-patch/statusline.ps1` line 2; an empty item returns `None`
+//! so it disappears with its separator. Vim, title, agent, artifacts, version and plan have no
+//! reference counterpart and are agyline additions.
+
 use crate::collect::FrameData;
 use crate::config::{EffectiveConfig, ItemId, ItemSlot};
 use crate::items::{
@@ -6,6 +11,8 @@ use crate::items::{
 };
 use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
 
+/// Execution-mode pill. A pending tool confirmation outranks every mode, and an unrecognized mode
+/// is suppressed unless `AGY_SHOW_DEFAULT_MODE` or the slot's `show_default` asks for `ask`.
 pub fn eval_mode(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -15,6 +22,7 @@ pub fn eval_mode(
     let force_compact = slot.compact.unwrap_or(false);
     let custom_fg = slot.fg.as_deref().and_then(parse_color_spec);
 
+    // The reference replaces the mode with the approval banner while a confirmation is pending.
     if payload.tool_confirmation_pending {
         let warn_pfx = slot
             .icon
@@ -60,6 +68,7 @@ pub fn eval_mode(
     };
 
     let low_mode = payload.exec_mode.to_ascii_lowercase();
+    // First match wins, in the reference's order: yolo, auto, accept-edits, plan, best-of-n.
     let matched: Option<(&str, &str, ColorToken)> = if !low_mode.is_empty() {
         if low_mode.contains("yolo") {
             Some(("bypass permissions on", "bypass", ColorToken::Auto))
@@ -69,6 +78,7 @@ pub fn eval_mode(
             Some(("accept edits on", "accept-edits", ColorToken::Context))
         } else if low_mode.contains("plan") {
             Some(("plan mode on", "plan", ColorToken::Model))
+        // `bestn` is an agyline alias; both references match only `best-of-n`.
         } else if low_mode.contains("best-of-n") || low_mode.contains("bestn") {
             Some(("best-of-n mode on", "best-of-n", ColorToken::Git))
         } else {
@@ -80,6 +90,7 @@ pub fn eval_mode(
 
     if let Some((full_txt, comp_txt, default_tok)) = matched {
         let mode_col: ColorSpec = custom_fg.unwrap_or(ColorSpec::Token(default_tok));
+        // Full wording and the dim hint are the reference's; the compact pill drops the hint.
         let compact_spans = vec![StyledSpan::new(mode_col, with_chev(comp_txt))];
         let full_spans = if force_compact {
             compact_spans.clone()
@@ -97,11 +108,16 @@ pub fn eval_mode(
         });
     }
 
+    // Env `AGY_SHOW_DEFAULT_MODE` outranks the slot option, so `=1` cannot be disabled per slot.
     let show_default = config
         .force_show_default_mode
         .unwrap_or_else(|| slot.show_default.unwrap_or(config.show_default_mode));
+    // Deliberate divergence: both scripts gate `ask` behind a non-empty mode, but agy 1.5.9 has
+    // no `execution_mode` and omits `cycle_mode` until the first shift+tab, which would make
+    // `AGY_SHOW_DEFAULT_MODE=1` a no-op. Pinned by golden fixture I03_empty_mode_show_default.
     if show_default {
         let ask_col: ColorSpec = custom_fg.unwrap_or(ColorSpec::Token(ColorToken::Muted));
+        // Reference default-mode wording: `ask mode (shift+tab to cycle)`, compact just `ask`.
         let compact_spans = vec![StyledSpan::new(ask_col, with_chev("ask"))];
         let full_spans = if force_compact {
             compact_spans.clone()
@@ -122,6 +138,9 @@ pub fn eval_mode(
     None
 }
 
+/// Mode pill for `AGY_STATUSLINE_LINES=1`, where line 2 collapses into line 1. Layout adds it only
+/// when the dropped row had items and row 1 has no mode slot. `None` for the default/ask modes;
+/// priority 1 makes it the last item that width narrowing drops.
 pub fn eval_single_line_mode_pill(
     frame: &FrameData,
     config: &EffectiveConfig,
@@ -143,11 +162,13 @@ pub fn eval_single_line_mode_pill(
     }
 
     let low_mode = payload.exec_mode.to_ascii_lowercase();
+    // The reference suppresses `default` and `request-review`; `ask` is suppressed here too.
     if low_mode == "default" || low_mode == "request-review" || low_mode == "ask" {
         return None;
     }
 
     let chev = glyphs::mode_chevrons(config.glyphs);
+    // The reference prints the raw lowercased mode here; only `best-of-n` is normalized.
     let label = if low_mode.contains("best-of-n") || low_mode.contains("bestn") {
         "best-of-n"
     } else {
@@ -162,6 +183,8 @@ pub fn eval_single_line_mode_pill(
     })
 }
 
+/// Subagent counts; `None` when the frame lists none. Running uses the reference's three active
+/// statuses, and the compact form drops the word `agents`.
 pub fn eval_subagents(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -175,6 +198,7 @@ pub fn eval_subagents(
         .icon
         .as_deref()
         .unwrap_or_else(|| glyphs::subagents_icon(config.glyphs));
+    // Reference colors running subagents as model cyan and idle ones dim.
     let default_tok = if payload.subagents_running > 0 {
         ColorToken::Model
     } else {
@@ -206,6 +230,8 @@ pub fn eval_subagents(
         let dot = glyphs::dot_sep(config.glyphs);
         let mut active_labels = Vec::new();
         for sub in &payload.subagents {
+            // Same active statuses as the count in `input.rs`. `-in` is case-insensitive in
+            // `statusline.ps1`, while `statusline.py` compares case-sensitively.
             let is_running = sub.status.eq_ignore_ascii_case("running")
                 || sub.status.eq_ignore_ascii_case("working")
                 || sub.status.eq_ignore_ascii_case("thinking");
@@ -224,6 +250,7 @@ pub fn eval_subagents(
             active_labels.push(label);
         }
         if !active_labels.is_empty() {
+            // Detail names are an agyline addition: two at most, then `+N` for the rest.
             let shown: Vec<&str> = active_labels.iter().take(2).map(String::as_str).collect();
             let extra = if active_labels.len() > 2 {
                 format!(", +{}", active_labels.len() - 2)
@@ -245,6 +272,7 @@ pub fn eval_subagents(
     })
 }
 
+/// Active background tasks; `None` at zero. Singular `task` versus `tasks` is reference wording.
 pub fn eval_tasks(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -270,6 +298,7 @@ pub fn eval_tasks(
     })
 }
 
+/// Queued user input; `None` at zero, so an idle queue leaves no segment behind.
 pub fn eval_queue(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -294,6 +323,8 @@ pub fn eval_queue(
     })
 }
 
+/// Sandbox state; `None` unless the sandbox is enabled. `sandbox+net` when network is allowed,
+/// both tags from the reference.
 pub fn eval_sandbox(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -322,6 +353,8 @@ pub fn eval_sandbox(
     })
 }
 
+/// Vim input mode, uppercased; `None` when blank or an off/none/false/disabled value. No reference
+/// counterpart: the colors and the compact single letter are agyline's.
 pub fn eval_vim(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -368,6 +401,8 @@ pub fn eval_vim(
     })
 }
 
+/// Conversation title flattened to one line; `None` when empty. The 32/16-char widths are
+/// agyline's, not the reference's.
 pub fn eval_title(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -394,6 +429,7 @@ pub fn eval_title(
     })
 }
 
+/// Custom agent name; `None` when blank or `default`, which carries no information on the line.
 pub fn eval_agent(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -419,6 +455,7 @@ pub fn eval_agent(
     })
 }
 
+/// Session artifact count; `None` at zero. Compact drops the word when an icon already marks it.
 pub fn eval_artifacts(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -450,6 +487,8 @@ pub fn eval_artifacts(
     })
 }
 
+/// Host CLI version, always re-prefixed with `v`; `None` when blank. No default icon and no
+/// reference counterpart.
 pub fn eval_version(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -478,6 +517,7 @@ pub fn eval_version(
     })
 }
 
+/// Account plan tier; `None` for blank, `none` or `unknown`, which are not worth a segment.
 pub fn eval_plan(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -506,6 +546,8 @@ pub fn eval_plan(
     })
 }
 
+/// Collapses control characters and whitespace runs into single spaces so a title or agent name
+/// cannot break the row or inject ANSI escapes. Leading and trailing spaces are dropped.
 fn sanitize_single_line(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut prev_space = true;

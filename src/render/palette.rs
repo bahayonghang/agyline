@@ -1,3 +1,8 @@
+//! Color tokens, palettes, and depth quantization. `terminal` is the default and reproduces the
+//! reference's ANSI colors for both themes; the seven RGB palettes have a fixed polarity and
+//! fall back to `terminal` on a mismatch. Tokens stay symbolic until emit time, so one resolved
+//! palette serves the ANSI writer and the TUI alike.
+
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
@@ -5,6 +10,8 @@ use std::path::Path;
 
 use crate::config::{ColorDepth, PaletteOverrides, ThemePolarity};
 
+/// Semantic color slots rather than literal colors: items ask for `Ok`/`Warn`/`Crit` and the
+/// palette decides what those mean. `Auto` is the mode pill's accent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ColorToken {
     Separator,
@@ -37,6 +44,7 @@ impl ColorToken {
         Self::Auto,
     ];
 
+    /// Position in every 12-color palette array; `ALL`, this, and the tables must stay in sync.
     pub const fn index(self) -> usize {
         match self {
             Self::Separator => 0,
@@ -54,6 +62,7 @@ impl ColorToken {
         }
     }
 
+    /// TOML key for this token in palette files and `[palette_overrides]` (note `dir_icon`).
     pub const fn as_key(self) -> &'static str {
         match self {
             Self::Separator => "separator",
@@ -71,6 +80,7 @@ impl ColorToken {
         }
     }
 
+    /// Case- and whitespace-insensitive key lookup; `None` for an unknown key.
     pub fn from_key(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "separator" => Some(Self::Separator),
@@ -151,6 +161,8 @@ impl Ansi16Color {
         }
     }
 
+    /// Fixed RGB stand-ins for the 16 SGR codes, used only to quantize wider colors down to 16;
+    /// the host terminal's own palette may render these codes differently.
     pub const fn to_rgb(self) -> (u8, u8, u8) {
         match self {
             Self::Black => (0, 0, 0),
@@ -172,6 +184,8 @@ impl Ansi16Color {
         }
     }
 
+    /// Accepts `-` or `_` separators and `gray`/`grey`/`dark_gray` for BrightBlack; `None` for an
+    /// unknown name.
     pub fn from_name(raw: &str) -> Option<Self> {
         let norm = raw.trim().to_ascii_lowercase().replace('-', "_");
         match norm.as_str() {
@@ -196,6 +210,8 @@ impl Ansi16Color {
     }
 }
 
+/// A color as configured: `Token` is resolved against the palette at emit time, the literal arms
+/// bypass it. Spans keep this symbolic form so one frame serves both ANSI output and the TUI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSpec {
     Token(ColorToken),
@@ -210,6 +226,8 @@ impl From<ColorToken> for ColorSpec {
     }
 }
 
+/// Parses `#rgb`/`#rrggbb`, `256:N`/`ansi256:N`, a bare 0-255 index, a token key, or a 16-color
+/// name. `None` for anything else, so an invalid override is ignored rather than defaulted.
 pub fn parse_color_spec(raw: &str) -> Option<ColorSpec> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -222,6 +240,7 @@ pub fn parse_color_spec(raw: &str) -> Option<ColorSpec> {
             let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
             return Some(ColorSpec::Rgb(r, g, b));
         }
+        // #abc means #aabbcc: multiplying the nibble by 0x11 replicates it.
         if hex.len() == 3 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
             let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
             let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
@@ -251,6 +270,7 @@ pub fn parse_color_spec(raw: &str) -> Option<ColorSpec> {
     None
 }
 
+/// What the terminal can actually show, after the `color_depth` setting and env detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectiveColorDepth {
     TrueColor,
@@ -259,6 +279,9 @@ pub enum EffectiveColorDepth {
     None,
 }
 
+/// Resolves the `color_depth` setting; an explicit value always wins. `auto` probes the injected
+/// env in order (NO_COLOR, TERM=dumb, COLORTERM, TERM) and otherwise assumes truecolor. Env is a
+/// parameter so tests can vary capability without mutating process env.
 pub fn resolve_effective_color_depth(
     setting: ColorDepth,
     env_vars: &BTreeMap<String, String>,
@@ -269,6 +292,7 @@ pub fn resolve_effective_color_depth(
         ColorDepth::Ansi16 => EffectiveColorDepth::Ansi16,
         ColorDepth::None => EffectiveColorDepth::None,
         ColorDepth::Auto => {
+            // NO_COLOR only counts when non-empty, per the no-color.org convention.
             if env_vars.get("NO_COLOR").is_some_and(|v| !v.is_empty()) {
                 return EffectiveColorDepth::None;
             }
@@ -277,6 +301,7 @@ pub fn resolve_effective_color_depth(
             {
                 return EffectiveColorDepth::None;
             }
+            // COLORTERM is an explicit capability claim, so it outranks what TERM implies.
             if let Some(ct) = env_vars.get("COLORTERM").map(|s| s.trim())
                 && !ct.is_empty()
             {
@@ -302,11 +327,13 @@ pub fn resolve_effective_color_depth(
                     return EffectiveColorDepth::Ansi16;
                 }
             }
+            // Nothing advertised a limit, so assume the widest depth rather than downgrade.
             EffectiveColorDepth::TrueColor
         }
     }
 }
 
+/// A concrete color after palette resolution, before it is quantized to the terminal's depth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolvedColor {
     Ansi16(Ansi16Color),
@@ -315,6 +342,8 @@ pub enum ResolvedColor {
 }
 
 impl ResolvedColor {
+    /// Downgrades to what the terminal can show; `None` at depth `None` means "write no SGR".
+    /// Ansi16 passes through at 256 depth so the terminal's own palette stays authoritative.
     pub fn quantize(self, depth: EffectiveColorDepth) -> Option<Self> {
         match depth {
             EffectiveColorDepth::None => None,
@@ -335,6 +364,8 @@ impl ResolvedColor {
         }
     }
 
+    /// Writes one foreground SGR. The leading `0;` resets attributes first, as the reference
+    /// does, so a previous span's color cannot bleed into this one.
     pub fn write_sgr(self, out: &mut String) {
         match self {
             Self::Ansi16(c) => {
@@ -350,6 +381,8 @@ impl ResolvedColor {
     }
 }
 
+/// Whether a palette ships colors for one theme or both. `Dual` is `terminal` and any custom
+/// file that provides both a `[dark]` and a `[light]` table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PalettePolarity {
     Dual,
@@ -363,6 +396,7 @@ pub struct PaletteInfo {
     pub polarity: PalettePolarity,
 }
 
+// Picker order: `terminal` first, then the seven fixed-polarity RGB sets.
 const BUILTIN_PALETTES: [PaletteInfo; 8] = [
     PaletteInfo {
         name: "terminal",
@@ -402,6 +436,9 @@ pub fn builtin_palettes() -> &'static [PaletteInfo] {
     &BUILTIN_PALETTES
 }
 
+/// Built-in names first, then the sorted stems of custom TOML files under `palettes`. A custom
+/// file cannot shadow a built-in (compared case-insensitively); a missing directory yields just
+/// the built-ins.
 pub fn discover_palettes(home_dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = BUILTIN_PALETTES
         .iter()
@@ -427,13 +464,17 @@ pub fn discover_palettes(home_dir: &Path) -> Vec<String> {
     names
 }
 
+/// The 12 token colors ready for quantization, plus whether polarity forced a fallback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResolvedPalette {
     colors: [ResolvedColor; 12],
+    /// True when the requested palette's polarity mismatched the theme and `terminal` was used;
+    /// the configurator surfaces this as a "(polarity fallback)" note.
     pub polarity_fell_back: bool,
 }
 
 impl ResolvedPalette {
+    /// The default palette: the reference's ANSI colors for this theme, with no fallback flag.
     pub const fn terminal(polarity: ThemePolarity) -> Self {
         Self {
             colors: terminal_colors(polarity),
@@ -445,6 +486,7 @@ impl ResolvedPalette {
         self.colors[token.index()]
     }
 
+    /// Tokens resolve through the palette; literal 16/256/RGB specs pass through unchanged.
     pub fn resolve_spec(&self, spec: ColorSpec) -> ResolvedColor {
         match spec {
             ColorSpec::Token(tok) => self.get(tok),
@@ -455,6 +497,8 @@ impl ResolvedPalette {
     }
 }
 
+/// Resolves a palette name for `polarity`, then applies `[palette_overrides]`. An empty or
+/// unknown name quietly uses `terminal`; only a polarity mismatch sets `polarity_fell_back`.
 pub fn resolve_palette(
     palette_name: &str,
     polarity: ThemePolarity,
@@ -465,6 +509,8 @@ pub fn resolve_palette(
     let (mut base, fell_back) = if key.is_empty() || key == "terminal" {
         (terminal_colors(polarity), false)
     } else if let Some((pal_pol, pal_colors)) = builtin_rgb_palette(&key) {
+        // A fixed-polarity RGB set on the wrong theme would be unreadable, so use `terminal`
+        // and flag the fallback instead of forcing the mismatch.
         if polarity_matches(pal_pol, polarity) {
             (pal_colors, false)
         } else {
@@ -486,6 +532,8 @@ pub fn resolve_palette(
         (terminal_colors(polarity), false)
     };
 
+    // Token-valued overrides read the pre-override snapshot, so `model = "crit"` cannot cascade
+    // through another override.
     let snapshot = base;
     for tok in ColorToken::ALL {
         if let Some(raw_ov) = overrides.get(tok)
@@ -506,6 +554,8 @@ pub fn resolve_palette(
     }
 }
 
+// Dual serves both themes; Dark/Light serve only their own, and the caller falls back to
+// `terminal` when they do not match.
 const fn polarity_matches(pal_pol: PalettePolarity, target: ThemePolarity) -> bool {
     match pal_pol {
         PalettePolarity::Dual => true,
@@ -514,6 +564,8 @@ const fn polarity_matches(pal_pol: PalettePolarity, target: ThemePolarity) -> bo
     }
 }
 
+// The reference's exact ANSI mapping (statusline.py c_sep/c_model/c_dir_icon/...): dark uses the
+// bright variants, light the plain ones, and both keep `crit` red. Arrays are in token order.
 const fn terminal_colors(polarity: ThemePolarity) -> [ResolvedColor; 12] {
     match polarity {
         ThemePolarity::Dark => [
@@ -551,6 +603,8 @@ const fn rgb(r: u8, g: u8, b: u8) -> ResolvedColor {
     ResolvedColor::Rgb(r, g, b)
 }
 
+// The seven fixed-polarity sets, each in `ColorToken::index` order and using that theme's
+// published colors. Only `terminal` adapts to the host's light/dark theme.
 fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12])> {
     match key {
         "catppuccin-mocha" => Some((
@@ -676,6 +730,8 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
     }
 }
 
+// Palette names come from config, so reject separators, drive letters and `..` before joining
+// one into a path under the config home.
 fn is_safe_asset_name(name: &str) -> bool {
     let t = name.trim();
     !t.is_empty()
@@ -685,6 +741,9 @@ fn is_safe_asset_name(name: &str) -> bool {
         && !t.contains("..")
 }
 
+/// Loads `palettes/<name>.toml`. Both theme arrays start from `terminal`, so a file may override
+/// only a few tokens. `None` when the name is unsafe or the file is missing/unparsable; the
+/// caller then uses `terminal`.
 fn load_custom_palette(
     home_dir: &Path,
     name: &str,
@@ -709,6 +768,8 @@ fn load_custom_palette(
         PalettePolarity::Dark
     };
 
+    // Polarity is inferred from the tables present unless a valid `polarity` key overrides it;
+    // an unrecognized value falls back to that inference.
     let pol = match tbl
         .get("polarity")
         .and_then(toml::Value::as_str)
@@ -724,6 +785,7 @@ fn load_custom_palette(
     let mut dark = terminal_colors(ThemePolarity::Dark);
     let mut light = terminal_colors(ThemePolarity::Light);
 
+    // Precedence: top-level keys, then `[colors]`, then the theme table, so `[dark]` wins.
     apply_toml_color_map(tbl, &mut dark);
     apply_toml_color_map(tbl, &mut light);
 
@@ -742,6 +804,7 @@ fn load_custom_palette(
 }
 
 fn apply_toml_color_map(tbl: &toml::map::Map<String, toml::Value>, dst: &mut [ResolvedColor; 12]) {
+    // Same snapshot rule as config overrides: a token value reads this map's pre-edit colors.
     let snap = *dst;
     for tok in ColorToken::ALL {
         if let Some(v) = tbl.get(tok.as_key())
@@ -757,6 +820,8 @@ fn apply_toml_color_map(tbl: &toml::map::Map<String, toml::Value>, dst: &mut [Re
     }
 }
 
+/// Strings go through `parse_color_spec`; a bare TOML integer is a 256-color index (0-255).
+/// Other value types are rejected so a typo cannot silently become a color.
 pub fn toml_value_to_color_spec(val: &toml::Value) -> Option<ColorSpec> {
     match val {
         toml::Value::String(s) => parse_color_spec(s),
@@ -769,8 +834,11 @@ pub fn toml_value_to_color_spec(val: &toml::Value) -> Option<ColorSpec> {
     }
 }
 
+// The xterm 6x6x6 cube's channel levels, shared by RGB->256 and 256->RGB.
 const CUBE_LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
 
+// Picks the nearer of the color cube and the grayscale ramp: neutral grays quantize badly to
+// the cube, so the ramp wins whenever its squared distance is smaller.
 fn rgb_to_ansi256(r: u8, g: u8, b: u8) -> u8 {
     let ri = nearest_cube_idx(r);
     let gi = nearest_cube_idx(g);
@@ -779,9 +847,11 @@ fn rgb_to_ansi256(r: u8, g: u8, b: u8) -> u8 {
     let cg = CUBE_LEVELS[gi];
     let cb = CUBE_LEVELS[bi];
     let cube_dist = color_dist_sq(r, g, b, cr, cg, cb);
+    // 16 skips the base ANSI block; the cube is 6x6x6, red-major.
     let cube_code = 16 + (36 * ri as u8) + (6 * gi as u8) + (bi as u8);
 
     let avg = ((u16::from(r) + u16::from(g) + u16::from(b)) / 3) as u8;
+    // The ramp spans 8..238 in steps of 10; clamping keeps the code inside 232..=255.
     let gray_step = if avg < 8 {
         0
     } else if avg > 238 {
@@ -811,6 +881,7 @@ fn nearest_cube_idx(v: u8) -> usize {
     best_i
 }
 
+// Inverse xterm layout (base 16, cube, gray ramp), used to quantize 256 colors down to 16.
 fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
     if idx < 16 {
         Ansi16Color::ALL[idx as usize].to_rgb()
@@ -826,6 +897,7 @@ fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
     }
 }
 
+// Nearest stand-in RGB wins; the strict comparison keeps the earlier candidate on ties.
 fn rgb_to_ansi16(r: u8, g: u8, b: u8) -> Ansi16Color {
     let mut best = Ansi16Color::White;
     let mut best_dist = u32::MAX;

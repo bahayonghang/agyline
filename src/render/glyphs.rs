@@ -1,3 +1,7 @@
+//! Icon and mark vocabulary for each `GlyphSet`. `nerd` reproduces the reference's Nerd Font
+//! codepoints; `unicode` and `ascii` exist because an unpatched font draws PUA icons as tofu.
+//! The sets are not width-equivalent, so layout must measure whichever set is configured.
+
 use crate::config::GlyphSet;
 
 pub fn model_icon(glyphs: GlyphSet) -> &'static str {
@@ -120,6 +124,8 @@ pub fn plan_icon(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+/// Battery glyph for remaining quota percent. The 90/70/45/20 steps and their Nerd codepoints
+/// reproduce `statusline.py`; only the `nerd` set varies by level.
 pub fn quota_icon(glyphs: GlyphSet, quota_pct: i32) -> &'static str {
     match glyphs {
         GlyphSet::Nerd => {
@@ -140,6 +146,7 @@ pub fn quota_icon(glyphs: GlyphSet, quota_pct: i32) -> &'static str {
     }
 }
 
+/// The reference's ` · ` joiner for model/effort and quota/cost; ascii falls back to ` . `.
 pub fn dot_sep(glyphs: GlyphSet) -> &'static str {
     match glyphs {
         GlyphSet::Nerd | GlyphSet::Unicode => " \u{00b7} ",
@@ -147,6 +154,8 @@ pub fn dot_sep(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+// The marks below are ordinary Unicode, not PUA, so nerd and unicode share them; only the icon
+// functions above need a patched font.
 pub fn relay_live_icon(glyphs: GlyphSet) -> &'static str {
     match glyphs {
         GlyphSet::Nerd | GlyphSet::Unicode => "\u{21bb}",
@@ -203,6 +212,7 @@ pub fn mode_chevrons(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+/// Truncation marker for layout's last stage; ascii `...` costs 3 columns where `…` costs 1.
 pub fn ellipsis(glyphs: GlyphSet) -> &'static str {
     match glyphs {
         GlyphSet::Nerd | GlyphSet::Unicode => "\u{2026}",

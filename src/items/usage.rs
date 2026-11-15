@@ -1,3 +1,8 @@
+//! Usage Segments 4-7: context window, prompt-cache TTL and hit rate, latched output speed, quota
+//! buckets and USD cost. The 300s cache window, the 60s warn boundary, the 32K keepalive floor and
+//! the 50/80% context and 20/45% quota thresholds reproduce `ref/agy-patch/statusline.ps1` and
+//! `statusline.py`. Inputs are already in `FrameData`; nothing here reads state or the network.
+
 use crate::collect::{FrameData, RelayStatus};
 use crate::config::{EffectiveConfig, ItemId, ItemSlot};
 use crate::input::QuotaBucketData;
@@ -7,6 +12,8 @@ use crate::items::{
 };
 use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
 
+/// Context percent and token count. Percent is `(input + cache_read) / window`, falling back to
+/// the frame's `used_percentage`; warn/crit come from `[thresholds]`, default 50/80 as reference.
 pub fn eval_context(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -15,6 +22,7 @@ pub fn eval_context(
     let payload = &frame.payload;
     let cur_in = payload.input_tokens;
     let cache_read = payload.cache_read_input_tokens;
+    // Cached prompt tokens count toward the window, as in the reference's `$realIn`.
     let real_in = cur_in.saturating_add(cache_read);
     let win_sz = payload.context_window_size;
 
@@ -25,6 +33,7 @@ pub fn eval_context(
     };
     let used_pct = normalize_zero(raw_pct);
 
+    // Ties-to-even rounding matches `[Math]::Round` and Python `round` in the reference.
     let used_tokens = if real_in > 0 {
         real_in
     } else if used_pct > 0.0 && win_sz > 0.0 {
@@ -34,6 +43,7 @@ pub fn eval_context(
     };
 
     let base_col = slot_fg_color(slot, ColorToken::Context);
+    // Reference: >=80 crit, >=50 warn, else the context magenta.
     let ctx_col: ColorSpec = if used_pct >= config.thresholds.context_crit {
         ColorToken::Crit.into()
     } else if used_pct >= config.thresholds.context_warn {
@@ -42,7 +52,9 @@ pub fn eval_context(
         base_col
     };
 
+    // `show_remaining` is an agyline option; the reference only prints used percent.
     let show_remaining = slot.show_remaining.unwrap_or(false);
+    // Reference: integer percent at >=10 or exactly 0, one decimal below 10 (both branches).
     let pct_fmt = if show_remaining {
         let rem_raw = if real_in > 0 && win_sz > 0.0 {
             (100.0 - used_pct).clamp(0.0, 100.0)
@@ -68,8 +80,10 @@ pub fn eval_context(
         .as_deref()
         .unwrap_or_else(|| glyphs::context_icon(config.glyphs));
     let custom_ic = slot_custom_icon_color(slot);
+    // The icon stays at the base color even when the text turns warn/crit (reference).
     let icon_col = custom_ic.unwrap_or(base_col);
 
+    // Full keeps the reference's ` tokens` suffix; compact drops the word, keeping the count.
     let (full_spans, compact_spans) = if used_tokens > 0 {
         let tok_fmt = format_compact_tokens(used_tokens);
         let build_with_tok = |tok_label: String| -> Vec<StyledSpan> {
@@ -104,6 +118,8 @@ pub fn eval_context(
     })
 }
 
+/// Prompt-cache TTL from the last accepted turn, plus keepalive badge and hit rate. `cold` is
+/// muted when no timestamp exists and warn once the 300s window expires. Never `None`.
 pub fn eval_cache(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -120,12 +136,14 @@ pub fn eval_cache(
     let cur_in = payload.input_tokens.max(0);
     let cache_read = payload.cache_read_input_tokens.max(0);
     let tot_prompt = cur_in.saturating_add(cache_read);
+    // Hit rate truncates instead of rounding, like the reference's integer division.
     let cache_pct = if tot_prompt > 0 {
         (cache_read.saturating_mul(100)) / tot_prompt
     } else {
         0
     };
 
+    // No timestamp at all: the reference prints a dim `cold`, not the warn one.
     let Some(cache_ts) = frame.cache.cache_ts.filter(|&ts| ts > 0) else {
         let spans = if icon.is_empty() {
             vec![StyledSpan::new(ColorToken::Muted, "cold")]
@@ -143,7 +161,10 @@ pub fn eval_cache(
         });
     };
 
+    // 300s implicit-cache window from the last accepted turn; the relay anchor can move it.
     let cache_rem = 300_i64.saturating_sub(frame.now_sec.saturating_sub(cache_ts));
+    // `fail` outranks `live`. The live badge needs a touch or the reference's 32K prompt floor,
+    // the same floor that gates a keepalive touch.
     let keep_badge = match frame.cache.relay_status {
         Some(RelayStatus::Fail) => Some(StyledSpan::new(
             ColorToken::Crit,
@@ -169,6 +190,7 @@ pub fn eval_cache(
     let val_col: ColorSpec = if cache_rem > 0 {
         let mm = cache_rem / 60;
         let ss = cache_rem % 60;
+        // Reference: cache blue above 60s left, warn in the last minute (`cache_warn_secs`).
         let ttl_col: ColorSpec = if (cache_rem as u64) > config.thresholds.cache_warn_secs {
             base_col
         } else {
@@ -188,6 +210,7 @@ pub fn eval_cache(
     }
 
     let mut full_spans = core_spans.clone();
+    // Hit rate takes the TTL color, as in the reference; the compact form drops it (agyline).
     if tot_prompt > 0 {
         full_spans.push(StyledSpan::new(
             ColorToken::Separator,
@@ -204,6 +227,8 @@ pub fn eval_cache(
     })
 }
 
+/// Output rate in tok/s. `None` until the first measurement (`--`); the value then latches in
+/// session state, so the segment stays visible between turns instead of blinking out.
 pub fn eval_speed(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -229,6 +254,8 @@ pub fn eval_speed(
     })
 }
 
+/// Reference segment 7: the most urgent quota bucket and the session cost joined by a middle dot.
+/// `None` when neither is present.
 pub fn eval_budget(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -258,6 +285,7 @@ pub fn eval_budget(
         compact_spans.extend(q_comp);
     }
 
+    // Cost is warn-colored in the reference even when the quota part is green.
     if payload.cost_usd > 0.0 {
         if !full_spans.is_empty() {
             full_spans.push(StyledSpan::new(
@@ -270,6 +298,7 @@ pub fn eval_budget(
             ));
         }
         let cost_base = format_usd(payload.cost_usd);
+        // The subagent share is an agyline addition; the reference prints only the session total.
         let cost_full = if show_subagent && payload.subagent_cost_usd > 0.0 {
             format!(
                 "{cost_base} (sub {})",
@@ -294,6 +323,8 @@ pub fn eval_budget(
     }
 }
 
+/// One bucket per slot, repeatable within a row. `None` when no bucket has a usable value; `label`
+/// defaults to `quota`.
 pub fn eval_quota(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -325,6 +356,7 @@ pub fn eval_quota(
     })
 }
 
+/// Session USD cost; `None` at zero. The warn color and the `$` formatting are the reference's.
 pub fn eval_cost(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -357,12 +389,16 @@ pub fn eval_cost(
     })
 }
 
+/// No filter: the lowest remaining fraction among enabled buckets, as the reference's min. A
+/// filter prefers an exact case-insensitive name, then the most urgent substring match.
+/// `allow_amount_only` admits count-only buckets, which the reference does not read.
 fn select_quota_bucket<'a>(
     buckets: &'a [QuotaBucketData],
     filter: Option<&str>,
     allow_amount_only: bool,
 ) -> Option<&'a QuotaBucketData> {
     let filter_trimmed = filter.map(str::trim).filter(|s| !s.is_empty());
+    // Disabled buckets and fractions outside 0..=1 are skipped, as in the reference.
     let has_usable_value = |b: &QuotaBucketData| -> bool {
         !b.disabled
             && (b
@@ -391,6 +427,7 @@ fn select_quota_bucket<'a>(
         .min_by(compare_bucket_urgency)
 }
 
+/// A fraction bucket outranks a count-only one, so a credits count cannot hide a percentage.
 fn compare_bucket_urgency(a: &&QuotaBucketData, b: &&QuotaBucketData) -> std::cmp::Ordering {
     match (a.remaining_fraction, b.remaining_fraction) {
         (Some(af), Some(bf)) => af.total_cmp(&bf),
@@ -400,6 +437,8 @@ fn compare_bucket_urgency(a: &&QuotaBucketData, b: &&QuotaBucketData) -> std::cm
     }
 }
 
+/// Quota body in both widths. Below `quota_crit` (default 20) crit, below `quota_warn` (45) warn,
+/// else ok; the battery icon bands are the reference's 90/70/45/20. `None` when nothing is usable.
 fn render_quota_spans(
     slot: &ItemSlot,
     bucket: &QuotaBucketData,
@@ -420,6 +459,7 @@ fn render_quota_spans(
         .remaining_fraction
         .filter(|v| (0.0..=1.0).contains(v))
     {
+        // Ties-to-even percent, matching `[Math]::Round` in the reference.
         let quota_pct = (rf * 100.0).round_ties_even() as i32;
         let icon = slot
             .icon
@@ -446,6 +486,7 @@ fn render_quota_spans(
         };
         let full_body = format!("{quota_pct}%{lbl_part}{amt_note}{reset_suffix}");
 
+        // Compact drops the default `quota` label when an icon already carries it.
         let compact_lbl = if label.is_empty() || (label == "quota" && !icon.is_empty()) {
             String::new()
         } else {
@@ -459,6 +500,7 @@ fn render_quota_spans(
         ));
     }
 
+    // Count-only fallback: crit at zero, since there is no percentage to color.
     if show_amount && let Some(amt) = bucket.remaining_amount {
         let icon = slot
             .icon
@@ -491,6 +533,8 @@ fn render_quota_spans(
     None
 }
 
+/// Reset countdown suffix such as ` (2d3h)`; `None` when no positive remainder. Prefers
+/// `reset_in_seconds`, then an RFC3339 `reset_time`. No reference counterpart.
 fn format_reset_suffix(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
     let rem_secs = if let Some(s) = bucket.reset_in_seconds.filter(|&v| v > 0) {
         s
@@ -529,8 +573,11 @@ fn format_reset_suffix(bucket: &QuotaBucketData, now_sec: i64) -> Option<String>
     Some(format!(" ({formatted})"))
 }
 
+/// Fixed-shape RFC3339 parser, so the printing path needs no date library. Accepts `Z`, `+HH:MM`,
+/// `+HHMM` or no offset, and leap second 60; `None` on any malformed field.
 fn parse_rfc3339_epoch_secs(raw: &str) -> Option<i64> {
     let s = raw.trim();
+    // Length and ASCII checks first, so the byte slicing below cannot panic.
     if s.len() < 19 || !s.is_ascii() {
         return None;
     }
@@ -578,6 +625,8 @@ fn parse_rfc3339_epoch_secs(raw: &str) -> Option<i64> {
     Some(utc_secs - offset_secs)
 }
 
+/// Hinnant's `days_from_civil`: a March-based year puts the leap day last, 146097 is the days in
+/// a 400-year era, and 719468 shifts the result to the Unix epoch.
 fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
     let y = i64::from(year) - if month <= 2 { 1 } else { 0 };
     let era = if y >= 0 { y } else { y - 399 } / 400;
@@ -588,6 +637,7 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// Reference cost format: two decimals at $1 and above, three below.
 fn format_usd(usd: f64) -> String {
     if usd >= 1.0 {
         format!("${usd:.2}")
@@ -596,6 +646,8 @@ fn format_usd(usd: f64) -> String {
     }
 }
 
+/// Subagent share trims one trailing zero below $1 (`$0.10`, not `$0.100`). Agyline-only: the
+/// reference's agents segment shows counts, not cost.
 fn format_subagent_usd(usd: f64) -> String {
     if usd >= 1.0 {
         format!("${usd:.2}")
@@ -605,6 +657,8 @@ fn format_subagent_usd(usd: f64) -> String {
     }
 }
 
+/// Reference token format: `1.2M` at a million, rounded `210k` at a thousand, raw below.
+/// The k branch rounds ties to even, matching `[Math]::Round` and Python `round`.
 pub fn format_compact_tokens(tokens: i64) -> String {
     if tokens >= 1_000_000 {
         format!("{:.1}M", (tokens as f64) / 1_000_000.0)
@@ -618,6 +672,7 @@ pub fn format_compact_tokens(tokens: i64) -> String {
     }
 }
 
+/// Maps -0.0 to 0.0: rounding a small negative remainder to zero would otherwise print `-0%`.
 fn normalize_zero(v: f64) -> f64 {
     if v == 0.0 { 0.0 } else { v }
 }

@@ -1,6 +1,12 @@
+//! Serializes a `RenderedFrame` into the bytes `agy` prints. This is the only frame-to-escape
+//! path: the configurator reads the same frame as styled spans instead of parsing these.
+//! Both emitters skip rows with nothing to show and badge the first row they actually emit.
+
 use crate::config::EffectiveConfig;
 use crate::render::{ColorToken, EffectiveColorDepth, RenderedFrame};
 
+/// Colored output quantized to `config.effective_color_depth`. Depth `None` delegates to
+/// `emit_plain`, so a NO_COLOR terminal receives no escapes at all. Every row ends reset + `\n`.
 pub fn emit_ansi(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
     match config.effective_color_depth {
         EffectiveColorDepth::None => emit_plain(frame, config),
@@ -19,6 +25,7 @@ pub fn emit_ansi(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
                     continue;
                 }
                 let indent = line.indent_override.as_deref().unwrap_or(&config.indent);
+                // Reference row framing: indent, reset, items, reset (statusline.py `r_esc`).
                 out.push_str(indent);
                 out.push_str("\x1b[0m");
                 for (idx, item) in line.items.iter().enumerate() {
@@ -35,6 +42,7 @@ pub fn emit_ansi(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
                         out.push_str(&span.text);
                     }
                 }
+                // The badge lands on the first *emitted* row: earlier rows may have been skipped.
                 if let Some(ref badge) = line.broken_suffix {
                     if !badge.is_empty() {
                         if let Some(c) = crit_col {
@@ -56,6 +64,8 @@ pub fn emit_ansi(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
     }
 }
 
+/// Escape-free text of the same frame: `preview --plain`, depth `None` via `emit_ansi`, and the
+/// plain copy of a live render. Row skipping and badge placement match `emit_ansi` exactly.
 pub fn emit_plain(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
     if frame.lines.is_empty() {
         return String::new();

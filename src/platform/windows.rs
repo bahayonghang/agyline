@@ -1,3 +1,8 @@
+//! Win32 half of the platform seam. kernel32 entry points and `#[repr(C)]` layouts are declared
+//! by hand, so field order must match the SDK; no windows-sys dependency. The printing path
+//! spawns no shell and waits on no `git`: workers get no console, no inherited handles and no
+//! window, and the parent returns without waiting.
+
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
@@ -9,9 +14,12 @@ use std::ptr;
 use std::thread;
 use std::time::Duration;
 
+// Worker creation flags: no inherited console, a separate process group so terminal Ctrl+C does
+// not kill the refresh, and no console window flashing while the line is being printed.
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+// Win32 pseudo-handles are negative i32 constants; the API takes them as u32.
 const STD_OUTPUT_HANDLE: u32 = (-11_i32) as u32;
 const INVALID_HANDLE_VALUE: isize = -1;
 const ERROR_ACCESS_DENIED: i32 = 5;
@@ -107,6 +115,8 @@ pub fn host_platform() -> super::PlatformKind {
     super::PlatformKind::Windows
 }
 
+/// 8.3 alias of `path`, which install prefers when the exe path contains spaces or cmd.exe
+/// metacharacters. `None` if the API fails or the alias would not fit the queried buffer.
 pub fn short_path_name(path: &Path) -> Option<PathBuf> {
     let wide: Vec<u16> = path
         .as_os_str()
@@ -121,12 +131,15 @@ pub fn short_path_name(path: &Path) -> Option<PathBuf> {
     let mut buf = vec![0u16; needed as usize];
     // SAFETY: `buf` has length `needed` UTF-16 code units as requested by the first call.
     let written = unsafe { GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), needed) };
+    // A full buffer means truncation with no NUL terminator; reject rather than over-read.
     if written == 0 || (written as usize) >= buf.len() {
         return None;
     }
     Some(PathBuf::from(OsString::from_wide(&buf[..written as usize])))
 }
 
+/// USERPROFILE first, then HOME for shells that export it; blank values are skipped. `None` lets
+/// the caller fall back to `.`.
 pub fn user_home_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     for key in ["USERPROFILE", "HOME"] {
         if let Some(val) = env_lookup(key) {
@@ -139,6 +152,8 @@ pub fn user_home_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> Option<Path
     None
 }
 
+/// Where `cache_relay.py` writes `agy_cache_<session>.dat`: TMPDIR/TEMP/TMP in the same order as
+/// Python's `tempfile.gettempdir()`, then the OS temp dir.
 pub fn relay_temp_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> PathBuf {
     for key in ["TMPDIR", "TEMP", "TMP"] {
         if let Some(val) = env_lookup(key) {
@@ -151,9 +166,13 @@ pub fn relay_temp_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> PathBuf {
     std::env::temp_dir()
 }
 
+/// Starts this exe as a background worker (`__refresh-git`, `__touch`) and returns without
+/// waiting. The child inherits no handles and gets no console, so it cannot write into the
+/// line's stdout pipe, and it keeps running after the render exits.
 pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     let exe = std::env::current_exe()?;
     let mut app_wide: Vec<u16> = exe.as_os_str().encode_wide().collect();
+    // CreateProcessW wants NUL-terminated UTF-16; an interior NUL would truncate the exe path.
     if app_wide.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -162,6 +181,8 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     }
     app_wide.push(0);
 
+    // lpApplicationName is not split into argv, so the child's CRT still needs argv[0] repeated
+    // at the front of lpCommandLine.
     let mut cmdline = Vec::new();
     append_windows_arg(&mut cmdline, exe.as_os_str())?;
     for arg in args {
@@ -170,6 +191,7 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     }
     cmdline.push(0);
 
+    // dw_flags stays 0 (no STARTF_USESTDHANDLES), so the null std handles are ignored.
     let si = StartupInfoW {
         cb: core::mem::size_of::<StartupInfoW>() as u32,
         lp_reserved: ptr::null_mut(),
@@ -217,6 +239,7 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     if ok == 0 {
         return Err(io::Error::last_os_error());
     }
+    // Close both handles so repeated spawns cannot leak them; the worker itself keeps running.
     unsafe {
         let _ = CloseHandle(pi.h_thread);
         let _ = CloseHandle(pi.h_process);
@@ -224,6 +247,8 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     Ok(())
 }
 
+/// Appends one argument to `lpCommandLine`, quoted per the MSVCRT rules the child parses.
+/// Interior NULs are rejected because they would truncate the command line.
 fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
     let wide: Vec<u16> = arg.encode_wide().collect();
     if wide.contains(&0) {
@@ -233,6 +258,8 @@ fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
         ));
     }
 
+    // An empty argument must be quoted or it disappears; spaces, tabs, quotes and control
+    // characters also force quoting.
     let quote = wide.is_empty()
         || wide.iter().any(|&c| {
             c == u16::from(b' ') || c == u16::from(b'\t') || c == u16::from(b'"') || c < 0x20
@@ -248,6 +275,7 @@ fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
         if ch == u16::from(b'\\') {
             backslashes += 1;
         } else if ch == u16::from(b'"') {
+            // 2n+1 backslashes: n pairs stay literal and the last one escapes the quote.
             for _ in 0..(backslashes * 2 + 1) {
                 cmdline.push(u16::from(b'\\'));
             }
@@ -261,6 +289,7 @@ fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
             backslashes = 0;
         }
     }
+    // Double trailing backslashes so they do not escape the closing quote.
     for _ in 0..(backslashes * 2) {
         cmdline.push(u16::from(b'\\'));
     }
@@ -268,14 +297,21 @@ fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
     Ok(())
 }
 
+/// Create only, no DACL rewrite: Windows has no cheap mode bit, and the default state location
+/// under the user profile already inherits a private ACL (Unix chmods 0700 instead).
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)
 }
 
+/// Needs SeCreateSymbolicLinkPrivilege (admin) or Developer Mode; an unprivileged host fails with
+/// OS error 1314 (ERROR_PRIVILEGE_NOT_HELD); callers must handle that, not assume success.
 pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
     std::os::windows::fs::symlink_file(original, link)
 }
 
+/// Atomic tmp -> dst swap. Windows cannot rename over a file another process holds open, so
+/// ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION (antivirus, indexer, a concurrent reader) get
+/// four attempts 3 ms apart. `tmp` is removed on failure so no `.tmp.*` litter survives.
 pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
     let mut last_err = None;
     for attempt in 0..4 {
@@ -299,10 +335,14 @@ pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
     Err(last_err.unwrap_or_else(|| io::Error::other("rename failed")))
 }
 
+/// Hides the console window of the git child the refresh worker still reads from. Unlike
+/// `spawn_detached_self` this child stays attached, so its piped stdout keeps working.
 pub fn configure_background_command(cmd: &mut Command) {
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
+/// Visible console window width, not the screen-buffer width. `None` when stdout is a pipe (the
+/// normal `agy` render) or has no console; `COLUMNS` is the fallback.
 pub fn stdout_terminal_columns() -> Option<usize> {
     // SAFETY: `GetStdHandle` and `GetConsoleScreenBufferInfo` take standard Win32 console arguments
     // and write into a stack-initialized `ConsoleScreenBufferInfo`.
@@ -321,6 +361,8 @@ pub fn stdout_terminal_columns() -> Option<usize> {
                 },
                 dw_maximum_window_size: Coord { x: 0, y: 0 },
             };
+            // sr_window is inclusive on both edges (+1); dw_size is the buffer and can be wider
+            // than the visible window. Guard the subtraction so a bogus rect cannot wrap.
             if GetConsoleScreenBufferInfo(h, &mut info) != 0
                 && info.sr_window.right >= info.sr_window.left
             {

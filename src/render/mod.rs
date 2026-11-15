@@ -1,3 +1,7 @@
+//! Styled intermediate representation of one render. The live line, `agyline preview`, and the
+//! configurator all consume `RenderedFrame`: colors stay symbolic and text stays unescaped, so
+//! the TUI builds ratatui spans from it without re-parsing ANSI. Only `ansi` serializes a frame.
+
 use crate::config::ItemId;
 
 pub use ansi::{emit_ansi, emit_plain};
@@ -13,6 +17,8 @@ pub mod glyphs;
 pub mod layout;
 pub mod palette;
 
+/// One run of text in one color. `color` is still symbolic here: the palette and the terminal's
+/// color depth are applied at emit time, never while building spans.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledSpan {
     pub color: ColorSpec,
@@ -28,6 +34,8 @@ impl StyledSpan {
     }
 }
 
+/// One catalog item's spans after narrowing. `id` is the item, not a slot index: dropped and
+/// compacted slots change the row, but the surviving items keep their identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledItem {
     pub id: ItemId,
@@ -40,6 +48,9 @@ impl StyledItem {
     }
 }
 
+/// One output row. `indent_override` is set only by ultra-tiny narrowing. `broken_suffix` holds
+/// this row's `! config` badge when one is reserved: `None` defers to the frame-level badge, and
+/// `Some("")` suppresses it because it could not fit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledLine {
     pub items: Vec<StyledItem>,
@@ -57,14 +68,20 @@ impl StyledLine {
     }
 }
 
+/// The whole render, shared by the live line, preview, and configurator. `slot_outcomes` keeps
+/// the original config grid (rows x slots, empty and dropped ones included), so it is indexed by
+/// config coordinates rather than by `lines`/`items`, which skip empty rows and dropped items.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderedFrame {
     pub lines: Vec<StyledLine>,
+    /// Config TOML failed to parse and defaults are in use; the emitters append `! config`.
     pub config_broken: bool,
+    /// Per config row and slot, including slots that rendered nothing or were dropped.
     pub slot_outcomes: Vec<Vec<SlotOutcome>>,
 }
 
 impl RenderedFrame {
+    /// Outcome of one config slot, or `None` when `row`/`slot` is outside the configured grid.
     pub fn slot_outcome(&self, row: usize, slot: usize) -> Option<SlotOutcome> {
         self.slot_outcomes
             .get(row)

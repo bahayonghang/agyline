@@ -1,3 +1,8 @@
+//! Display-width measurement and priority-based narrowing. `overflow = "fit"` shrinks a row to
+//! the terminal budget in three stages (compact, drop, grapheme-safe truncate); `"none"` prints
+//! it whole. Widths are terminal columns, never bytes or chars, and every decision is recorded
+//! per config slot in `SlotOutcome` for the configurator and the narrowing tests.
+
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -6,6 +11,9 @@ use crate::config::{EffectiveConfig, ItemId, OverflowMode};
 use crate::items::{EvaluatedItem, runtime::eval_single_line_mode_pill};
 use crate::render::{ColorToken, StyledItem, StyledLine, StyledSpan, glyphs};
 
+/// What narrowing did to one configured slot: `Empty` when the item produced nothing this frame,
+/// otherwise `Full` or the stage that changed it (`Compact`, `Dropped`, `Truncated`). Indexed by
+/// config row/slot, so the configurator can badge a slot that no longer appears in the line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotOutcome {
     Empty,
@@ -17,6 +25,7 @@ pub enum SlotOutcome {
 
 #[derive(Debug, Clone)]
 struct ActiveSlot {
+    // None for the synthesized single-line mode pill, which has no config slot to report on.
     orig_slot_idx: Option<usize>,
     eval: EvaluatedItem,
     use_compact: bool,
@@ -33,30 +42,39 @@ impl ActiveSlot {
     }
 }
 
+/// Terminal columns occupied by `text`, summed per grapheme cluster so a ZWJ emoji or a flag
+/// pair counts once. Bytes or `char` counts would mis-size CJK, combining marks, and PUA icons.
 pub fn str_display_width(text: &str) -> usize {
     text.graphemes(true).map(grapheme_display_width).sum()
 }
 
+/// Columns for one grapheme cluster: Nerd PUA icons are pinned to 1, emoji-presentation
+/// sequences and regional-indicator flags to 2, everything else to the unicode-width tables.
 pub fn grapheme_display_width(g: &str) -> usize {
     if g.is_empty() {
         return 0;
     }
     let mut chars = g.chars();
+    // A patched font draws a Nerd icon in one column; pin that instead of trusting PUA tables.
     if let Some(first) = chars.next()
         && chars.next().is_none()
         && is_nerd_pua_codepoint(first)
     {
         return 1;
     }
+    // ZWJ/VS16 mean emoji presentation, which terminals draw 2 columns wide; a cluster that
+    // measures 0 (a lone joiner or combining mark) must stay 0.
     if (g.contains('\u{200d}') || g.contains('\u{fe0f}')) && UnicodeWidthStr::width(g) > 0 {
         return 2;
     }
+    // A flag is two regional indicators in one cluster and still occupies 2 columns.
     if g.chars().all(is_regional_indicator) {
         return 2;
     }
     UnicodeWidthStr::width(g)
 }
 
+// BMP PUA plus the supplementary PUA planes where Nerd Font keeps its material-design icons.
 fn is_nerd_pua_codepoint(ch: char) -> bool {
     ('\u{e000}'..='\u{f8ff}').contains(&ch)
         || ('\u{f0000}'..='\u{ffffd}').contains(&ch)
@@ -67,6 +85,9 @@ fn is_regional_indicator(ch: char) -> bool {
     ('\u{1f1e6}'..='\u{1f1ff}').contains(&ch)
 }
 
+/// Lays out evaluated rows into styled lines plus the per-slot outcome grid. `max_cols` is the
+/// terminal budget; `None` (or `overflow = "none"`) prints full width. The grid keeps the input
+/// shape, including empty slots and rows that `single_line` drops.
 pub fn layout_evaluated_rows(
     evaluated_rows: Vec<Vec<Option<EvaluatedItem>>>,
     frame: &FrameData,
@@ -116,6 +137,8 @@ pub fn layout_evaluated_rows(
             })
             .collect();
 
+        // Collapsing rows would hide runtime state, so synthesize a mode pill when row 0 has no
+        // Mode slot of its own. It has no config slot, so it records no outcome.
         if secondary_has_items
             && !row0_active.iter().any(|s| s.eval.id == ItemId::Mode)
             && let Some(pill) = eval_single_line_mode_pill(frame, config)
@@ -150,6 +173,7 @@ pub fn layout_evaluated_rows(
         }
     }
 
+    // A zero budget counts as no budget: narrowing to 0 columns would print nothing useful.
     let width_budget = match config.overflow {
         OverflowMode::None => None,
         OverflowMode::Fit => max_cols.filter(|&w| w > 0),
@@ -171,6 +195,8 @@ pub fn layout_evaluated_rows(
     (out_lines, slot_outcomes)
 }
 
+// The ladder: compact what can shrink, drop whole items, then truncate the last survivor, and
+// stop at the first stage that fits. `order` visits P5 first and P1 (model, context, mode) last.
 fn narrow_single_row(
     active: &mut [ActiveSlot],
     row_outcomes: &mut [SlotOutcome],
@@ -189,6 +215,7 @@ fn narrow_single_row(
 
     let indent_w = str_display_width(&config.indent);
     let sep_w = str_display_width(&config.separator);
+    // 9 is the display width of the " ! config" badge reserved on the first emitted row.
     let broken_w = if append_broken { 9 } else { 0 };
 
     if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
@@ -211,6 +238,7 @@ fn narrow_single_row(
 
     // Stage 1: Downgrade eligible items from Full -> Compact.
     for &idx in &order {
+        // Skip items whose compact form is identical: downgrading them would save no columns.
         if active[idx].eval.has_compact_diff() {
             active[idx].use_compact = true;
             if let Some(orig) = active[idx].orig_slot_idx {
@@ -229,6 +257,7 @@ fn narrow_single_row(
     // Stage 2: Drop whole items right-to-left (5 -> 1), keeping at least 1 surviving item.
     let mut surviving_count = active.len();
     for &idx in &order {
+        // Keep one survivor for Stage 3 to truncate; dropping it would leave an empty row.
         if surviving_count <= 1 {
             break;
         }
@@ -274,6 +303,7 @@ fn narrow_single_row(
     }
 
     // Ultra-tiny width fallback: preserve grapheme boundaries across indent, item, and broken badge.
+    // The indent is all-or-nothing: drop it whole so the item keeps the remaining columns.
     let effective_indent = if indent_w < budget {
         config.indent.clone()
     } else {
@@ -282,6 +312,7 @@ fn narrow_single_row(
     let eff_indent_w = str_display_width(&effective_indent);
     let rem_after_indent = budget.saturating_sub(eff_indent_w);
 
+    // No columns left: suppress indent and badge rather than overflow the budget.
     if rem_after_indent == 0 {
         return StyledLine {
             items: vec![StyledItem::new(surviving.eval.id, Vec::new())],
@@ -327,6 +358,7 @@ fn compute_row_width(
     broken_w: usize,
 ) -> usize {
     let mut total = indent_w + broken_w;
+    // Separators only between survivors, so a dropped item leaves no phantom separator behind.
     for (seen, slot) in active.iter().filter(|s| !s.dropped).enumerate() {
         if seen > 0 {
             total += sep_w;
@@ -349,6 +381,7 @@ fn clip_spans_with_ellipsis(
     if budget == 0 {
         return Vec::new();
     }
+    // Even the ellipsis does not fit (ascii "..." is 3 columns): fill with plain dots instead.
     if budget < ell_w {
         let dots = ".".repeat(budget);
         return vec![StyledSpan::new(ColorToken::Muted, dots)];
