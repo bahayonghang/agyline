@@ -47,6 +47,7 @@ struct ProcessInformation {
     dw_thread_id: u32,
 }
 
+#[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreateProcessW(
         lp_application_name: *const u16,
@@ -62,10 +63,7 @@ unsafe extern "system" {
     ) -> i32;
 
     fn CloseHandle(h_object: Handle) -> i32;
-}
 
-#[link(name = "kernel32")]
-unsafe extern "system" {
     fn GetShortPathNameW(
         lpsz_long_path: *const u16,
         lpsz_short_path: *mut u16,
@@ -84,7 +82,7 @@ pub fn short_path_name(path: &Path) -> Option<PathBuf> {
         .chain(std::iter::once(0))
         .collect();
     // SAFETY: `wide` is NUL-terminated UTF-16; null output buffer with length 0 queries required size.
-    let needed = unsafe { GetShortPathNameW(wide.as_ptr(), std::ptr::null_mut(), 0) };
+    let needed = unsafe { GetShortPathNameW(wide.as_ptr(), ptr::null_mut(), 0) };
     if needed == 0 {
         return None;
     }
@@ -124,15 +122,21 @@ pub fn relay_temp_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> PathBuf {
 pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     let exe = std::env::current_exe()?;
     let mut app_wide: Vec<u16> = exe.as_os_str().encode_wide().collect();
+    if app_wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "executable path contains interior NUL",
+        ));
+    }
     app_wide.push(0);
 
-    let mut cmd_wide = Vec::new();
-    append_quoted_wide_arg(&mut cmd_wide, exe.as_os_str());
+    let mut cmdline = Vec::new();
+    append_windows_arg(&mut cmdline, exe.as_os_str())?;
     for arg in args {
-        cmd_wide.push(u16::from(b' '));
-        append_quoted_wide_arg(&mut cmd_wide, arg);
+        cmdline.push(u16::from(b' '));
+        append_windows_arg(&mut cmdline, arg)?;
     }
-    cmd_wide.push(0);
+    cmdline.push(0);
 
     let si = StartupInfoW {
         cb: core::mem::size_of::<StartupInfoW>() as u32,
@@ -161,12 +165,13 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
         dw_thread_id: 0,
     };
 
-    // Pass `bInheritHandles = 0` (`FALSE`) so zero pipe/file handles from `agy` or `cmd.exe`
-    // can ever leak into the detached background worker and delay parent stdout/stderr EOF.
+    // SAFETY: `app_wide` and `cmdline` are NUL-terminated UTF-16 buffers valid for this call,
+    // `b_inherit_handles` is 0 (`FALSE`) so zero parent pipe handles leak to the detached worker,
+    // and returned process/thread handles are closed immediately on success.
     let ok = unsafe {
         CreateProcessW(
             app_wide.as_ptr(),
-            cmd_wide.as_mut_ptr(),
+            cmdline.as_mut_ptr(),
             ptr::null(),
             ptr::null(),
             0,
@@ -187,27 +192,48 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
     Ok(())
 }
 
-fn append_quoted_wide_arg(cmd: &mut Vec<u16>, arg: &OsStr) {
-    const QUOTE: u16 = b'"' as u16;
-    const BACKSLASH: u16 = b'\\' as u16;
+fn append_windows_arg(cmdline: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
+    let wide: Vec<u16> = arg.encode_wide().collect();
+    if wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "argument contains interior NUL",
+        ));
+    }
 
-    cmd.push(QUOTE);
-    let mut backslashes = 0_usize;
-    for unit in arg.encode_wide() {
-        if unit == BACKSLASH {
+    let quote = wide.is_empty()
+        || wide.iter().any(|&c| {
+            c == u16::from(b' ') || c == u16::from(b'\t') || c == u16::from(b'"') || c < 0x20
+        });
+    if !quote {
+        cmdline.extend_from_slice(&wide);
+        return Ok(());
+    }
+
+    cmdline.push(u16::from(b'"'));
+    let mut backslashes: usize = 0;
+    for &ch in &wide {
+        if ch == u16::from(b'\\') {
             backslashes += 1;
-        } else if unit == QUOTE {
-            cmd.extend(core::iter::repeat_n(BACKSLASH, backslashes * 2 + 1));
-            cmd.push(QUOTE);
+        } else if ch == u16::from(b'"') {
+            for _ in 0..(backslashes * 2 + 1) {
+                cmdline.push(u16::from(b'\\'));
+            }
+            cmdline.push(u16::from(b'"'));
             backslashes = 0;
         } else {
-            cmd.extend(core::iter::repeat_n(BACKSLASH, backslashes));
-            cmd.push(unit);
+            for _ in 0..backslashes {
+                cmdline.push(u16::from(b'\\'));
+            }
+            cmdline.push(ch);
             backslashes = 0;
         }
     }
-    cmd.extend(core::iter::repeat_n(BACKSLASH, backslashes * 2));
-    cmd.push(QUOTE);
+    for _ in 0..(backslashes * 2) {
+        cmdline.push(u16::from(b'\\'));
+    }
+    cmdline.push(u16::from(b'"'));
+    Ok(())
 }
 
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
@@ -218,25 +244,27 @@ pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
     std::os::windows::fs::symlink_file(original, link)
 }
 
-pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<()> {
-    let mut attempt = 0_u32;
-    loop {
-        match fs::rename(tmp_path, dst_path) {
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    let mut last_err = None;
+    for attempt in 0..4 {
+        match fs::rename(tmp, dst) {
             Ok(()) => return Ok(()),
             Err(err) => {
-                let retryable = err.kind() == io::ErrorKind::PermissionDenied
+                let is_transient = err.kind() == io::ErrorKind::PermissionDenied
                     || matches!(
                         err.raw_os_error(),
                         Some(ERROR_ACCESS_DENIED) | Some(ERROR_SHARING_VIOLATION)
                     );
-                if !retryable || attempt >= 3 {
-                    return Err(err);
+                last_err = Some(err);
+                if !is_transient || attempt == 3 {
+                    break;
                 }
-                attempt += 1;
                 thread::sleep(Duration::from_millis(3));
             }
         }
     }
+    let _ = fs::remove_file(tmp);
+    Err(last_err.unwrap_or_else(|| io::Error::other("rename failed")))
 }
 
 pub fn configure_background_command(cmd: &mut Command) {

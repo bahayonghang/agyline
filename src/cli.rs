@@ -71,7 +71,7 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
             crate::collect::run_hidden_refresh_git(&tail);
             0
         }
-        CliAction::HiddenTouch(_tail) => 0,
+        CliAction::HiddenTouch(tail) => crate::collect::touch::run_touch_worker(&tail),
         CliAction::Help(topic) => {
             let text = help_text(topic);
             let _ = streams.stdout.write_all(text.as_bytes());

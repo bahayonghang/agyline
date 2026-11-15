@@ -49,8 +49,14 @@ pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(original, link)
 }
 
-pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<()> {
-    fs::rename(tmp_path, dst_path)
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    match fs::rename(tmp, dst) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(tmp);
+            Err(err)
+        }
+    }
 }
 
 pub fn configure_background_command(_cmd: &mut Command) {}

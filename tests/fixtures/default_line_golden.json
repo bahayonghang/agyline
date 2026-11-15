@@ -565,6 +565,239 @@
       "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
     },
     {
+      "id": "F01_stateful_tps_from_telemetry",
+      "description": "Read persisted tok/s and 3:00 warm Prompt Cache countdown from version 1 session state",
+      "env": {},
+      "payload": {
+        "session_id": "550e8400-e29b-41d4-a716-446655440001",
+        "context_window": {
+          "total_output_tokens": 500
+        }
+      },
+      "session_state": {
+        "file_name": "550e8400-e29b-41d4-a716-446655440001.json",
+        "json": {
+          "version": 1,
+          "session_id": "550e8400-e29b-41d4-a716-446655440001",
+          "prev_state": "idle",
+          "start_time_ms": 1699999998000,
+          "base_out": 500,
+          "last_tps": "64.5",
+          "resp_model": "",
+          "prev_model_key": "Model",
+          "cache_ts": 1699999880,
+          "db_fingerprint": null
+        }
+      },
+      "expected_plain": "   Model |  0% |  3:00 |  64.5 tok/s\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;37m | \u001b[0;92m 64.5 tok/s\u001b[0m\n"
+    },
+    {
+      "id": "F02_temp_vs_tmp_precedence",
+      "description": "DIV-17: Persisted session state retains 48.2 tok/s and 3:59 TTL when total_output_tokens resets to 0",
+      "env": {},
+      "payload": {
+        "session_id": "550e8400-e29b-41d4-a716-446655440002"
+      },
+      "session_state": {
+        "file_name": "550e8400-e29b-41d4-a716-446655440002.json",
+        "json": {
+          "version": 1,
+          "session_id": "550e8400-e29b-41d4-a716-446655440002",
+          "prev_state": "idle",
+          "start_time_ms": 1699999995000,
+          "base_out": 100,
+          "last_tps": "48.2",
+          "resp_model": "",
+          "prev_model_key": "Model",
+          "cache_ts": 1699999939,
+          "db_fingerprint": null
+        }
+      },
+      "expected_plain": "   Model |  0% |  3:59 |  48.2 tok/s\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:59\u001b[0;37m | \u001b[0;92m 48.2 tok/s\u001b[0m\n"
+    },
+    {
+      "id": "F03_db_response_model_match",
+      "description": "SQLite gen_metadata chat_model resolves Auto to Opus 4.6 and mtime anchors 4:00 cache TTL",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f03",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999940,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "claude-opus-4-6"
+          }
+        ]
+      },
+      "expected_plain": "   Opus 4.6 |  0% |  4:00\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 4:00\u001b[0m\n"
+    },
+    {
+      "id": "F04_db_gt256kb_steps_tail",
+      "description": "DIV-18: SQLite query resolves Opus 4.6 even when steps table appends >256 KB after gen_metadata",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f04",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999600,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "claude-opus-4-6"
+          }
+        ],
+        "steps_pad_bytes": 300000
+      },
+      "expected_plain": "   Opus 4.6 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n"
+    },
+    {
+      "id": "F05_db_wal_stale_frame",
+      "description": "DIV-18: SQLite WAL RESTART checkpoint reads newest idx DESC Gemini 2.5 Pro instead of stale WAL tail",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f05",
+        "model": {
+          "display_name": "Auto"
+        },
+        "agent_state": "working",
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "wal_stale_restart"
+      },
+      "expected_plain": "   Gemini 2.5 Pro |  0% |  5:00\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 2.5 Pro\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n"
+    },
+    {
+      "id": "F06_db_steps_table_pollution",
+      "description": "DIV-18: Protobuf bytes inside steps table never pollute gen_metadata Response Model lookup",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f06",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999600,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "claude-opus-4-6"
+          }
+        ],
+        "steps_fake_model": "gemini-2.5-pro"
+      },
+      "expected_plain": "   Opus 4.6 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n"
+    },
+    {
+      "id": "F07_db_trailing_nonmodel_field19",
+      "description": "DIV-18: Top-level non-model field 19 (end_turn) after chat_model does not overwrite Opus 4.6",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f07",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999600,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "claude-opus-4-6",
+            "trailing_top_field19": "end_turn"
+          }
+        ]
+      },
+      "expected_plain": "   Opus 4.6 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n"
+    },
+    {
+      "id": "F08_db_gt600b_trailing_in_blob",
+      "description": "DIV-18: Full gen_metadata.data protobuf decode resolves Opus 4.6 even with >600 B trailing fields",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f08",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999600,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "claude-opus-4-6",
+            "trailing_pad_bytes": 700
+          }
+        ]
+      },
+      "expected_plain": "   Opus 4.6 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n"
+    },
+    {
+      "id": "F09_db_short_and_nonwhitelist_models",
+      "description": "DIV-18: Exact protobuf field 1.19 decode accepts short/non-whitelist model names such as o3",
+      "env": {},
+      "payload": {
+        "session_id": "probe_f09",
+        "model": {
+          "display_name": "Auto"
+        },
+        "context_window": {
+          "total_output_tokens": 20
+        }
+      },
+      "db_setup": {
+        "kind": "standard",
+        "mtime_sec": 1699999600,
+        "gen_rows": [
+          {
+            "idx": 1,
+            "chat_model": "o3"
+          }
+        ]
+      },
+      "expected_plain": "   o3 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m o3\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;33m cold\u001b[0m\n"
+    },
+    {
       "id": "G01_line2_all_active_runtime",
       "description": "Line 2 all runtime segments active: yolo mode, 2/3 running subagents, singular task, queued, sandbox+net",
       "env": {},
@@ -761,14 +994,40 @@
       "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m▸▸ ask mode (shift+tab to cycle)\u001b[0m\n"
     },
     {
+      "id": "H08_env_cache_relay_live_badges",
+      "description": "AGY_CACHE_RELAY reads agy_cache_<safe_sid>.dat and renders live keepalive badge ↻2 and hit rate",
+      "env": {
+        "AGY_CACHE_RELAY": "http://127.0.0.1:9"
+      },
+      "payload": {
+        "session_id": "probe_h08",
+        "context_window": {
+          "current_usage": {
+            "input_tokens": 4000,
+            "cache_read_input_tokens": 36000
+          }
+        }
+      },
+      "relay_file": {
+        "file_name": "agy_cache_probe_h08.dat",
+        "content": "1699999880 2 live\n"
+      },
+      "expected_plain": "   Model |  0% · 40k tokens |  3:00 ↻2 · 90% hit\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 0%\u001b[0;37m · \u001b[0;95m40k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 3:00\u001b[0;92m ↻2\u001b[0;37m · \u001b[0;34m90% hit\u001b[0m\n"
+    },
+    {
       "id": "H09_env_cache_relay_uppercase_OFF",
-      "description": "DIV-21: AGY_CACHE_RELAY=\"OFF\" disables relay case-insensitively",
+      "description": "DIV-21: AGY_CACHE_RELAY=\"OFF\" disables relay case-insensitively and ignores agy_cache_<sid>.dat",
       "env": {
         "AGY_CACHE_RELAY": "OFF"
       },
       "payload": {
         "session_id": "probe_h09",
         "agent_state": "working"
+      },
+      "relay_file": {
+        "file_name": "agy_cache_probe_h09.dat",
+        "content": "1699999880 1 fail\n"
       },
       "expected_plain": "   Model |  0% |  5:00\n",
       "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n"
