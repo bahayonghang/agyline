@@ -59,11 +59,14 @@ Windows 上是 `statusline.ps1`，另一份是 Python 的 `statusline.py`。外�
 
 | 部分 | 位置 |
 | --- | --- |
-| 二进制 | `agyline` |
+| 二进制 | `agyline`（通过 GitHub Releases 预编译包与 `cargo install` 分发；不做 npm 包装） |
+| 支持平台 | Windows（`msvc`）、macOS 与 Linux（纯静态 `musl`），`x86_64` 与 `arm64` 对齐官方 `agy` 发行目标；需同侧运行 |
 | 配置目录 | `~/.gemini/agyline/`，或 `AGYLINE_HOME` 指向的目录 |
-| 配置文件 | `config.toml`：预设、配色，以及每一行放哪些段。字段名和加载器在同一次改动里定下来 |
-| 在终端里直接运行 | 配置器，预览和真实状态栏用同一套渲染 |
-| 接到 `agy` | `~/.gemini/antigravity-cli/settings.json` 的 `statusLine.command`。写入前先把改动显示出来 |
+| 配置文件 | `config.toml`：顶层 `version`、`preset`、`palette`、`theme`（`auto`/`dark`/`light`）、`glyphs`、`color_depth`、`separator`、`indent`、`single_line`、`overflow`（`fit`/`none`）；子表 `[thresholds]`（`context_warn`、`context_crit`、`quota_warn`、`quota_crit`、`cache_warn_secs`）、`[git]`（`cache_ms`）、`[cache_relay]`（`url`）、`[palette_overrides]`；以及 `[[line]]`（`items` 数组，支持 `"<id>"` 或 `{ id, icon, fg, icon_color, priority, ... }`）。显式 `AGY_*` 环境变量优先于 `config.toml`；`COLORFGBG` 在 `theme = "auto"` 时生效 |
+| 运行期状态 | 配置目录下的 `state/`（每会话状态、本地 Git 缓存与后台锁；`cache_relay.py` 状态文件仍从系统临时目录只读） |
+| 在终端里直接运行 | 配置器（`agyline` 或 `agyline -c`），预览和真实状态栏用同一套渲染 |
+| 公开子命令 | `agyline preview`（基于内置场景或 payload 文件的无状态命令行预览）、`agyline install`、`agyline uninstall` |
+| 接到 `agy` | `~/.gemini/antigravity-cli/settings.json` 的 `statusLine.command`（经 `agyline install` / `agyline uninstall` 或配置器修改）。写入前先把改动显示出来，卸载时恢复原有 `statusLine` |
 | 默认外观 | 上面的参考行 |
 
 官方的 `agy` 和 `agy.exe` 保持安装时的样子。`agy` 把 `agyline` 当作 `statusLine` 命令来跑。

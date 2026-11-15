@@ -59,11 +59,14 @@ No code creates the pieces below. Build against these names.
 
 | Piece | Place |
 | --- | --- |
-| Binary | `agyline` |
+| Binary | `agyline` (GitHub Releases archives and `cargo install`; no npm wrapper) |
+| Platforms | Windows (`msvc`), macOS, and Linux (static `musl`), `x86_64` and `arm64` matching official `agy` targets; same-OS invocation only |
 | Config home | `~/.gemini/agyline/`, or the directory in `AGYLINE_HOME` |
-| Config file | `config.toml`: preset, palette, and which segments sit on which line. Field names are fixed in the same change as the loader. |
-| Terminal run | a configurator, whose preview uses the same renderer as the live line |
-| `agy` hook | `statusLine.command` in `~/.gemini/antigravity-cli/settings.json`. Show the edit before writing it. |
+| Config file | `config.toml`: top-level `version`, `preset`, `palette`, `theme` (`auto`/`dark`/`light`), `glyphs`, `color_depth`, `separator`, `indent`, `single_line`, `overflow` (`fit`/`none`); tables `[thresholds]` (`context_warn`, `context_crit`, `quota_warn`, `quota_crit`, `cache_warn_secs`), `[git]` (`cache_ms`), `[cache_relay]` (`url`), `[palette_overrides]`; and `[[line]]` (`items` of `"<id>"` or `{ id, icon, fg, icon_color, priority, ... }`). Explicit `AGY_*` variables override `config.toml`; `COLORFGBG` applies when `theme = "auto"`. |
+| Runtime state | `state/` under the config home (session state, local Git cache, and background locks; `cache_relay.py` state stays read-only in the OS temp directory) |
+| Terminal run | a configurator (`agyline` or `agyline -c`), whose preview uses the same renderer as the live line |
+| Subcommands | `agyline preview` (stateless CLI preview for built-in scenarios or a payload file), `agyline install`, `agyline uninstall` |
+| `agy` hook | `statusLine.command` in `~/.gemini/antigravity-cli/settings.json`, updated via `agyline install` / `agyline uninstall` or the configurator. Show the edit before writing it, and restore the prior `statusLine` on uninstall. |
 | Default look | the reference line above |
 
 The official `agy` and `agy.exe` binaries stay as installed. `agy` runs `agyline` as the `statusLine` command.
