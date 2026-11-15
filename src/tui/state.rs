@@ -1,3 +1,8 @@
+//! Configurator state machine: the editable `ConfigDoc`, focus, bounded undo history and all disk
+//! side effects. The preview uses the live renderer (`render_lines_with_width`) and is only then
+//! converted to ratatui, so nothing here formats or re-parses ANSI. Saves are guarded by a disk
+//! stamp, and an unparseable `config.toml` is never overwritten unconfirmed.
+
 use std::collections::{BTreeMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -25,19 +30,29 @@ use crate::state::maybe_sweep_stale_state;
 use crate::statusline::render_lines_with_width;
 use crate::tui::convert::rendered_frame_to_ratatui_lines;
 
+// History holds whole-doc snapshots, so it is capped and the oldest is evicted when full. Undo and
+// redo only move snapshots between the two stacks, so this bounds their combined memory too.
 pub const MAX_UNDO_STEPS: usize = 100;
 
+// Keeps temp names unique when two writes share a nanosecond timestamp or the clock is coarse.
 static TUI_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// Everything the configurator reads from the host, captured once at startup. Injected rather than
+/// read live so tests can use a sandbox home and a fixed clock without touching process env.
 #[derive(Debug, Clone)]
 pub struct ConfiguratorEnv {
+    // AGYLINE_HOME, else ~/.gemini/agyline; config, presets and state all hang off this directory.
     pub home_dir: PathBuf,
     pub env_vars: BTreeMap<String, String>,
+    // Kept as a Result: a host with no usable settings path must still open the workbench.
     pub install_env: Result<InstallEnv, InstallError>,
+    // Frozen at construction so the stale-state sweep is reproducible in tests.
     pub now_ms: u64,
 }
 
 impl ConfiguratorEnv {
+    /// The only constructor that reads the real process: one env snapshot feeds home resolution,
+    /// the AGY_* badges and the Effective preview so they cannot disagree.
     pub fn from_process() -> Self {
         let env_vars: BTreeMap<String, String> = std::env::vars().collect();
         let lookup = |k: &str| env_vars.get(k).cloned();
@@ -56,6 +71,7 @@ impl ConfiguratorEnv {
         }
     }
 
+    /// Test constructor: explicit home, env and clock, no process reads, install always available.
     pub fn for_sandbox(
         home_dir: PathBuf,
         env_vars: BTreeMap<String, String>,
@@ -71,12 +87,16 @@ impl ConfiguratorEnv {
     }
 }
 
+/// Exit path, not a write log: `Saved` is returned only by a save-and-quit, while `Cancelled`
+/// covers quit and discard and may still follow an earlier Ctrl+S write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfiguratorExit {
     Saved,
     Cancelled,
 }
 
+/// The four workbench tabs in display order. `ALL`, `index()` and the tab bar must agree, since
+/// mouse hit testing converts a column into a tab through that order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TuiTab {
     Layout,
@@ -93,6 +113,7 @@ impl TuiTab {
         Self::AgyHook,
     ];
 
+    /// Position in `ALL`, used to map a tab-bar column back to a tab.
     pub const fn index(self) -> usize {
         match self {
             Self::Layout => 0,
@@ -111,6 +132,7 @@ impl TuiTab {
         }
     }
 
+    /// Short labels below 100 columns so all four tabs still fit the minimum 80-column terminal.
     pub(crate) const fn title_for_width(self, width: u16) -> &'static str {
         if width >= 100 {
             return self.title();
@@ -142,6 +164,7 @@ impl TuiTab {
     }
 }
 
+/// Layout-tab focus; each pane keeps its own cursor, so switching back restores the position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutPane {
     ActiveRows,
@@ -207,6 +230,8 @@ impl RuntimePane {
     }
 }
 
+/// Editable keys of the selected slot. The visible set depends on the item id, so `inspector_idx`
+/// is per-item and must be re-clamped whenever the selection changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectorField {
     Priority,
@@ -225,6 +250,7 @@ pub enum InspectorField {
 }
 
 impl InspectorField {
+    /// TOML key name, matching what the drawer serializes for the same slot field.
     pub const fn key_label(self) -> &'static str {
         match self {
             Self::Priority => "priority",
@@ -244,6 +270,7 @@ impl InspectorField {
     }
 }
 
+// Per-item field sets: the four base keys plus only the options that item actually reads.
 const INSP_BASE: [InspectorField; 4] = [
     InspectorField::Priority,
     InspectorField::Icon,
@@ -300,6 +327,8 @@ const INSP_COST: [InspectorField; 5] = [
     InspectorField::ShowSubagent,
 ];
 
+/// Field list for `id`. Lists differ in length, so `inspector_idx` must be clamped after any
+/// change of selection or item kind.
 pub fn inspector_fields_for_item(id: ItemId) -> &'static [InspectorField] {
     match id {
         ItemId::Context => &INSP_CONTEXT,
@@ -346,6 +375,8 @@ impl StyleField {
     ];
 }
 
+/// Threshold keys in navigation order. The context pair and the quota pair are cross-validated on
+/// commit and run in opposite directions: context is used percent, quota is remaining percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdField {
     SingleLine,
@@ -379,6 +410,8 @@ impl RuntimeSubField {
     pub const ALL: [Self; 2] = [Self::GitCacheMs, Self::CacheRelayUrl];
 }
 
+/// Inline-edit destination. Inspector targets carry row/slot so the commit addresses the slot the
+/// edit was opened on, not whatever happens to be selected when it closes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextEditTarget {
     InspectorIcon { row: usize, slot: usize },
@@ -424,10 +457,14 @@ impl TextEditTarget {
 pub struct TextEditState {
     pub target: TextEditTarget,
     pub buffer: String,
+    // A char index, not a byte offset: icons and labels may be non-ASCII.
     pub cursor_chars: usize,
+    // Set when a commit is rejected; the edit stays open so the value can be corrected.
     pub error: Option<String>,
 }
 
+/// The three settings.json operations. Each opens a diff preview first; nothing is written until
+/// the user confirms it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookAction {
     Connect,
@@ -455,6 +492,8 @@ impl HookAction {
     }
 }
 
+/// A planned settings.json change, or the reason it could not be planned. `Error` is display-only
+/// and is never applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HookModalPlan {
     Install(InstallPlan),
@@ -469,19 +508,25 @@ pub struct HookModalState {
     pub scroll: u16,
 }
 
+/// One modal at a time; while open it intercepts every key before panes and global hotkeys.
+/// `selected` is the focused button, and `exit_after_save` carries a quit intent through a save
+/// confirmation so the user still leaves once the write succeeds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActiveModal {
     DirtyExit {
         selected: usize,
     },
+    // The on-disk TOML did not parse; replacing it needs an explicit back-up-or-not choice.
     BrokenTomlConfirm {
         exit_after_save: bool,
         selected: usize,
     },
+    // Disk changed since load: writing now would silently drop another editor's work.
     ExternalConflict {
         exit_after_save: bool,
         selected: usize,
     },
+    // Scope is picked before applying so a Style preset cannot clobber a customized layout.
     PresetApply {
         preset_idx: usize,
         scope: PresetScope,
@@ -490,6 +535,8 @@ pub enum ActiveModal {
     HelpOverlay,
 }
 
+/// Fingerprint of config.toml used to detect external edits before a save. Length and content hash
+/// back up `modified`, which coarse filesystem timestamps can leave unchanged after a rewrite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DiskStamp {
     pub exists: bool,
@@ -499,6 +546,8 @@ pub(crate) struct DiskStamp {
 }
 
 impl DiskStamp {
+    /// Reads the file now. A missing or unreadable file yields `exists: false` and a zero stamp,
+    /// which compares unequal to any stamp taken from a file that was present.
     pub fn probe(path: &Path) -> Self {
         match fs::read(path) {
             Ok(bytes) => {
@@ -520,6 +569,7 @@ impl DiskStamp {
     }
 }
 
+// Cheap non-cryptographic hash: this only has to notice a changed file, not resist collisions.
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in bytes {
@@ -529,6 +579,8 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
     hash
 }
 
+/// Writes `file_name` under `home_dir` via a private temp file and an atomic rename, so a crash
+/// or a concurrent reader never sees a half-written config. Returns the destination path.
 fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
     platform::ensure_private_dir(home_dir)?;
     let dst_path = home_dir.join(file_name);
@@ -537,6 +589,7 @@ fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::R
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
+    // `create_new` below fails on an existing name, so pid + nanos + counter must stay unique.
     let tmp_path = home_dir.join(format!(
         ".{file_name}.{}.{nanos}.{seq}.tmp",
         std::process::id()
@@ -548,11 +601,13 @@ fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::R
             .create_new(true)
             .open(&tmp_path)?;
         f.write_all(bytes)?;
+        // Flush and sync before the rename so the destination never exposes a partial file.
         f.flush()?;
         let _ = f.sync_all();
         Ok(())
     })();
 
+    // One cleanup path for any write failure: a partial temp file must not be left behind.
     if let Err(err) = write_res {
         let _ = fs::remove_file(&tmp_path);
         return Err(err);
@@ -565,6 +620,8 @@ fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::R
     Ok(dst_path)
 }
 
+/// Catalog grouped in category order (Workspace, Usage, Runtime, Session). The Layout pane draws
+/// and the mouse hit-tests by index into this list, so the order is part of the UI contract.
 pub fn ordered_catalog_entries() -> Vec<&'static ItemCatalogEntry> {
     let mut out = Vec::with_capacity(20);
     for cat in [
@@ -580,6 +637,7 @@ pub fn ordered_catalog_entries() -> Vec<&'static ItemCatalogEntry> {
     out
 }
 
+/// Cycles All -> Layout -> Style; the scope decides which half of the doc a preset may replace.
 pub fn preset_scope_next(scope: PresetScope) -> PresetScope {
     match scope {
         PresetScope::All => PresetScope::Layout,
@@ -604,16 +662,25 @@ pub fn preset_scope_label(scope: PresetScope) -> &'static str {
     }
 }
 
+/// The whole workbench state. `doc` is the draft and `baseline_doc` the last loaded or saved
+/// version; dirty is their difference, so undoing back to the baseline clears the dirty flag.
 pub struct ConfiguratorApp {
     pub(crate) env: ConfiguratorEnv,
     pub(crate) doc: ConfigDoc,
+    // Last loaded or saved doc; `is_dirty` compares against it, not against the defaults.
     pub(crate) baseline_doc: ConfigDoc,
+    // Oldest-first whole-doc snapshots, capped at MAX_UNDO_STEPS.
     pub(crate) undo_stack: VecDeque<ConfigDoc>,
+    // Cleared by any new edit so redo cannot replay an abandoned branch.
     pub(crate) redo_stack: Vec<ConfigDoc>,
+    // False when no config.toml was found: an unmodified draft must not create one.
     pub(crate) file_existed: bool,
+    // The file failed to parse, so the draft is defaults and saving needs confirmation.
     pub(crate) loaded_from_broken_toml: bool,
     pub(crate) syntax_error: Option<ConfigSyntaxError>,
+    // Taken at load and re-probed before each save to catch an external editor.
     pub(crate) loaded_disk_stamp: DiskStamp,
+    // AGY_* values that currently win over the doc; shown as badges, never written to disk.
     pub(crate) env_overrides: Vec<ActiveEnvOverride>,
     pub(crate) hook_inspection: Option<HookInspection>,
     pub(crate) available_presets: Vec<String>,
@@ -642,17 +709,25 @@ pub struct ConfiguratorApp {
     pub(crate) text_edit: Option<TextEditState>,
 
     pub(crate) scenario_idx: usize,
+    // None means unbounded preview width; `last_finite_width` is what toggling back restores.
     pub(crate) sim_width: Option<usize>,
     pub(crate) last_finite_width: usize,
+    // Once the user sets a width, switching scenarios must not override it.
     pub(crate) width_pinned_by_user: bool,
+    // Applies AGY_* overrides to the preview only; toggling it never mutates the doc.
     pub(crate) effective_preview_mode: bool,
     pub(crate) toml_drawer_open: bool,
+    // Placeholder until the first Resize event; `run_configurator` seeds the real size.
     pub(crate) term_size: (u16, u16),
+    // Cleared by the next edit so a stale "Saved" toast cannot outlive the change it described.
     pub(crate) status_toast: Option<String>,
 }
 
 impl ConfiguratorApp {
+    /// Scroll offsets that keep the selected Active Rows / Catalog entry visible. The view and the
+    /// mouse hit test must use the same visible height or clicks land on the wrong item.
     pub(crate) fn layout_list_offsets(&self, visible_rows: usize) -> (usize, usize) {
+        // Each row contributes a header line plus its slots; an empty row still shows one line.
         let active_index = self
             .doc
             .lines
@@ -665,6 +740,7 @@ impl ConfiguratorApp {
         let entries = ordered_catalog_entries();
         let mut catalog_index = self.catalog_idx;
         let mut last_category = None;
+        // Category headers are list items too, so the catalog index shifts once per new category.
         for entry in entries.iter().take(self.catalog_idx + 1) {
             if last_category != Some(entry.category) {
                 catalog_index += 1;
@@ -677,7 +753,10 @@ impl ConfiguratorApp {
         )
     }
 
+    /// Loads the draft and captures every host fact once. A broken config.toml loads as defaults
+    /// with `loaded_from_broken_toml` set, so quitting cannot overwrite the unreadable file.
     pub fn new(env: ConfiguratorEnv) -> Self {
+        // Reuse the render path's rate-limited sweep rather than adding a second cleanup policy.
         maybe_sweep_stale_state(&env.home_dir, env.now_ms);
 
         let loaded = load_config_doc(&env.home_dir);
@@ -688,6 +767,7 @@ impl ConfiguratorApp {
         let available_palettes = discover_palettes(&env.home_dir);
 
         let scenarios = builtin_scenarios();
+        // Start at the first scenario's width so the preview matches the scenario on screen.
         let default_width = scenarios.first().map(|s| s.default_width).unwrap_or(112);
 
         Self {
@@ -736,6 +816,7 @@ impl ConfiguratorApp {
         &self.doc
     }
 
+    /// True when the draft differs from the last loaded or saved doc; undoing back clears it.
     pub fn is_dirty(&self) -> bool {
         self.doc != self.baseline_doc
     }
@@ -748,6 +829,7 @@ impl ConfiguratorApp {
         self.active_tab
     }
 
+    /// Wraps the index so a stale selection cannot panic if the scenario list ever shrinks.
     pub fn active_scenario(&self) -> &'static Scenario {
         let list = builtin_scenarios();
         &list[self.scenario_idx % list.len()]
@@ -777,6 +859,8 @@ impl ConfiguratorApp {
         self.syntax_error.as_ref()
     }
 
+    /// The same `EffectiveConfig` the live render uses. `effective_preview_mode` decides only
+    /// whether AGY_* overrides apply; it never changes the doc.
     pub fn effective_config_for_preview(&self) -> EffectiveConfig {
         let mut cfg = EffectiveConfig::from_doc(
             &self.doc,
@@ -785,14 +869,18 @@ impl ConfiguratorApp {
             self.effective_preview_mode,
         );
         if self.loaded_from_broken_toml {
+            // Keep the broken-config badge even though the draft itself is valid defaults.
             cfg.config_broken = true;
         }
         cfg
     }
 
+    /// The single preview path: live renderer first, ratatui conversion afterwards. Returns the
+    /// frame together with the config it was rendered with so the view labels the same values.
     pub fn preview_rendered_frame(&self) -> (RenderedFrame, EffectiveConfig) {
         let cfg = self.effective_config_for_preview();
         let sc = self.active_scenario();
+        // File-Only also drops AGY_CACHE_RELAY's effect on the frame, not just on the config.
         let frame = if self.effective_preview_mode {
             sc.frame_for_env(&self.env.env_vars)
         } else {
@@ -802,25 +890,32 @@ impl ConfiguratorApp {
         (rendered, cfg)
     }
 
+    /// Preview as ratatui lines; the text must equal `emit_plain` of the same frame.
     pub fn preview_lines(&self) -> Vec<Line<'static>> {
         let (rendered, cfg) = self.preview_rendered_frame();
         rendered_frame_to_ratatui_lines(&rendered, &cfg)
     }
 
+    /// The only way to change the draft: snapshot, apply, then record one undo step if anything
+    /// actually changed. A no-op edit must not push a snapshot or clear redo.
     pub(crate) fn mutate_doc<F: FnOnce(&mut ConfigDoc)>(&mut self, f: F) {
         let snapshot = self.doc.clone();
         f(&mut self.doc);
         if self.doc != snapshot {
+            // Full history: evict oldest-first so the newest steps survive the cap.
             if self.undo_stack.len() >= MAX_UNDO_STEPS {
                 let _ = self.undo_stack.pop_front();
             }
             self.undo_stack.push_back(snapshot);
+            // A new edit forks history; redo must not replay the abandoned branch.
             self.redo_stack.clear();
             self.status_toast = None;
         }
+        // Outside the change check: indices are only valid against the post-edit doc.
         self.clamp_layout_selection();
     }
 
+    /// Restores the previous snapshot and pushes the current doc onto redo; no-op when empty.
     pub(crate) fn undo(&mut self) {
         if let Some(prev) = self.undo_stack.pop_back() {
             let current = std::mem::replace(&mut self.doc, prev);
@@ -830,6 +925,7 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Replays the next snapshot. Re-applies the history cap because it pushes back onto undo.
     pub(crate) fn redo(&mut self) {
         if let Some(next) = self.redo_stack.pop() {
             let current = std::mem::replace(&mut self.doc, next);
@@ -842,12 +938,15 @@ impl ConfiguratorApp {
         }
     }
 
+    /// The layout editor always addresses two rows, so a shorter doc is padded before indexing.
     pub(crate) fn ensure_two_rows(doc: &mut ConfigDoc) {
         while doc.lines.len() < 2 {
             doc.lines.push(Vec::new());
         }
     }
 
+    /// Keeps row, slot and inspector indices inside the doc. Must run after every mutation,
+    /// undo, redo and reload, or the next draw and mouse hit test index out of bounds.
     pub(crate) fn clamp_layout_selection(&mut self) {
         self.selected_row = self.selected_row.min(1);
         let row_len = self.doc.lines.get(self.selected_row).map_or(0, Vec::len);
@@ -857,6 +956,7 @@ impl ConfiguratorApp {
         } else {
             self.selected_slot = self.selected_slot.min(row_len - 1);
             let slot_id = self.doc.lines[self.selected_row][self.selected_slot].id;
+            // Field count is per item id, so switching slots can shrink the inspector list.
             let fields = inspector_fields_for_item(slot_id);
             self.inspector_idx = self.inspector_idx.min(fields.len().saturating_sub(1));
         }
@@ -869,6 +969,7 @@ impl ConfiguratorApp {
             .and_then(|r| r.get(self.selected_slot))
     }
 
+    /// Opens an inline edit with the cursor at the end; the buffer stays a draft until commit.
     pub(crate) fn start_text_edit(&mut self, target: TextEditTarget, initial: String) {
         let cursor_chars = initial.chars().count();
         self.text_edit = Some(TextEditState {
@@ -879,10 +980,13 @@ impl ConfiguratorApp {
         });
     }
 
+    /// Validates and applies the inline buffer. On rejection the edit stays open with `error` set;
+    /// on success it closes. Empty clears optional keys, but separator/indent/icon keep raw text.
     pub(crate) fn commit_text_edit(&mut self) {
         let Some(edit) = self.text_edit.clone() else {
             return;
         };
+        // Icon, separator and indent keep raw whitespace; every other field commits trimmed.
         let raw = edit.buffer;
         let trimmed = raw.trim().to_string();
 
@@ -890,12 +994,14 @@ impl ConfiguratorApp {
             TextEditTarget::InspectorIcon { row, slot } => {
                 self.mutate_doc(|doc| {
                     if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        // An empty icon is a deliberate blank, so it is stored, not cleared.
                         s.icon = Some(raw);
                     }
                 });
                 self.text_edit = None;
             }
             TextEditTarget::InspectorFg { row, slot } => {
+                // Reject before mutating: an unparseable color must not reach the doc or history.
                 if !trimmed.is_empty() && parse_color_spec(&trimmed).is_none() {
                     if let Some(ref mut st) = self.text_edit {
                         st.error =
@@ -967,6 +1073,7 @@ impl ConfiguratorApp {
                 }
                 self.mutate_doc(|doc| {
                     if trimmed.is_empty() {
+                        // Clearing falls back to the palette rather than storing an empty color.
                         doc.palette_overrides.remove(tok);
                     } else {
                         doc.palette_overrides.set(tok, trimmed);
@@ -975,6 +1082,7 @@ impl ConfiguratorApp {
                 self.text_edit = None;
             }
             TextEditTarget::ThresholdContextWarn => {
+                // warn must stay strictly below crit, so the reachable maximum is crit - 1.
                 let max_allowed = (self.doc.thresholds.context_crit - 1.0).max(0.0);
                 let Ok(v) = trimmed.parse::<f64>() else {
                     if let Some(ref mut st) = self.text_edit {
@@ -1018,6 +1126,7 @@ impl ConfiguratorApp {
                 self.text_edit = None;
             }
             TextEditTarget::ThresholdQuotaWarn => {
+                // Inverted vs context: quota is remaining percent, so warn must exceed crit.
                 let Ok(v) = trimmed.parse::<i32>() else {
                     if let Some(ref mut st) = self.text_edit {
                         st.error = Some("Expected integer 1..100 (> quota_crit)".to_string());
@@ -1085,12 +1194,14 @@ impl ConfiguratorApp {
                     return;
                 };
                 self.mutate_doc(|doc| {
+                    // Git-cache freshness TTL in ms; 0 asks for a refresh on every render.
                     doc.git_cache_ms = v;
                 });
                 self.text_edit = None;
             }
             TextEditTarget::RuntimeCacheRelayUrl => {
                 self.mutate_doc(|doc| {
+                    // Stored as typed; the loopback warning is advisory, not a validation gate.
                     doc.cache_relay_url = trimmed;
                 });
                 self.text_edit = None;
@@ -1098,9 +1209,12 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Applies a preset as one undo step. An unknown name changes nothing and takes no snapshot.
     pub(crate) fn apply_preset_with_undo(&mut self, name: &str, scope: PresetScope) {
+        // `mutate_doc` borrows all of self, so the home path must be cloned out first.
         let home = self.env.home_dir.clone();
         self.mutate_doc(|doc| {
+            // False means the preset could not be resolved; the doc is left untouched.
             let _ = apply_preset(doc, name, scope, Some(&home));
         });
     }
@@ -1156,6 +1270,7 @@ impl ConfiguratorApp {
         });
     }
 
+    /// Cycles the depth *setting*, not the resolved depth: Auto still follows the environment.
     pub(crate) fn cycle_color_depth(&mut self, forward: bool) {
         let next = match (self.doc.color_depth, forward) {
             (ColorDepth::Auto, true) => ColorDepth::TrueColor,
@@ -1184,6 +1299,7 @@ impl ConfiguratorApp {
         });
     }
 
+    /// Switches the preview scenario; the width follows it unless the user pinned a width.
     pub(crate) fn cycle_scenario(&mut self, forward: bool) {
         let list = builtin_scenarios();
         if list.is_empty() {
@@ -1203,14 +1319,17 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Steps the simulated width by `delta` columns, clamped to 40..=200, and pins it.
     pub(crate) fn adjust_sim_width(&mut self, delta: isize) {
         self.width_pinned_by_user = true;
+        // Stepping out of unbounded mode resumes from the last finite width.
         let base = self.sim_width.unwrap_or(self.last_finite_width) as isize;
         let next = (base + delta).clamp(40, 200) as usize;
         self.sim_width = Some(next);
         self.last_finite_width = next;
     }
 
+    /// Toggles unbounded (`None`) against the remembered finite width; both directions pin it.
     pub(crate) fn toggle_unbounded_width(&mut self) {
         self.width_pinned_by_user = true;
         match self.sim_width {
@@ -1228,9 +1347,12 @@ impl ConfiguratorApp {
         self.env.home_dir.join("config.toml")
     }
 
+    /// Save entry point. Runs the external-edit and broken-TOML guards first and may open a modal
+    /// instead of writing; returns an exit only when the caller asked to quit after saving.
     pub(crate) fn request_save(&mut self, exit_after_save: bool) -> Option<ConfiguratorExit> {
         let cfg_path = self.config_path();
         let current_stamp = DiskStamp::probe(&cfg_path);
+        // Another editor changed the file since load; writing now would silently drop their work.
         if current_stamp != self.loaded_disk_stamp {
             self.active_modal = Some(ActiveModal::ExternalConflict {
                 exit_after_save,
@@ -1239,6 +1361,7 @@ impl ConfiguratorApp {
             return None;
         }
 
+        // The draft is defaults, not the user's file: overwriting needs an explicit .bak choice.
         if self.loaded_from_broken_toml {
             self.active_modal = Some(ActiveModal::BrokenTomlConfirm {
                 exit_after_save,
@@ -1247,6 +1370,7 @@ impl ConfiguratorApp {
             return None;
         }
 
+        // Never materialize a config.toml just to restate the defaults.
         if !self.file_existed && !self.is_dirty() {
             self.active_modal = None;
             self.status_toast =
@@ -1260,6 +1384,8 @@ impl ConfiguratorApp {
         self.perform_write_config(false, exit_after_save)
     }
 
+    /// The only config.toml writer. With `write_backup` the current bytes go to config.toml.bak
+    /// first, and a failed backup aborts the save so the original is never left unprotected.
     pub(crate) fn perform_write_config(
         &mut self,
         write_backup: bool,
@@ -1267,6 +1393,7 @@ impl ConfiguratorApp {
     ) -> Option<ConfiguratorExit> {
         let cfg_path = self.config_path();
         if write_backup && cfg_path.exists() {
+            // Back up before overwriting; any failure here aborts the save entirely.
             match fs::read(&cfg_path) {
                 Ok(raw_bytes) => {
                     if let Err(err) =
@@ -1288,6 +1415,7 @@ impl ConfiguratorApp {
         let serialized = serialize_config_doc(&self.doc);
         match atomic_write_in_home(&self.env.home_dir, "config.toml", serialized.as_bytes()) {
             Ok(saved_path) => {
+                // Re-baseline and re-stamp: the doc is clean and this write is the new baseline.
                 self.baseline_doc = self.doc.clone();
                 self.file_existed = true;
                 self.loaded_from_broken_toml = false;
@@ -1306,6 +1434,7 @@ impl ConfiguratorApp {
                 }
             }
             Err(err) => {
+                // Keep baseline and stamp: a failed save must stay dirty and re-check the disk.
                 self.active_modal = None;
                 self.status_toast = Some(format!("Save error: {err}"));
                 None
@@ -1313,7 +1442,10 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Discards the draft for the on-disk version, but keeps the old draft as one undo step so the
+    /// reload itself is reversible.
     pub(crate) fn reload_from_disk(&mut self) {
+        // Push the current draft first: choosing Reload must not silently destroy local edits.
         let prev = self.doc.clone();
         if self.undo_stack.len() >= MAX_UNDO_STEPS {
             let _ = self.undo_stack.pop_front();
@@ -1333,6 +1465,7 @@ impl ConfiguratorApp {
         self.status_toast = Some("Reloaded config.toml from disk".to_string());
     }
 
+    /// Plans a settings.json change and shows it as a diff; nothing is written here.
     pub(crate) fn open_hook_modal(&mut self, action: HookAction) {
         let plan = match &self.env.install_env {
             Err(err) => HookModalPlan::Error(err.to_string()),
@@ -1346,6 +1479,7 @@ impl ConfiguratorApp {
                     Err(err) => HookModalPlan::Error(err.to_string()),
                 },
                 HookAction::Reset => {
+                    // Reset drops statusLine and discards the snapshot instead of restoring it.
                     let opts = UninstallOptions {
                         reset: true,
                         ..UninstallOptions::default()
@@ -1364,6 +1498,8 @@ impl ConfiguratorApp {
         }));
     }
 
+    /// Confirms the hook diff and writes settings.json only. It never saves the config draft, so
+    /// an unsaved layout stays unsaved.
     pub(crate) fn apply_active_hook_modal(&mut self) {
         let Some(ActiveModal::HookDiff(modal_state)) = self.active_modal.take() else {
             return;
@@ -1386,6 +1522,7 @@ impl ConfiguratorApp {
                 UninstallPlan::NotInstalled { .. } => {
                     "agyline is not currently configured in settings.json".to_string()
                 }
+                // A statusLine we do not own is never replaced.
                 UninstallPlan::ForeignStatusLine { .. } => {
                     "settings.json uses an external statusLine; left untouched".to_string()
                 }
@@ -1397,6 +1534,7 @@ impl ConfiguratorApp {
             HookModalPlan::Error(_) => return,
         };
 
+        // Re-inspect so the tab shows the post-write state, not the pre-write plan.
         self.hook_inspection = self.env.install_env.as_ref().ok().map(inspect_hook);
         self.status_toast = Some(toast);
     }

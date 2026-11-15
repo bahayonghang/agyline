@@ -1,3 +1,8 @@
+//! Ratatui drawing for the 4-tab configurator. The preview is the live renderer's own output
+//! converted to spans, never re-parsed ANSI, so it shows what `agy` would print. Under
+//! MIN_TERM_WIDTH x MIN_TERM_HEIGHT a recoverable guard replaces the workbench. Pane splits,
+//! list offsets and modal button order here are mirrored by the hit-testing in `input.rs`.
+
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -20,9 +25,14 @@ use crate::tui::state::{
     inspector_fields_for_item, ordered_catalog_entries, preset_scope_label,
 };
 
+/// Smallest terminal the workbench is drawn in. 80 cols keep the tab bar's Min(50) plus its
+/// 22-col drawer label readable; `input.rs` applies the same floor to keys and mouse.
 pub const MIN_TERM_WIDTH: u16 = 80;
+/// Height floor: 8 rows of chrome plus the body's Min(10), with room for the broken-TOML banner.
 pub const MIN_TERM_HEIGHT: u16 = 22;
 
+/// Draws one configurator frame, for the live terminal and the TestBackend alike. Under the
+/// minimum size it draws the resize guard instead and skips the workbench entirely.
 pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     let area = frame.area();
     if area.width < MIN_TERM_WIDTH || area.height < MIN_TERM_HEIGHT {
@@ -31,11 +41,14 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     }
 
     let has_broken_banner = app.loaded_from_broken_toml;
+    // Chrome in draw order: top bar, optional banner, preview, tab bar, body, footer. The idx
+    // walk below must skip the banner slot exactly when it was not pushed here.
     let mut constraints = Vec::with_capacity(6);
     constraints.push(Constraint::Length(1));
     if has_broken_banner {
         constraints.push(Constraint::Length(1));
     }
+    // 5 rows = 2 borders + 1 width ruler + the 2 lines a two-line status line can render.
     constraints.push(Constraint::Length(5));
     constraints.push(Constraint::Length(1));
     constraints.push(Constraint::Min(10));
@@ -73,6 +86,7 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     draw_preview_box(frame, preview_area, app, &rendered_preview, &effective_cfg);
     draw_tab_bar(frame, tabs_area, app);
 
+    // The drawer takes the right 40%; input.rs recomputes the same 60% cut to route clicks.
     let main_body_area = if app.toml_drawer_open {
         let split = Layout::default()
             .direction(Direction::Horizontal)
@@ -98,6 +112,8 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     }
 }
 
+/// Shown instead of the workbench under the minimum size, where the fixed chrome would squeeze
+/// panes to nothing. Enlarging the window recovers with no state loss; q/Esc still exit.
 fn draw_resize_guard(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     let dirty_note = if app.is_dirty() {
         " (* unsaved changes)"
@@ -120,6 +136,8 @@ fn draw_resize_guard(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
             Style::default().fg(Color::DarkGray),
         )),
     ];
+    // The 3-way exit popup cannot fit here, so its choices are inlined. input.rs still opens
+    // DirtyExit on q/Esc, so a small window can never silently drop an unsaved draft.
     if let Some(ActiveModal::DirtyExit { .. }) = app.active_modal {
         lines.push(Line::from(Span::styled(
             "Unsaved changes: [S] Save & Exit  [D] Discard  [Esc] Cancel",
@@ -137,6 +155,8 @@ fn draw_resize_guard(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     frame.render_widget(para, area);
 }
 
+/// Middle-ellipsized to `max_chars`, keeping twice as much tail as head: the file name and last
+/// directories identify the config, the home prefix does not. Under 8 chars it only truncates.
 fn shorten_middle_path(text: &str, max_chars: usize) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() <= max_chars || max_chars < 8 {
@@ -196,6 +216,7 @@ fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     };
     right_spans.push(hook_span);
 
+    // Badges are capped and the left side keeps Min(16), so they can never push the brand off.
     let right_width: usize = right_spans.iter().map(|s| s.content.chars().count()).sum();
     let right_cols = (right_width as u16).min(area.width.saturating_sub(16));
     let split = Layout::default()
@@ -203,8 +224,10 @@ fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
         .constraints([Constraint::Min(16), Constraint::Length(right_cols)])
         .split(area);
 
+    // " agyline " plus its gap is 10 cols; the spare 1 keeps the text ellipsizing, not wrapping.
     let left_budget = (split[0].width as usize).saturating_sub(11);
     let cfg_path = app.env.home_dir.join("config.toml");
+    // A toast borrows this slot so save/undo results are visible without opening a popup.
     let left_text = if let Some(ref msg) = app.status_toast {
         shorten_middle_path(msg, left_budget)
     } else {
@@ -235,6 +258,8 @@ fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     );
 }
 
+/// Persistent warning that the on-disk TOML did not parse: the draft in memory is the default
+/// base, and overwriting the broken file needs the .bak confirmation. Owns a whole layout row.
 fn draw_broken_banner(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     let err_txt = app
         .syntax_error
@@ -257,6 +282,8 @@ fn draw_broken_banner(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) 
     frame.render_widget(Paragraph::new(line), area);
 }
 
+/// The preview box. `rendered` comes from `render_lines_with_width`, so this is the live line
+/// rather than a second implementation; inner row 0 is the width ruler, rows 1.. are the line(s).
 fn draw_preview_box(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -297,6 +324,7 @@ fn draw_preview_box(
     )));
 
     let preview_lines = rendered_frame_to_ratatui_lines(rendered, effective_cfg);
+    // Distinguishes an empty render (e.g. every slot dropped) from a box that never drew.
     if preview_lines.is_empty() {
         lines.push(Line::from(Span::styled(
             "  (empty output)",
@@ -310,11 +338,13 @@ fn draw_preview_box(
 }
 
 fn draw_tab_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
+    // 22 cols are reserved for the drawer label; input.rs clicks the drawer at width - 22.
     let split = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(50), Constraint::Length(22)])
         .split(area);
 
+    // Titles shorten below 100 cols so all four still fit the Min(50) side.
     let titles: Vec<Line<'static>> = TuiTab::ALL
         .iter()
         .map(|t| Line::from(t.title_for_width(area.width)))
@@ -349,6 +379,8 @@ fn draw_tab_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     );
 }
 
+/// Narrowing badge for a rendered slot; `None` when it rendered in full or is absent from the
+/// frame. Both come from the same render, so a badge cannot disagree with the preview.
 fn outcome_badge(outcome: Option<SlotOutcome>) -> Option<(&'static str, Color)> {
     let out = outcome?;
     match out {
@@ -360,6 +392,8 @@ fn outcome_badge(outcome: Option<SlotOutcome>) -> Option<(&'static str, Color)> 
     }
 }
 
+/// `[ENV: VAR=value]` when an AGY_* variable overrides this TOML key, which is why the preview
+/// can disagree with the draft. `None` when the key is not overridden.
 fn env_badge_for_key(app: &ConfiguratorApp, target_key: &str) -> Option<String> {
     app.env_overrides
         .iter()
@@ -373,6 +407,7 @@ fn draw_layout_tab(
     app: &ConfiguratorApp,
     rendered: &RenderedFrame,
 ) {
+    // The 34/33/33 cuts are duplicated in input.rs click routing; change both together.
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -382,6 +417,8 @@ fn draw_layout_tab(
         ])
         .split(area);
 
+    // Both lists scroll to keep the selection visible; -2 is the pane's top and bottom border.
+    // A click maps back to a list index only after adding the same offset.
     let (rows_offset, catalog_offset) =
         app.layout_list_offsets(area.height.saturating_sub(2) as usize);
 
@@ -391,6 +428,7 @@ fn draw_layout_tab(
         LayoutPane::Catalog | LayoutPane::Inspector => false,
     };
     let mut row_items: Vec<ListItem<'static>> = Vec::new();
+    // Always two rows; an empty one still gets a selectable line so the cursor can land on it.
     for r_idx in 0..2 {
         let inactive_note = if r_idx == 1 && app.doc.single_line {
             " (inactive: single_line)"
@@ -495,6 +533,7 @@ fn draw_layout_tab(
                 Style::default().fg(Color::Cyan),
             ))));
         }
+        // [x] is membership in the selected row only, not in either row.
         let in_row = app
             .doc
             .lines
@@ -503,6 +542,7 @@ fn draw_layout_tab(
         let mark = if in_row { "[x]" } else { "[ ]" };
         let selected = cat_focused && app.catalog_idx == c_idx;
         let prefix = if selected { "> " } else { "  " };
+        // Repeatable items (quota) show +multi: each instance is a separate slot, not a priority.
         let tag = if entry.allow_multiple {
             "+multi".to_string()
         } else {
@@ -564,6 +604,7 @@ fn draw_layout_tab(
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )));
+        // The field list depends on the item id, so inspector_idx is re-clamped on every move.
         let fields = inspector_fields_for_item(slot.id);
         for (f_idx, &field) in fields.iter().enumerate() {
             let selected = insp_focused && app.inspector_idx == f_idx;
@@ -596,12 +637,15 @@ fn draw_layout_tab(
     frame.render_widget(Paragraph::new(insp_lines).block(insp_block), cols[2]);
 }
 
+/// Inspector text for one field. Unset values print as a default so the draft keeps only real
+/// overrides; the icon is tri-state and an explicit empty string means "hidden".
 fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
     match field {
         InspectorField::Priority => match slot.priority {
             Some(p) => format!("P{p}"),
             None => format!("P{} (default)", slot.id.default_priority()),
         },
+        // Some("") hides the icon; None inherits the item's own glyph.
         InspectorField::Icon => match &slot.icon {
             Some(ic) if ic.is_empty() => "\"\" (hidden)".to_string(),
             Some(ic) => format!("{ic:?}"),
@@ -636,6 +680,7 @@ fn draw_style_tab(
     app: &ConfiguratorApp,
     effective_cfg: &crate::config::EffectiveConfig,
 ) {
+    // The 26/40/34 cuts are duplicated in input.rs click routing.
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -699,6 +744,7 @@ fn draw_style_tab(
         let prefix = if selected { "> " } else { "  " };
         let (row_txt, env_note) = match field {
             StyleField::Palette => {
+                // A fixed-polarity RGB palette on the opposite theme falls back to terminal.
                 let fb = if effective_cfg.resolved_palette.polarity_fell_back {
                     " (polarity fallback)"
                 } else {
@@ -763,6 +809,7 @@ fn draw_style_tab(
     for (idx, tok) in ColorToken::ALL.iter().copied().enumerate() {
         let selected = ov_focused && app.palette_override_idx == idx;
         let prefix = if selected { "> " } else { "  " };
+        // Swatch is the resolved color (palette + override + env); text is the raw draft.
         let swatch_col = resolved_color_to_ratatui(effective_cfg.resolve_span_color(tok))
             .unwrap_or(Color::Reset);
         let val = app.doc.palette_overrides.get(tok).unwrap_or("(default)");
@@ -797,6 +844,7 @@ fn draw_style_tab(
 }
 
 fn draw_runtime_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
+    // The 52/48 cut is duplicated in input.rs click routing.
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
@@ -892,6 +940,8 @@ fn draw_runtime_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
         )));
     }
 
+    // The URL is stored as typed; this is the same loopback gate the __touch worker parses with,
+    // so a warning here means no touch will ever be sent.
     let raw_url = app.doc.cache_relay_url.trim();
     if raw_url.is_empty() || raw_url.eq_ignore_ascii_case("off") {
         rt_lines.push(Line::from(Span::styled(
@@ -937,6 +987,7 @@ fn draw_hook_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
                 "settings.json: {}",
                 insp.settings_path.display()
             )));
+            // Only for a symlinked settings.json, and it shifts every row below it by one.
             if insp.resolved_settings_path != insp.settings_path {
                 lines.push(Line::from(Span::styled(
                     format!("Symlink target: {}", insp.resolved_settings_path.display()),
@@ -968,6 +1019,7 @@ fn draw_hook_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
                 Span::styled(status_desc, Style::default().fg(status_col)),
             ]));
 
+            // The exact command string install would write, or the reason it cannot be built.
             if let Ok(ref ienv) = app.env.install_env {
                 match resolve_command_string(ienv) {
                     Ok(cmd) => lines.push(Line::from(Span::styled(
@@ -981,6 +1033,7 @@ fn draw_hook_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
                 }
             }
 
+            // The snapshot is what uninstall restores; --reset discards it instead.
             let snap_desc = if insp.has_previous_snapshot {
                 format!(
                     "Saved prior statusLine snapshot: {}",
@@ -1022,6 +1075,7 @@ fn draw_hook_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     lines.push(Line::from(btn_spans));
 
     lines.push(Line::from(""));
+    // Mirrors the loader's precedence and the AGY_* names both READMEs document.
     lines.push(Line::from(Span::styled(
         "Precedence: AGY_* env > config.toml > preset > default",
         Style::default().fg(Color::Cyan),
@@ -1059,6 +1113,8 @@ fn draw_hook_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     );
 }
 
+/// Popup rect at the given percentages, floored at 48x9 so text stays readable and capped 2
+/// cols/rows inside `area`; on a tiny terminal the cap wins and the popup still fits.
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let w = ((area.width.saturating_mul(percent_x)) / 100)
         .max(48)
@@ -1085,6 +1141,8 @@ fn button_span(label: &'static str, selected: bool, accent: Color) -> Span<'stat
     }
 }
 
+/// Draws the top-most modal over the workbench, clearing its rect first so panes cannot show
+/// through. Each arm's button order is the order input.rs maps `selected` and Enter onto.
 fn draw_active_modal(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -1104,6 +1162,7 @@ fn draw_active_modal(
                 )),
                 Line::from(format!("Target: {}", app.config_path().display())),
                 Line::from(""),
+                // Indices: 0 Save & Exit, 1 Discard & Exit, 2 Cancel.
                 Line::from(vec![
                     button_span("[S] Save & Exit", *selected == 0, Color::Green),
                     Span::raw("  "),
@@ -1179,6 +1238,7 @@ fn draw_active_modal(
                 )),
                 Line::from("Choose how to resolve the disk conflict:"),
                 Line::from(""),
+                // Unlike DirtyExit, index 0 is Cancel here; the Enter arms follow this order.
                 Line::from(vec![
                     button_span("[Esc] Cancel", *selected == 0, Color::Gray),
                     Span::raw("  "),
@@ -1199,6 +1259,7 @@ fn draw_active_modal(
             );
         }
         ActiveModal::PresetApply { preset_idx, scope } => {
+            // Highlight and scope live in the modal; nothing reaches the doc until Enter.
             let popup = centered_rect(64, 58, area);
             frame.render_widget(Clear, popup);
             let mut lines = Vec::with_capacity(12);
@@ -1278,6 +1339,7 @@ fn draw_active_modal(
     }
 }
 
+/// One line describing the plan's snapshot side effect; `None` when it touches no snapshot.
 fn format_snapshot_note(action: &SnapshotAction) -> Option<String> {
     match action {
         SnapshotAction::None => None,
@@ -1297,6 +1359,8 @@ fn format_snapshot_note(action: &SnapshotAction) -> Option<String> {
     }
 }
 
+/// Colors a unified diff. The +++/---/@@ headers must be tested before the single +/- prefixes,
+/// or file headers would be painted as added and removed lines.
 fn push_colored_diff_lines(lines: &mut Vec<Line<'static>>, diff: &str) {
     for raw_line in diff.lines() {
         let style = if raw_line.starts_with("+++")
@@ -1315,6 +1379,8 @@ fn push_colored_diff_lines(lines: &mut Vec<Line<'static>>, diff: &str) {
     }
 }
 
+/// Standalone settings.json transaction: the plan was computed when the modal opened, so the diff
+/// shown is exactly what Enter applies. The unsaved config.toml draft is not part of it.
 fn draw_hook_diff_modal(frame: &mut Frame<'_>, area: Rect, hook_modal: &HookModalState) {
     let popup = centered_rect(84, 78, area);
     frame.render_widget(Clear, popup);
@@ -1428,6 +1494,7 @@ fn draw_hook_diff_modal(frame: &mut Frame<'_>, area: Rect, hook_modal: &HookModa
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
         .title(title);
+    // The modal owns this vertical offset; Up/Down and the wheel in input.rs move it.
     frame.render_widget(
         Paragraph::new(lines)
             .block(block)
@@ -1436,6 +1503,8 @@ fn draw_hook_diff_modal(frame: &mut Frame<'_>, area: Rect, hook_modal: &HookModa
     );
 }
 
+/// Read-only view of the in-memory draft, re-serialized every frame so unsaved edits appear at
+/// once. It is not the file on disk, which may be older or externally modified.
 fn draw_toml_drawer(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     let toml_str = serialize_config_doc(&app.doc);
     let lines: Vec<Line<'static>> = toml_str
@@ -1449,6 +1518,8 @@ fn draw_toml_drawer(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
+/// The one footer row doubles as the inline edit prompt: while `text_edit` is active it shows the
+/// buffer with commit/cancel keys instead of the hotkey legend.
 fn draw_footer_or_text_input(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
     if let Some(ref ed) = app.text_edit {
         let mut spans = vec![

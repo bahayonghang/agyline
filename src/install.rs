@@ -1,3 +1,8 @@
+//! Install/uninstall engine for the `agy` statusLine hook in settings.json. Planning only reads,
+//! so `--dry-run` and the TUI diff preview consume a plan without writing. Applying must do no
+//! damage: keep sibling keys, write through symlinks, snapshot the prior `statusLine` for exact
+//! restore, and leave the file untouched on failure. The official `agy` binary is never modified.
+
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -14,12 +19,18 @@ use crate::cli::CliStreams;
 use crate::platform::{self, PlatformKind};
 use crate::state::ensure_state_dir;
 
+// Keeps temp names unique within one process so `create_new` cannot collide across rapid writes.
 static TEMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
+// Prior `statusLine` object, saved before the first install that replaces a foreign hook.
 const SNAPSHOT_FILE_NAME: &str = "previous_statusline.json";
 
+/// Injectable `platform::short_path_name` so tests can simulate 8.3 aliases (or volumes without
+/// them) on any host; the real resolver only produces aliases on Windows.
 pub type ShortPathResolver = Arc<dyn Fn(&Path) -> Option<PathBuf> + Send + Sync>;
 
+/// Everything install reads from the host, injected rather than ambient so the sandbox install
+/// test can point at fake paths and exercise Windows command rules on a Unix host.
 #[derive(Clone)]
 pub struct InstallEnv {
     pub settings_path: PathBuf,
@@ -45,6 +56,8 @@ impl fmt::Debug for InstallEnv {
 }
 
 impl InstallEnv {
+    /// Captures the live host once; fails only when home or the exe path is unresolvable. Tests
+    /// build the struct directly instead, to avoid mutating process-wide env.
     pub fn from_process() -> Result<Self, InstallError> {
         let lookup = |k: &str| std::env::var(k).ok();
         let user_home = platform::user_home_dir(&lookup);
@@ -71,11 +84,14 @@ impl InstallEnv {
         })
     }
 
+    /// `<agyline_home>/state/previous_statusline.json`; uninstall reads it to restore exactly.
     pub fn snapshot_path(&self) -> PathBuf {
         self.agyline_home.join("state").join(SNAPSHOT_FILE_NAME)
     }
 }
 
+/// Failures carry the offending path. Writes are atomic, so an error never leaves settings.json
+/// half-written; a purge error can still follow an already-applied restore.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallError {
     MissingHomeDir,
@@ -146,6 +162,8 @@ pub struct InstallOptions {
     pub yes: bool,
 }
 
+/// `reset` removes `statusLine` outright instead of restoring the snapshot (and discards it);
+/// `purge` additionally deletes the whole AGYLINE_HOME directory after the settings change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct UninstallOptions {
     pub dry_run: bool,
@@ -154,15 +172,28 @@ pub struct UninstallOptions {
     pub purge: bool,
 }
 
+/// What `inspect_hook` found. Install may repoint any hook but snapshots a foreign one first;
+/// uninstall only acts on `Connected` and leaves every other statusLine byte-for-byte untouched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HookStatus {
     MissingSettings,
     NotConfigured,
-    Connected { command: String, enabled: bool },
-    ForeignStatusLine { command: Option<String> },
-    InvalidSettings { reason: String },
+    /// `enabled` is the effective flag; an absent key counts as enabled.
+    Connected {
+        command: String,
+        enabled: bool,
+    },
+    /// Covers the legacy pwsh statusline.ps1 hook; `command` is None for non-object values.
+    ForeignStatusLine {
+        command: Option<String>,
+    },
+    InvalidSettings {
+        reason: String,
+    },
 }
 
+/// Read-only hook report; never fails, folding parse errors into `HookStatus::InvalidSettings`.
+/// `resolved_settings_path` is the symlink target a write would land on, shown in the preview.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookInspection {
     pub settings_path: PathBuf,
@@ -172,24 +203,32 @@ pub struct HookInspection {
     pub has_previous_snapshot: bool,
 }
 
+/// What apply must do with `<AGYLINE_HOME>/state/previous_statusline.json`, decided at plan time.
+/// The file holds the exact pre-install `statusLine` object so uninstall can restore it verbatim.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SnapshotAction {
     None,
+    /// Captures a foreign prior hook; only planned when no snapshot file exists yet.
     SaveNew {
         path: PathBuf,
         snapshot_json: String,
     },
+    /// Repeat install: keep the existing snapshot so restore still reaches the original hook.
     PreserveExisting {
         path: PathBuf,
     },
+    /// Uninstall puts the saved object back, then deletes the snapshot file.
     RestoreFrom {
         path: PathBuf,
     },
+    /// `--reset`: delete the snapshot without restoring; `statusLine` is removed instead.
     DiscardByReset {
         path: PathBuf,
     },
 }
 
+/// A fully computed settings.json write: exact new bytes, the diff to show first, and the
+/// snapshot step. Both `--dry-run` and the TUI preview render this without applying it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsMutationPlan {
     pub settings_path: PathBuf,
@@ -199,6 +238,8 @@ pub struct SettingsMutationPlan {
     pub snapshot_action: SnapshotAction,
 }
 
+/// `AlreadyInstalled` is a no-op even without `--yes`; `WouldChange` carries everything apply
+/// needs, so applying never re-reads settings.json or re-decides the command string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallPlan {
     AlreadyInstalled {
@@ -212,6 +253,8 @@ pub enum InstallPlan {
     },
 }
 
+/// `NotInstalled` and `ForeignStatusLine` never write settings.json; they may still carry a
+/// `purge_dir`, which is previewed and confirmed separately from the settings change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UninstallPlan {
     NotInstalled {
@@ -240,6 +283,7 @@ pub struct ApplyOutcome {
 pub fn inspect_hook(env: &InstallEnv) -> HookInspection {
     let snapshot_path = env.snapshot_path();
     let has_previous_snapshot = snapshot_path.is_file();
+    // Inspection must not fail; an unresolvable link falls back to the literal path.
     let resolved_settings_path = resolve_target_settings_path(&env.settings_path)
         .unwrap_or_else(|_| env.settings_path.clone());
 
@@ -264,6 +308,7 @@ pub fn inspect_hook(env: &InstallEnv) -> HookInspection {
                     HookStatus::ForeignStatusLine { command: cmd }
                 }
             }
+            // A non-object statusLine is still someone's config; treat it as foreign, not absent.
             Some(
                 Value::Null
                 | Value::Bool(_)
@@ -286,6 +331,9 @@ pub fn inspect_hook(env: &InstallEnv) -> HookInspection {
     }
 }
 
+/// True when the invoked program (not its arguments) is agyline: `agyline`, `agyline.exe`, or a
+/// Windows 8.3 `agylin~*.exe` alias, case-insensitive. Misclassifying a foreign hook as ours
+/// would let uninstall delete it, so matching stops at the program leaf.
 pub fn command_invokes_agyline(cmd: &str) -> bool {
     let trimmed = cmd.trim();
     if trimmed.is_empty() {
@@ -301,6 +349,7 @@ pub fn command_invokes_agyline(cmd: &str) -> bool {
     if leaf.eq_ignore_ascii_case("agyline") || leaf.eq_ignore_ascii_case("agyline.exe") {
         return true;
     }
+    // Install's 8.3 fallback writes commands like `AGYLIN~1.EXE`; uninstall must recognize them.
     let lower = leaf.to_ascii_lowercase();
     lower.starts_with("agylin~") && lower.ends_with(".exe")
 }
@@ -326,6 +375,8 @@ fn extract_invoked_program(trimmed: &str) -> &str {
     trimmed.split_whitespace().next().unwrap_or("")
 }
 
+/// Reads only; the returned plan is everything apply needs. Equality is on the whole statusLine
+/// object, so a hook the user disabled or edited is re-pointed and re-enabled, not skipped.
 pub fn plan_install(env: &InstallEnv) -> Result<InstallPlan, InstallError> {
     let resolved_command = resolve_command_string(env)?;
     let resolved_settings_path = resolve_target_settings_path(&env.settings_path)?;
@@ -344,6 +395,8 @@ pub fn plan_install(env: &InstallEnv) -> Result<InstallPlan, InstallError> {
     }
 
     let snapshot_path = env.snapshot_path();
+    // Snapshot only a foreign prior hook, and never overwrite an existing snapshot: re-installs
+    // must keep the path back to the original statusLine, not to our own previous command.
     let snapshot_action = match existing_sl.as_ref() {
         Some(Value::Object(prev_obj)) => {
             let prev_is_agyline = prev_obj
@@ -384,8 +437,11 @@ pub fn plan_install(env: &InstallEnv) -> Result<InstallPlan, InstallError> {
         }
     };
 
+    // `Map` preserves insertion order (serde_json preserve_order), so replacing statusLine in
+    // place keeps every sibling key and its position.
     root.insert("statusLine".to_string(), new_sl_val);
     let new_settings_json = serialize_json_pretty(&Value::Object(root))?;
+    // Diff against normalized text so CRLF or a missing final newline is not shown as a change.
     let old_for_diff = if old_exists {
         normalize_json_for_diff(&old_raw)
     } else {
@@ -410,6 +466,8 @@ pub fn plan_install(env: &InstallEnv) -> Result<InstallPlan, InstallError> {
     })
 }
 
+/// Writes the plan: snapshot first, then settings.json, so a failed settings write still leaves
+/// the restore path intact. `AlreadyInstalled` writes nothing, even without `--yes`.
 pub fn apply_install(env: &InstallEnv, plan: &InstallPlan) -> Result<ApplyOutcome, InstallError> {
     match plan {
         InstallPlan::AlreadyInstalled { .. } => Ok(ApplyOutcome {
@@ -428,6 +486,7 @@ pub fn apply_install(env: &InstallEnv, plan: &InstallPlan) -> Result<ApplyOutcom
                     path,
                     snapshot_json,
                 } => {
+                    // Re-check at apply time: a snapshot created since planning must win.
                     if !path.exists() {
                         ensure_state_dir(&env.agyline_home).map_err(|err| InstallError::Io {
                             path: env.agyline_home.join("state"),
@@ -443,6 +502,7 @@ pub fn apply_install(env: &InstallEnv, plan: &InstallPlan) -> Result<ApplyOutcom
                 | SnapshotAction::DiscardByReset { .. } => {}
             }
 
+            // Write the resolved target, not the link, so the user's symlink survives.
             atomic_write_text(
                 &mutation.resolved_settings_path,
                 &mutation.new_settings_json,
@@ -457,6 +517,8 @@ pub fn apply_install(env: &InstallEnv, plan: &InstallPlan) -> Result<ApplyOutcom
     }
 }
 
+/// Pure read. Only a hook that invokes agyline is changed; a foreign statusLine is reported and
+/// left byte-for-byte intact. With a snapshot, restore it; `--reset` removes statusLine instead.
 pub fn plan_uninstall(
     env: &InstallEnv,
     opts: UninstallOptions,
@@ -520,6 +582,7 @@ pub fn plan_uninstall(
             },
         )
     } else {
+        // Rebuild the map in order: `swap_remove` would reorder the user's remaining keys.
         let filtered: Map<String, Value> = root
             .into_iter()
             .filter(|(k, _)| k != "statusLine")
@@ -550,6 +613,8 @@ pub fn plan_uninstall(
     })
 }
 
+/// Settings first, then snapshot cleanup, then purge: the restore is durable before the snapshot
+/// is deleted, and a purge failure cannot undo an already-restored settings.json.
 pub fn apply_uninstall(
     _env: &InstallEnv,
     _plan: &UninstallPlan,
@@ -581,6 +646,7 @@ pub fn apply_uninstall(
                 &mutation.new_settings_json,
             )?;
             let mut snapshot_restored = None;
+            // Best-effort: settings.json is already written, so cleanup must not fail the run.
             match &mutation.snapshot_action {
                 SnapshotAction::RestoreFrom { path } => {
                     let _ = fs::remove_file(path);
@@ -604,6 +670,7 @@ pub fn apply_uninstall(
     }
 }
 
+/// Prints the diff, then applies only after `--yes` or a TTY confirmation; returns the exit code.
 pub fn run_install_cli(env: &InstallEnv, opts: InstallOptions, streams: &mut CliStreams<'_>) -> u8 {
     let plan = match plan_install(env) {
         Ok(p) => p,
@@ -665,6 +732,7 @@ pub fn run_install_cli(env: &InstallEnv, opts: InstallOptions, streams: &mut Cli
     }
 }
 
+/// Prints the diff, then applies only after `--yes` or a TTY confirmation; returns the exit code.
 pub fn run_uninstall_cli(
     env: &InstallEnv,
     opts: UninstallOptions,
@@ -744,6 +812,7 @@ pub fn run_uninstall_cli(
     }
 }
 
+/// A purge-only uninstall still previews and confirms the directory before deleting it.
 fn handle_purge_only_plan(
     env: &InstallEnv,
     plan: &UninstallPlan,
@@ -815,6 +884,7 @@ fn print_mutation_preview(
 }
 
 fn confirm_or_refuse(streams: &mut CliStreams<'_>, target_desc: &str) -> bool {
+    // Even a piped "y" is refused: confirmation requires a real TTY or an explicit --yes.
     if !streams.stdin_is_terminal || !streams.stdout_is_terminal {
         let _ = writeln!(
             streams.stderr,
@@ -860,6 +930,7 @@ fn execute_purge(purge_dir: Option<&Path>) -> Result<Option<PathBuf>, InstallErr
     };
     match fs::remove_dir_all(dir) {
         Ok(()) => Ok(Some(dir.to_path_buf())),
+        // A directory that vanished between plan and apply is not an error.
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
         Err(err) => Err(InstallError::Io {
             path: dir.to_path_buf(),
@@ -868,6 +939,8 @@ fn execute_purge(purge_dir: Option<&Path>) -> Result<Option<PathBuf>, InstallErr
     }
 }
 
+/// Guards `--purge`: refuses an empty path, a filesystem root, or the user's home (compared
+/// canonically, so a symlink to home is caught too). `remove_dir_all` on those is unrecoverable.
 fn validate_safe_purge_path(
     agyline_home: &Path,
     user_home: Option<&Path>,
@@ -894,6 +967,8 @@ fn validate_safe_purge_path(
     Ok(())
 }
 
+/// Repoints only type/command/enabled, preserving extra statusLine subkeys like `padding`.
+/// Existing canonical keys keep their positions; otherwise the three lead and extras follow.
 fn build_installed_status_line(existing: Option<&Value>, command: &str) -> Map<String, Value> {
     if let Some(Value::Object(prev)) = existing {
         if prev.contains_key("type") && prev.contains_key("command") && prev.contains_key("enabled")
@@ -923,6 +998,8 @@ fn build_installed_status_line(existing: Option<&Value>, command: &str) -> Map<S
     sl
 }
 
+/// Resolves settings.json to the file a write must land on, so the symlink itself is never
+/// replaced. Handles dangling links (returns the ultimate target) and caps chains at 32 hops.
 fn resolve_target_settings_path(settings_path: &Path) -> Result<PathBuf, InstallError> {
     match fs::symlink_metadata(settings_path) {
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(settings_path.to_path_buf()),
@@ -937,6 +1014,7 @@ fn resolve_target_settings_path(settings_path: &Path) -> Result<PathBuf, Install
                 return Ok(clean_canonical_path(canon));
             }
             if meta.file_type().is_symlink() {
+                // canonicalize fails on a dangling link; walk manually, capped against loops.
                 let mut cur = settings_path.to_path_buf();
                 for _ in 0..32 {
                     match fs::symlink_metadata(&cur) {
@@ -971,6 +1049,8 @@ fn resolve_target_settings_path(settings_path: &Path) -> Result<PathBuf, Install
     }
 }
 
+/// Strips the `\\?\` verbatim prefix from Windows `canonicalize` output so previews and writes
+/// use the conventional path form.
 fn clean_canonical_path(path: PathBuf) -> PathBuf {
     if let Some(s) = path.to_str() {
         let stripped = strip_windows_verbatim(s);
@@ -981,6 +1061,8 @@ fn clean_canonical_path(path: PathBuf) -> PathBuf {
     path
 }
 
+/// Returns (exists, raw body, parsed object). A missing file is a valid empty settings, not an
+/// error; anything that is not a JSON object is rejected so a malformed file is never rewritten.
 fn read_settings_object(path: &Path) -> Result<(bool, String, Map<String, Value>), InstallError> {
     let raw = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -994,6 +1076,7 @@ fn read_settings_object(path: &Path) -> Result<(bool, String, Map<String, Value>
             });
         }
     };
+    // serde_json rejects a leading UTF-8 BOM, which Windows editors may add; strip it first.
     let body = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
     let val: Value =
         serde_json::from_str(body).map_err(|err| InstallError::InvalidSettingsJson {
@@ -1014,6 +1097,8 @@ fn read_settings_object(path: &Path) -> Result<(bool, String, Map<String, Value>
     }
 }
 
+/// A corrupt snapshot aborts uninstall (`InvalidSnapshotJson` suggests `--reset`) rather than
+/// restoring garbage over the user's current hook.
 fn read_snapshot_object(path: &Path) -> Result<Map<String, Value>, InstallError> {
     let raw = fs::read_to_string(path).map_err(|err| InstallError::Io {
         path: path.to_path_buf(),
@@ -1052,10 +1137,12 @@ fn serialize_json_pretty(val: &Value) -> Result<String, InstallError> {
         path: PathBuf::from("<json>"),
         message: err.to_string(),
     })?;
+    // Match `normalize_json_for_diff` so the final newline never shows up as a diff hunk.
     s.push('\n');
     Ok(s)
 }
 
+/// Normalizes CRLF and the final newline so the diff shows only real content changes.
 fn normalize_json_for_diff(raw: &str) -> String {
     let mut normalized = raw.replace("\r\n", "\n");
     if !normalized.ends_with('\n') {
@@ -1064,6 +1151,8 @@ fn normalize_json_for_diff(raw: &str) -> String {
     normalized
 }
 
+/// tmp-file + rename so readers (agy) never see partial JSON and a failure leaves the original
+/// intact. Preserves the target's permissions and retries transient Windows rename denials.
 fn atomic_write_text(target_path: &Path, content: &str) -> Result<(), InstallError> {
     let parent = target_path
         .parent()
@@ -1074,6 +1163,7 @@ fn atomic_write_text(target_path: &Path, content: &str) -> Result<(), InstallErr
         message: err.to_string(),
     })?;
 
+    // Copy the old permissions onto the tmp so the rename cannot silently change the file's mode.
     let existing_perms = fs::metadata(target_path).ok().map(|m| m.permissions());
     let file_name = target_path
         .file_name()
@@ -1092,6 +1182,7 @@ fn atomic_write_text(target_path: &Path, content: &str) -> Result<(), InstallErr
     ));
 
     {
+        // `create_new` refuses to reuse a colliding tmp name instead of truncating someone's file.
         let mut tmp_file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -1100,6 +1191,7 @@ fn atomic_write_text(target_path: &Path, content: &str) -> Result<(), InstallErr
                 path: tmp_path.clone(),
                 message: err.to_string(),
             })?;
+        // sync_all before the rename so a power loss cannot swap in a truncated settings.json.
         if let Err(err) = tmp_file
             .write_all(content.as_bytes())
             .and_then(|()| tmp_file.sync_all())
@@ -1117,6 +1209,7 @@ fn atomic_write_text(target_path: &Path, content: &str) -> Result<(), InstallErr
     }
 
     let mut last_err = None;
+    // Brief retries: Windows antivirus or a concurrent reader can transiently deny the rename.
     for attempt in 0..4 {
         match fs::rename(&tmp_path, target_path) {
             Ok(()) => return Ok(()),
@@ -1148,6 +1241,7 @@ enum DiffOp<'a> {
     Insert(&'a str),
 }
 
+/// Hand-rolled unified diff (3 context lines) so the preview needs no external `diff` binary.
 fn unified_diff(label: &str, old_exists: bool, old_text: &str, new_text: &str) -> String {
     let new_lines: Vec<&str> = split_diff_lines(new_text);
     if !old_exists {
@@ -1303,6 +1397,9 @@ fn compute_lcs_ops<'a>(old: &[&'a str], new: &[&'a str]) -> Vec<DiffOp<'a>> {
     ops
 }
 
+/// The command agy will run. Windows: clean exe path (tilde-shortened), else bare `agyline` if
+/// PATH resolves to this same binary, else a clean 8.3 short path, else refuse. Unix: `~/...`
+/// when clean, otherwise a single-quoted path with `'\''` escapes.
 pub fn resolve_command_string(env: &InstallEnv) -> Result<String, InstallError> {
     match env.platform {
         PlatformKind::Windows => resolve_windows_command(env),
@@ -1319,6 +1416,7 @@ fn resolve_windows_command(env: &InstallEnv) -> Result<String, InstallError> {
     let exe_norm = normalize_windows_slashes(strip_windows_verbatim(raw_exe));
 
     if is_clean_windows_cmd_path(&exe_norm) {
+        // Prefer `~/...` like the reference hook; only when both exe and home are cmd-clean.
         if let Some(raw_home) = env.user_home.as_deref().and_then(Path::to_str) {
             let home_slashes = normalize_windows_slashes(strip_windows_verbatim(raw_home));
             let home_norm = trim_trailing_slash_windows(&home_slashes);
@@ -1331,10 +1429,12 @@ fn resolve_windows_command(env: &InstallEnv) -> Result<String, InstallError> {
         return Ok(exe_norm);
     }
 
+    // Bare name only if PATH's first agyline hit is this exact binary, not a shadowing older copy.
     if bare_agyline_resolves_to_same_exe(env) {
         return Ok("agyline".to_string());
     }
 
+    // 8.3 aliases have no spaces, so cmd.exe runs them unquoted; last resort before refusing.
     if let Some(short_pb) = (env.short_path_resolver)(&env.exe_path)
         && let Some(short_str) = short_pb.to_str()
     {
@@ -1376,9 +1476,11 @@ fn resolve_unix_command(env: &InstallEnv) -> Result<String, InstallError> {
         }
     }
 
+    // Single quotes literalize everything but `'`; `'\''` closes, escapes one quote, reopens.
     Ok(format!("'{}'", exe_str.replace('\'', "'\\''")))
 }
 
+/// Strip `\\?\` only for drive-letter paths; `\\?\UNC\` needs the slash-normalizer instead.
 fn strip_windows_verbatim(path: &str) -> &str {
     if let Some(rest) = path
         .strip_prefix(r"\\?\")
@@ -1390,6 +1492,7 @@ fn strip_windows_verbatim(path: &str) -> &str {
     path
 }
 
+/// cmd.exe accepts forward slashes; UNC verbatim paths become the `//server/share` form.
 fn normalize_windows_slashes(path: &str) -> String {
     if let Some(unc_rest) = path
         .strip_prefix(r"\\?\UNC\")
@@ -1402,6 +1505,7 @@ fn normalize_windows_slashes(path: &str) -> String {
 
 fn trim_trailing_slash_windows(path: &str) -> &str {
     let trimmed = path.trim_end_matches('/');
+    // Keep the slash on `C:/`: bare `C:` means the drive's current directory, not the root.
     if trimmed.len() == 2 && trimmed.as_bytes().get(1) == Some(&b':') {
         return path;
     }
@@ -1416,6 +1520,7 @@ fn strip_home_prefix_windows<'a>(exe_norm: &'a str, home_norm: &str) -> Option<&
     if !prefix.eq_ignore_ascii_case(home_norm) {
         return None;
     }
+    // Require a `/` boundary so a home of `alice` never prefixes a sibling like `alicia`.
     let rel = rest.strip_prefix('/')?;
     if rel.is_empty() {
         return None;
@@ -1423,6 +1528,7 @@ fn strip_home_prefix_windows<'a>(exe_norm: &'a str, home_norm: &str) -> Option<&
     Some(rel)
 }
 
+/// Rejects anything cmd.exe would parse: whitespace, quotes, metacharacters, `%`/`!` expansion.
 fn is_clean_windows_cmd_path(path: &str) -> bool {
     !path.is_empty()
         && path.chars().all(|c| {
@@ -1435,6 +1541,7 @@ fn is_clean_windows_cmd_path(path: &str) -> bool {
         })
 }
 
+/// Rejects shell metacharacters and glob/expansion chars so the unquoted `~/...` form is safe.
 fn is_clean_unix_sh_path(path: &str) -> bool {
     !path.is_empty()
         && path.chars().all(|c| {
@@ -1467,11 +1574,14 @@ fn is_clean_unix_sh_path(path: &str) -> bool {
         })
 }
 
+/// True only when PATH's first agyline candidate is this same binary, guarding against a shadowing
+/// older copy that a bare `agyline` command would otherwise run.
 fn bare_agyline_resolves_to_same_exe(env: &InstallEnv) -> bool {
     let Some(ref raw_path) = env.path_env else {
         return false;
     };
     let path_lossy = raw_path.to_string_lossy();
+    // Mirror cmd.exe's PATHEXT order: .com, .exe, .bat, .cmd, then extensionless.
     let candidates = [
         "agyline.com",
         "agyline.exe",
@@ -1495,6 +1605,7 @@ fn bare_agyline_resolves_to_same_exe(env: &InstallEnv) -> bool {
     false
 }
 
+/// Canonicalize to equate symlinks/8.3 aliases; fall back to case-insensitive text when it fails.
 fn same_executable_file(a: &Path, b: &Path) -> bool {
     if let (Ok(ca), Ok(cb)) = (fs::canonicalize(a), fs::canonicalize(b)) {
         return ca == cb;

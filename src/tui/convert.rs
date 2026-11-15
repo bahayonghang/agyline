@@ -1,12 +1,21 @@
+//! Seam between the shared renderer and ratatui: a `RenderedFrame` plus its `EffectiveConfig`
+//! become styled lines directly, never by re-parsing the ANSI that `emit_ansi` produces. Colors
+//! arrive already quantized by `resolve_span_color`, so preview and live output agree by
+//! construction; `tests/tui_smoke.rs` pins the text against `emit_plain`.
+
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 
 use crate::config::EffectiveConfig;
 use crate::render::{Ansi16Color, ColorToken, EffectiveColorDepth, RenderedFrame, ResolvedColor};
 
+/// Maps an already-quantized color to ratatui. `None` means depth `None` and must stay unstyled
+/// rather than fall back to a default foreground.
 pub fn resolved_color_to_ratatui(color: Option<ResolvedColor>) -> Option<Color> {
     let resolved = color?;
     let mapped = match resolved {
+        // ratatui's names are one step off ANSI's: `Gray` is SGR 37 and `White` is bright 97, so
+        // this table cannot be collapsed into matching variant names.
         ResolvedColor::Ansi16(c16) => match c16 {
             Ansi16Color::Black => Color::Black,
             Ansi16Color::Red => Color::Red,
@@ -31,6 +40,7 @@ pub fn resolved_color_to_ratatui(color: Option<ResolvedColor>) -> Option<Color> 
     Some(mapped)
 }
 
+/// Foreground-only style. `None` yields the terminal default, matching `emit_ansi` writing no SGR.
 pub fn style_for_resolved(color: Option<ResolvedColor>) -> Style {
     match resolved_color_to_ratatui(color) {
         Some(fg) => Style::default().fg(fg),
@@ -38,6 +48,9 @@ pub fn style_for_resolved(color: Option<ResolvedColor>) -> Style {
     }
 }
 
+/// The preview/live parity seam: converts the very frame the printer emits, span by span, with no
+/// ANSI round-trip. Row skipping, indent, separators and the broken-config badge must mirror
+/// `emit_ansi` / `emit_plain` exactly, including their empty-row and first-emitted-row rules.
 pub fn rendered_frame_to_ratatui_lines(
     frame: &RenderedFrame,
     config: &EffectiveConfig,
@@ -46,6 +59,7 @@ pub fn rendered_frame_to_ratatui_lines(
         return Vec::new();
     }
 
+    // Depth None prints no SGR at all, so every span here must stay unstyled too.
     let plain_mode = match config.effective_color_depth {
         EffectiveColorDepth::None => true,
         EffectiveColorDepth::TrueColor
@@ -99,6 +113,7 @@ pub fn rendered_frame_to_ratatui_lines(
                 spans.push(Span::styled(badge.clone(), crit_style));
             }
         } else if frame.config_broken && emitted_rows == 0 {
+            // First *emitted* row, not row index 0: skipped empty rows must not steal the badge.
             spans.push(Span::styled(" ! config".to_string(), crit_style));
         }
 
@@ -109,6 +124,8 @@ pub fn rendered_frame_to_ratatui_lines(
     out
 }
 
+/// Column ruler under the preview. `sim_width` of `None` means unbounded and gets a fixed legend;
+/// a finite width is marked at that column. Output is always clipped to `viewport_cols` chars.
 pub fn build_width_ruler(sim_width: Option<usize>, viewport_cols: usize) -> String {
     if viewport_cols == 0 {
         return String::new();
@@ -128,6 +145,8 @@ pub fn build_width_ruler(sim_width: Option<usize>, viewport_cols: usize) -> Stri
         } else if col % 10 == 0 {
             let label = col.to_string();
             let label_chars: Vec<char> = label.chars().collect();
+            // A multi-digit label overwrites the ticks before it so the ruler stays exactly
+            // `target` chars wide instead of growing past the viewport.
             let replace_prev = label_chars.len().saturating_sub(1);
             for _ in 0..replace_prev {
                 let _ = chars.pop();

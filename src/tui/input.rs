@@ -1,3 +1,8 @@
+//! Key and mouse dispatch for the configurator, in four tiers: modal, inline text edit, focused
+//! pane, then global hotkeys. A tier that consumes a key stops the ones below it, so typed text
+//! never fires a hotkey. Only Press events are dispatched: the Windows console also reports
+//! Release and Repeat, which would double-fire every keystroke.
+
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
@@ -12,9 +17,13 @@ use crate::tui::state::{
 };
 
 impl ConfiguratorApp {
+    /// Feeds one terminal event to the workbench. `Some(exit)` ends the event loop, `None` keeps
+    /// it running. Release/Repeat are dropped here so every tier below sees Press only.
     pub fn handle_event(&mut self, event: Event) -> Option<ConfiguratorExit> {
         match event {
             Event::Key(key) => {
+                // Windows consoles deliver Release (and Repeat) beside each Press; acting on them
+                // would double every edit, tab switch and exit.
                 if key.kind != KeyEventKind::Press {
                     return None;
                 }
@@ -24,6 +33,7 @@ impl ConfiguratorApp {
             Event::Resize(width, height) => {
                 let prev_width = self.term_size.0;
                 self.term_size = (width, height);
+                // Under 100 cols the 60/40 drawer split starves the panes.
                 if prev_width >= 100 && width < 100 {
                     self.toml_drawer_open = false;
                 }
@@ -45,6 +55,7 @@ impl ConfiguratorApp {
             return None;
         }
 
+        // Ctrl+C is tested before the size guard so a too-small window can still be left.
         if key.modifiers.contains(KeyModifiers::CONTROL)
             && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('C'))
         {
@@ -55,6 +66,8 @@ impl ConfiguratorApp {
             return Some(ConfiguratorExit::Cancelled);
         }
 
+        // Same floor as view.rs MIN_TERM_*: while the guard is up only q/Esc act, and a dirty
+        // draft still gets the 3-way exit rather than being dropped.
         if self.term_size.0 < 80 || self.term_size.1 < 22 {
             if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
                 if self.is_dirty() {
@@ -67,6 +80,7 @@ impl ConfiguratorApp {
         }
 
         // Global Ctrl shortcuts (Undo, Redo, Save, Preset modal).
+        // Ahead of tier 3 so no pane can swallow them; inert while the resize guard is up.
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             match key.code {
                 KeyCode::Char('z') | KeyCode::Char('Z') => {
@@ -92,6 +106,7 @@ impl ConfiguratorApp {
         }
 
         // Tier 3: Focused Pane Local Keys
+        // true means the pane consumed the key, so the global hotkeys below must not also fire.
         if self.handle_tier3_pane_key(key) {
             return None;
         }
@@ -100,7 +115,10 @@ impl ConfiguratorApp {
         self.handle_tier4_global_key(key)
     }
 
+    /// Modal tier: consumes every key while a modal is open so the pane underneath cannot be
+    /// edited by accident. Ctrl+C closes it, except on DirtyExit where it discards and exits.
     fn handle_tier1_modal_key(&mut self, key: KeyEvent) -> Option<ConfiguratorExit> {
+        // Cloned so the arms can replace self.active_modal without holding a borrow on it.
         let modal = self.active_modal.clone()?;
 
         if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -172,6 +190,7 @@ impl ConfiguratorApp {
                     self.active_modal = None;
                     None
                 }
+                // 'b' preserves the unparseable original as config.toml.bak before overwriting.
                 KeyCode::Char('b') | KeyCode::Char('B') => {
                     self.perform_write_config(true, exit_after_save)
                 }
@@ -210,6 +229,7 @@ impl ConfiguratorApp {
                     self.active_modal = None;
                     None
                 }
+                // Reload adopts disk and pushes the local draft onto undo; nothing is written.
                 KeyCode::Char('r') | KeyCode::Char('R') => {
                     self.reload_from_disk();
                     None
@@ -283,6 +303,7 @@ impl ConfiguratorApp {
                             scope: preset_scope_next(scope),
                         });
                     }
+                    // One undo step for the whole preset; idx/scope are copied back to the pane.
                     KeyCode::Enter | KeyCode::Char(' ') => {
                         if count > 0 {
                             let idx = preset_idx % count;
@@ -316,6 +337,7 @@ impl ConfiguratorApp {
                         hook_modal.scroll = hook_modal.scroll.saturating_add(1);
                         self.active_modal = Some(ActiveModal::HookDiff(hook_modal));
                     }
+                    // Writes settings.json only; the unsaved config.toml draft is not touched.
                     KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => {
                         self.apply_active_hook_modal();
                     }
@@ -339,9 +361,13 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Inline edit tier: every printable key goes into the buffer, including letters that are
+    /// hotkeys elsewhere ('q', 's', 'p', '[', ']'). The doc is not touched until Enter commits, so
+    /// Esc discards the buffer and the previous value survives. Ctrl/Alt chords are swallowed.
     fn handle_tier2_text_input(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
+                // Nothing was written to the doc, so dropping the buffer restores the old value.
                 self.text_edit = None;
             }
             KeyCode::Enter => {
@@ -372,6 +398,7 @@ impl ConfiguratorApp {
                 if let Some(ref mut ed) = self.text_edit
                     && ed.cursor_chars > 0
                 {
+                    // The cursor counts chars but String indexes bytes: icons can be multi-byte.
                     let remove_at = ed.cursor_chars - 1;
                     let byte_idx = char_to_byte_idx(&ed.buffer, remove_at);
                     ed.buffer.remove(byte_idx);
@@ -390,6 +417,7 @@ impl ConfiguratorApp {
                 }
             }
             KeyCode::Char(ch) => {
+                // Ctrl/Alt chords are dropped, not typed; tier 2 swallows Ctrl+C mid-edit too.
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT)
                     && let Some(ref mut ed) = self.text_edit
@@ -404,6 +432,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Routes to the active tab's focused pane. `true` means the key was consumed and tier 4 is
+    /// skipped; `false` lets an unbound key fall through to the global hotkeys.
     fn handle_tier3_pane_key(&mut self, key: KeyEvent) -> bool {
         match self.active_tab {
             TuiTab::Layout => self.handle_layout_tab_key(key),
@@ -413,6 +443,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Hook tab: the three actions form a ring, so arrows, hjkl and Tab/BackTab all cycle them.
+    /// 'u' and 'x' jump straight to their modal; plain 'i' falls through to tier 4.
     fn handle_hook_tab_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
             KeyCode::Left
@@ -450,6 +482,7 @@ impl ConfiguratorApp {
     }
 
     fn handle_layout_tab_key(&mut self, key: KeyEvent) -> bool {
+        // Tab/BackTab cycle the three panes before any pane handler sees the key.
         match key.code {
             KeyCode::Tab => {
                 self.layout_pane = self.layout_pane.next();
@@ -469,7 +502,10 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Active Rows pane: the cursor walks both rows, and the case of j/k decides whether the slot
+    /// moves with it. Digits are priority hotkeys here but plain text in tier 2.
     fn handle_active_rows_key(&mut self, key: KeyEvent) -> bool {
+        // Alt+Up/Down is the arrow alias for the J/K reorder below.
         if key.modifiers.contains(KeyModifiers::ALT) {
             match key.code {
                 KeyCode::Up => {
@@ -505,10 +541,12 @@ impl ConfiguratorApp {
                 self.move_selected_slot_other_row();
                 true
             }
+            // Delete removes the slot here; in the Inspector the same key resets one field.
             KeyCode::Char('x') | KeyCode::Delete | KeyCode::Backspace => {
                 self.remove_selected_slot();
                 true
             }
+            // 1..=5 set the slot priority directly; the same digits type text during an edit.
             KeyCode::Char(d @ '1'..='5') => {
                 let p = (d as u8) - b'0';
                 self.set_selected_slot_priority(p);
@@ -518,6 +556,7 @@ impl ConfiguratorApp {
                 if self.selected_item_slot().is_some() {
                     self.layout_pane = LayoutPane::Inspector;
                 }
+                // Consumed even on an empty row so Enter cannot leak into a global hotkey.
                 true
             }
             _ => false,
@@ -543,6 +582,8 @@ impl ConfiguratorApp {
                 self.catalog_idx = (self.catalog_idx + 1) % count;
                 true
             }
+            // Space/Enter toggles membership in the selected row: repeatable items (quota) always
+            // append a new instance; singletons move from the other row instead of doubling.
             KeyCode::Char(' ') | KeyCode::Enter => {
                 let entry = entries[self.catalog_idx.min(count - 1)];
                 let target_row = self.selected_row.min(1);
@@ -563,6 +604,7 @@ impl ConfiguratorApp {
                         added_slot_idx = Some(doc.lines[target_row].len() - 1);
                     }
                 });
+                // Follow the added slot so the Inspector can customize it without re-navigating.
                 if let Some(new_idx) = added_slot_idx {
                     self.selected_row = target_row;
                     self.selected_slot = new_idx;
@@ -574,7 +616,10 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Inspector pane: edits one field of the selected slot. h/l/Space step or toggle in place,
+    /// Enter opens the inline editor for text fields, and Delete clears the override.
     fn handle_inspector_key(&mut self, key: KeyEvent) -> bool {
+        // Snapshot: the arms below mutate the doc, which a borrow of the slot would forbid.
         let Some(slot_snapshot) = self.selected_item_slot().cloned() else {
             return false;
         };
@@ -582,6 +627,7 @@ impl ConfiguratorApp {
         if fields.is_empty() {
             return false;
         }
+        // Field lists differ per item id, so the index is clamped rather than trusted.
         let field = fields[self.inspector_idx.min(fields.len() - 1)];
         let row = self.selected_row;
         let slot_idx = self.selected_slot;
@@ -604,6 +650,7 @@ impl ConfiguratorApp {
                 self.set_selected_slot_priority(p);
                 true
             }
+            // h/l step enums and flip bools; free-text fields ignore them and need Enter.
             KeyCode::Left | KeyCode::Char('h') => {
                 self.step_or_toggle_inspector_field(row, slot_idx, &slot_snapshot, field, false)
             }
@@ -614,6 +661,7 @@ impl ConfiguratorApp {
                 self.step_or_toggle_inspector_field(row, slot_idx, &slot_snapshot, field, true)
             }
             KeyCode::Enter => self.activate_inspector_field(row, slot_idx, &slot_snapshot, field),
+            // Back to None (inherit the default), which drops the key from the serialized TOML.
             KeyCode::Delete | KeyCode::Backspace => {
                 self.reset_inspector_field(row, slot_idx, field);
                 true
@@ -622,6 +670,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// One h/l/Space step. Priority wraps inside 1..=5 and bools flip; the free-text fields
+    /// return `false` because only Enter opens an editor for them.
     fn step_or_toggle_inspector_field(
         &mut self,
         row: usize,
@@ -661,6 +711,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Enter on a field: text fields open the inline editor seeded with the current value (empty
+    /// when unset), while bools flip and priority steps without leaving the pane.
     fn activate_inspector_field(
         &mut self,
         row: usize,
@@ -748,6 +800,8 @@ impl ConfiguratorApp {
             let Some(slot) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) else {
                 return;
             };
+            // Tri-state: true goes back to None (inherit) rather than Some(false), so the TOML
+            // never carries a key that restates the default.
             let flip = |opt: &mut Option<bool>| {
                 *opt = if opt.unwrap_or(false) {
                     None
@@ -828,6 +882,7 @@ impl ConfiguratorApp {
                         self.style_preset_idx = (self.style_preset_idx + 1) % count;
                         true
                     }
+                    // h/l change the apply scope, not the highlighted preset.
                     KeyCode::Left | KeyCode::Char('h') => {
                         self.style_preset_scope = preset_scope_prev(self.style_preset_scope);
                         true
@@ -861,6 +916,7 @@ impl ConfiguratorApp {
                         self.style_field_idx = (self.style_field_idx + 1) % fields.len();
                         true
                     }
+                    // Only the four enum fields cycle; separator and indent are text (Enter).
                     KeyCode::Left | KeyCode::Char('h') => match field {
                         StyleField::Palette => {
                             self.cycle_palette(false);
@@ -927,6 +983,7 @@ impl ConfiguratorApp {
                             true
                         }
                     },
+                    // Reference defaults: " | " between items and a two-space indent.
                     KeyCode::Delete | KeyCode::Backspace => match field {
                         StyleField::Separator => {
                             self.mutate_doc(|doc| doc.separator = " | ".to_string());
@@ -960,6 +1017,7 @@ impl ConfiguratorApp {
                         self.palette_override_idx = (self.palette_override_idx + 1) % tokens.len();
                         true
                     }
+                    // Seeded with the raw override ("" when unset); committing empty removes it.
                     KeyCode::Enter => {
                         let init = self
                             .doc
@@ -981,6 +1039,7 @@ impl ConfiguratorApp {
     }
 
     fn handle_runtime_tab_key(&mut self, key: KeyEvent) -> bool {
+        // Only two panes, so Tab and Shift+Tab both toggle.
         match key.code {
             KeyCode::Tab | KeyCode::BackTab => {
                 self.runtime_pane = self.runtime_pane.toggle();
@@ -1052,6 +1111,7 @@ impl ConfiguratorApp {
                         self.runtime_field_idx = (self.runtime_field_idx + 1) % fields.len();
                         true
                     }
+                    // 250 ms steps, floored at 0 and capped at 600000 ms (10 min).
                     KeyCode::Left | KeyCode::Char('h') => match field {
                         RuntimeSubField::GitCacheMs => {
                             let next = self.doc.git_cache_ms.saturating_sub(250);
@@ -1080,6 +1140,7 @@ impl ConfiguratorApp {
                             true
                         }
                     },
+                    // 2000 ms is the default git cache TTL; an empty URL disables the touch.
                     KeyCode::Delete | KeyCode::Backspace => match field {
                         RuntimeSubField::GitCacheMs => {
                             self.mutate_doc(|doc| doc.git_cache_ms = 2000);
@@ -1096,6 +1157,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// One Left/Right step. Each warn/crit pair is clamped against its partner so they can never
+    /// cross or tie: context warn stays below crit, quota warn (remaining %) stays above crit.
     fn step_threshold_field(&mut self, field: ThresholdField, dir: i32) {
         match field {
             ThresholdField::SingleLine => {
@@ -1124,6 +1187,7 @@ impl ConfiguratorApp {
                 let next = (self.doc.thresholds.quota_crit + dir).clamp(0, max_val);
                 self.mutate_doc(|doc| doc.thresholds.quota_crit = next);
             }
+            // 5 s steps inside 0..=86400 (one day), the range the numeric editor also enforces.
             ThresholdField::CacheWarnSecs => {
                 let next = if dir >= 0 {
                     (self.doc.thresholds.cache_warn_secs + 5).min(86_400)
@@ -1165,6 +1229,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Delete/Backspace: the reference defaults (context 50/80, quota 45/20, cache 60 s), each
+    /// re-clamped against its partner so a reset cannot invert the pair.
     fn reset_threshold_field(&mut self, field: ThresholdField) {
         match field {
             ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = false),
@@ -1193,6 +1259,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Moves the selection over both rows flattened into one list, wrapping at the ends. An empty
+    /// row contributes one position so it stays selectable; the Inspector index resets each move.
     fn move_active_rows_cursor(&mut self, delta: isize) {
         let mut positions: Vec<(usize, usize)> = Vec::new();
         for r in 0..2 {
@@ -1220,6 +1288,8 @@ impl ConfiguratorApp {
         self.inspector_idx = 0;
     }
 
+    /// J/K: swaps the slot with its neighbour inside the same row, without wrapping, and the
+    /// selection follows it to the new index.
     fn reorder_selected_slot(&mut self, delta: isize) {
         let row_idx = self.selected_row;
         let slot_idx = self.selected_slot;
@@ -1240,6 +1310,8 @@ impl ConfiguratorApp {
         self.selected_slot = target_idx;
     }
 
+    /// 'm': appends the slot to the end of the other row and follows it there. A no-op on an empty
+    /// row, which has no slot to move.
     fn move_selected_slot_other_row(&mut self) {
         let from_row = self.selected_row.min(1);
         let to_row = 1 - from_row;
@@ -1279,6 +1351,8 @@ impl ConfiguratorApp {
         });
     }
 
+    /// Sets priority 1..=5, ignoring anything else. A value equal to the item's default is stored
+    /// as `None` so the TOML keeps only real overrides.
     fn set_selected_slot_priority(&mut self, prio: u8) {
         if !(1..=5).contains(&prio) {
             return;
@@ -1296,6 +1370,8 @@ impl ConfiguratorApp {
         });
     }
 
+    /// Global hotkeys, reached only when no modal, editor or pane consumed the key. Quitting a
+    /// dirty draft opens the 3-way exit instead of leaving.
     fn handle_tier4_global_key(&mut self, key: KeyEvent) -> Option<ConfiguratorExit> {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
@@ -1314,6 +1390,7 @@ impl ConfiguratorApp {
                 });
                 None
             }
+            // Hook hotkeys work from any tab, not just agy Hook, and only preview a diff.
             KeyCode::Char('i') => {
                 self.hook_action = HookAction::Connect;
                 self.open_hook_modal(HookAction::Connect);
@@ -1360,6 +1437,8 @@ impl ConfiguratorApp {
                 self.cycle_scenario(false);
                 None
             }
+            // +/- alias the brackets. Steps are 4 cols, clamped to 40..=200, and pin the width so
+            // cycling scenarios no longer resets it to the scenario default.
             KeyCode::Char('[') | KeyCode::Char('-') => {
                 self.adjust_sim_width(-4);
                 None
@@ -1368,6 +1447,7 @@ impl ConfiguratorApp {
                 self.adjust_sim_width(4);
                 None
             }
+            // '0' toggles unlimited width, remembering the last finite value for the way back.
             KeyCode::Char('0') => {
                 self.toggle_unbounded_width();
                 None
@@ -1376,6 +1456,7 @@ impl ConfiguratorApp {
                 self.toml_drawer_open = !self.toml_drawer_open;
                 None
             }
+            // Preview-only: File-Only ignores the AGY_* overrides without changing the draft.
             KeyCode::Char('e') => {
                 self.effective_preview_mode = !self.effective_preview_mode;
                 None
@@ -1384,11 +1465,14 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Mouse tier. The wheel synthesizes Up/Down so it moves the same selection as the keyboard;
+    /// clicks are ignored under the resize guard and during an inline edit, which owns the keys.
     fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Option<ConfiguratorExit> {
         if self.term_size.0 < 80 || self.term_size.1 < 22 || self.text_edit.is_some() {
             return None;
         }
 
+        // A modal swallows all mouse input; only the hook diff scrolls, 2 rows per wheel notch.
         if let Some(ref mut modal) = self.active_modal {
             match modal {
                 ActiveModal::HookDiff(hook_modal) => match mouse.kind {
@@ -1428,7 +1512,11 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Hit-tests a click against the layout view.rs draws. These row and column constants are a
+    /// second copy of that layout, so chrome heights, pane percentages and scroll offsets must
+    /// stay in sync with `draw_workbench` and the tab drawers.
     fn handle_left_click(&mut self, col: u16, row: u16) {
+        // Chrome rows: top bar 1, optional broken banner 1, preview 5, tab bar 1, then the body.
         let preview_y: u16 = if self.loaded_from_broken_toml { 2 } else { 1 };
         let tabs_y: u16 = preview_y + 5;
         let body_y: u16 = tabs_y + 1;
@@ -1442,6 +1530,7 @@ impl ConfiguratorApp {
         if row == tabs_y {
             let mut cursor_x = 0u16;
             for (idx, tab) in TuiTab::ALL.iter().copied().enumerate() {
+                // Tabs pads each title with one space per side and puts "|" between them.
                 let seg_w = (tab.title_for_width(self.term_size.0).chars().count() as u16) + 2;
                 if col >= cursor_x && col < cursor_x + seg_w {
                     self.active_tab = tab;
@@ -1449,6 +1538,7 @@ impl ConfiguratorApp {
                 }
                 cursor_x += seg_w + u16::from(idx + 1 < TuiTab::ALL.len());
             }
+            // Right of the tabs is the 22-col drawer label reserved by draw_tab_bar.
             if col >= self.term_size.0.saturating_sub(22) {
                 self.toml_drawer_open = !self.toml_drawer_open;
             }
@@ -1459,6 +1549,7 @@ impl ConfiguratorApp {
             return;
         }
 
+        // The drawer owns the right 40%, so a click there is not a pane click.
         let main_w = if self.toml_drawer_open {
             (self.term_size.0.saturating_mul(60)) / 100
         } else {
@@ -1468,12 +1559,15 @@ impl ConfiguratorApp {
             return;
         }
 
+        // +1 skips the pane's top border, so inner_row indexes the lines the pane drew.
         let inner_row = row.saturating_sub(body_y + 1) as usize;
         match self.active_tab {
             TuiTab::Layout => {
+                // The body's own top and bottom border rows are not list items.
                 if row == body_y || row == footer_y.saturating_sub(1) {
                     return;
                 }
+                // Both lists are scrolled by these offsets, so screen row -> index + offset.
                 let (rows_offset, catalog_offset) =
                     self.layout_list_offsets(footer_y.saturating_sub(body_y + 2) as usize);
                 let c0 = (main_w * 34) / 100;
@@ -1497,6 +1591,7 @@ impl ConfiguratorApp {
                 let c1 = c0 + (main_w * 40) / 100;
                 if col < c0 {
                     self.style_pane = StylePane::Presets;
+                    // Row 0 is the scope header, so preset indices start at inner_row 1.
                     if inner_row >= 1 && !self.available_presets.is_empty() {
                         self.style_preset_idx =
                             (inner_row - 1).min(self.available_presets.len() - 1);
@@ -1520,6 +1615,8 @@ impl ConfiguratorApp {
                 }
             }
             TuiTab::AgyHook => {
+                // The button row shifts with the optional symlink/command lines above it, so this
+                // index only matches when all are drawn. Column cuts split labels and gaps.
                 if inner_row == 6 {
                     let action = if col < 24 {
                         HookAction::Connect
@@ -1535,6 +1632,8 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Maps a scrolled Active Rows screen row back to (row, slot) by walking the same header and
+    /// empty-row lines `draw_layout_tab` emits. Clicking a line header selects that row's slot 0.
     fn click_active_rows_item(&mut self, inner_row: usize) {
         let mut line_cursor = 0usize;
         for r_idx in 0..2 {
@@ -1568,6 +1667,7 @@ impl ConfiguratorApp {
         }
     }
 
+    /// Same mapping for the Catalog, counting the category header lines the view inserts.
     fn click_catalog_item(&mut self, inner_row: usize) {
         let entries = ordered_catalog_entries();
         let mut line_cursor = 0usize;
@@ -1586,6 +1686,8 @@ impl ConfiguratorApp {
     }
 }
 
+/// Byte offset of char index `char_idx`, or `s.len()` when it is past the end. The edit cursor
+/// counts chars while `String::insert`/`remove` need bytes, so multi-byte icons stay intact.
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
         .nth(char_idx)
