@@ -27,3 +27,7 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     imp::ensure_private_dir(path)
 }
+
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    imp::replace_file_with_retry(tmp, dst)
+}

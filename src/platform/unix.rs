@@ -36,3 +36,13 @@ pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }
+
+pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
+    match fs::rename(tmp, dst) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(tmp);
+            Err(err)
+        }
+    }
+}

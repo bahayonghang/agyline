@@ -1,15 +1,85 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agyline::{
     CacheFrameState, EffectiveConfig, FrameData, GitFrameState, NoopSpawner, RelayStatus,
     RenderEnv, emit_ansi, emit_plain, parse_stdin_payload, render_lines, run_live_frame,
 };
+use rusqlite::{Connection, params};
 use serde::Deserialize;
+
+static SANDBOX_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+struct TempSandbox {
+    root: PathBuf,
+}
+
+impl TempSandbox {
+    fn new(label: &str) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let seq = SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "agyline_golden_{}_{}_{}_{}",
+            std::process::id(),
+            nanos,
+            seq,
+            label
+        ));
+        fs::create_dir_all(&dir).expect("create golden sandbox");
+        Self { root: dir }
+    }
+}
+
+impl Drop for TempSandbox {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct GoldenSuite {
     cases: Vec<GoldenCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionStateFixture {
+    file_name: String,
+    json: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct RelayFileFixture {
+    file_name: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GenRowFixture {
+    idx: i64,
+    chat_model: String,
+    #[serde(default)]
+    trailing_top_field19: Option<String>,
+    #[serde(default)]
+    trailing_pad_bytes: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct DbSetupFixture {
+    kind: String,
+    #[serde(default)]
+    mtime_sec: Option<u64>,
+    #[serde(default)]
+    gen_rows: Vec<GenRowFixture>,
+    #[serde(default)]
+    steps_pad_bytes: usize,
+    #[serde(default)]
+    steps_fake_model: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,8 +92,147 @@ struct GoldenCase {
     raw_stdin: Option<String>,
     #[serde(default)]
     payload: Option<serde_json::Value>,
+    #[serde(default)]
+    session_state: Option<SessionStateFixture>,
+    #[serde(default)]
+    relay_file: Option<RelayFileFixture>,
+    #[serde(default)]
+    db_setup: Option<DbSetupFixture>,
     expected_plain: String,
     expected_ansi: String,
+}
+
+fn push_varint(out: &mut Vec<u8>, mut val: u64) {
+    loop {
+        if val < 0x80 {
+            out.push(val as u8);
+            break;
+        }
+        out.push(((val & 0x7f) as u8) | 0x80);
+        val >>= 7;
+    }
+}
+
+fn push_len_field(out: &mut Vec<u8>, field_num: u64, bytes: &[u8]) {
+    push_varint(out, (field_num << 3) | 2);
+    push_varint(out, bytes.len() as u64);
+    out.extend_from_slice(bytes);
+}
+
+fn encode_gen_metadata_blob(
+    chat_model: &str,
+    trailing_top_field19: Option<&str>,
+    trailing_pad_bytes: usize,
+) -> Vec<u8> {
+    let mut inner_chat_model = Vec::new();
+    push_len_field(&mut inner_chat_model, 19, chat_model.as_bytes());
+
+    let mut outer = Vec::new();
+    push_len_field(&mut outer, 1, &inner_chat_model);
+    if let Some(top19) = trailing_top_field19 {
+        push_len_field(&mut outer, 19, top19.as_bytes());
+    }
+    if trailing_pad_bytes > 0 {
+        let pad = vec![b'x'; trailing_pad_bytes];
+        push_len_field(&mut outer, 2, &pad);
+    }
+    outer
+}
+
+fn prepare_db_setup(
+    conversations_dir: &Path,
+    session_id: &str,
+    setup: &DbSetupFixture,
+) -> Option<Connection> {
+    fs::create_dir_all(conversations_dir).expect("create conversations_dir");
+    let db_path = conversations_dir.join(format!("{session_id}.db"));
+
+    if setup.kind == "wal_stale_restart" {
+        let conn = Connection::open(&db_path).expect("open wal db");
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER NOT NULL DEFAULT 0);
+             CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_payload BLOB);",
+        )
+        .expect("init wal schema");
+        let r1 = encode_gen_metadata_blob("claude-opus-4-6", None, 0);
+        let r2 = encode_gen_metadata_blob("claude-haiku-4-5", None, 0);
+        let r3 = encode_gen_metadata_blob("gemini-2.5-pro", None, 0);
+        let big_step = vec![b'y'; 24_000];
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data, size) VALUES (?1, ?2, ?3)",
+            params![1_i64, r1, r1.len() as i64],
+        )
+        .expect("insert r1");
+        conn.execute(
+            "INSERT INTO steps (idx, step_payload) VALUES (1, ?1)",
+            params![big_step],
+        )
+        .expect("insert step");
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data, size) VALUES (?1, ?2, ?3)",
+            params![2_i64, r2, r2.len() as i64],
+        )
+        .expect("insert r2");
+        conn.execute_batch("PRAGMA wal_checkpoint(RESTART);")
+            .expect("wal_checkpoint(RESTART)");
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data, size) VALUES (?1, ?2, ?3)",
+            params![3_i64, r3, r3.len() as i64],
+        )
+        .expect("insert r3");
+        return Some(conn);
+    }
+
+    let conn = Connection::open(&db_path).expect("open standard db");
+    conn.execute_batch(
+        "CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER NOT NULL DEFAULT 0);
+         CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_payload BLOB);",
+    )
+    .expect("init standard schema");
+    for row in &setup.gen_rows {
+        let blob = encode_gen_metadata_blob(
+            &row.chat_model,
+            row.trailing_top_field19.as_deref(),
+            row.trailing_pad_bytes,
+        );
+        conn.execute(
+            "INSERT INTO gen_metadata (idx, data, size) VALUES (?1, ?2, ?3)",
+            params![row.idx, blob, blob.len() as i64],
+        )
+        .expect("insert gen_metadata row");
+    }
+    let mut step_idx = 1_i64;
+    if setup.steps_pad_bytes > 0 {
+        let pad = vec![b'x'; setup.steps_pad_bytes];
+        conn.execute(
+            "INSERT INTO steps (idx, step_payload) VALUES (?1, ?2)",
+            params![step_idx, pad],
+        )
+        .expect("insert padded step");
+        step_idx += 1;
+    }
+    if let Some(fake_model) = &setup.steps_fake_model {
+        let mut polluted = vec![b'z'; 4096];
+        polluted.extend_from_slice(&encode_gen_metadata_blob(fake_model, None, 0));
+        conn.execute(
+            "INSERT INTO steps (idx, step_payload) VALUES (?1, ?2)",
+            params![step_idx, polluted],
+        )
+        .expect("insert polluted step");
+    }
+    drop(conn);
+
+    if let Some(mtime_sec) = setup.mtime_sec {
+        let target_time = UNIX_EPOCH + Duration::from_secs(mtime_sec);
+        let f = fs::OpenOptions::new()
+            .write(true)
+            .open(&db_path)
+            .expect("open db for set_times");
+        f.set_times(fs::FileTimes::new().set_modified(target_time))
+            .expect("set db mtime");
+    }
+    None
 }
 
 #[test]
@@ -42,10 +251,37 @@ fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
             panic!("case {} missing both raw_stdin and payload", case.id);
         };
 
+        let sandbox = TempSandbox::new(&case.id);
+        let home_dir = sandbox.root.join("agyline_home");
+        let temp_dir = sandbox.root.join("relay_temp");
+        let conversations_dir = sandbox.root.join("conversations");
+        fs::create_dir_all(&temp_dir).expect("create temp_dir");
+
+        if let Some(seed) = &case.session_state {
+            let sessions_dir = home_dir.join("state").join("sessions");
+            fs::create_dir_all(&sessions_dir).expect("create sessions_dir");
+            let bytes = serde_json::to_vec(&seed.json).expect("serialize session_state");
+            fs::write(sessions_dir.join(&seed.file_name), bytes).expect("write session_state");
+        }
+
+        if let Some(relay) = &case.relay_file {
+            fs::write(temp_dir.join(&relay.file_name), &relay.content).expect("write relay_file");
+        }
+
+        let _held_wal_conn = case.db_setup.as_ref().map(|db_setup| {
+            let sid = case
+                .payload
+                .as_ref()
+                .and_then(|p| p.get("session_id"))
+                .and_then(|v| v.as_str())
+                .expect("db_setup case must specify payload.session_id");
+            prepare_db_setup(&conversations_dir, sid, db_setup)
+        });
+
         let env = RenderEnv {
-            home_dir: PathBuf::from("nonexistent_agyline_home"),
-            temp_dir: PathBuf::from("nonexistent_temp_dir"),
-            conversations_dir: PathBuf::from("nonexistent_conversations_dir"),
+            home_dir,
+            temp_dir,
+            conversations_dir,
             env_vars: case.env.clone(),
             now_ms: 1_700_000_000_000,
             spawner: &spawner,
