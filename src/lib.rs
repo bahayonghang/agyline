@@ -7,6 +7,13 @@ pub use config::{
     ThresholdsConfig,
 };
 pub use input::{MAX_STDIN_BYTES, Payload, QuotaBucketData, SubagentSummary, parse_stdin_payload};
+pub use install::{
+    ApplyOutcome, HookInspection, HookStatus, InstallEnv, InstallError, InstallOptions,
+    InstallPlan, SettingsMutationPlan, SnapshotAction, UninstallOptions, UninstallPlan,
+    apply_install, apply_uninstall, command_invokes_agyline, inspect_hook, plan_install,
+    plan_uninstall, resolve_command_string, run_install_cli, run_uninstall_cli,
+};
+pub use platform::{PlatformKind, create_file_symlink};
 pub use render::{
     ColorToken, RenderedFrame, StyledItem, StyledLine, StyledSpan, emit_ansi, emit_plain,
 };
@@ -17,6 +24,7 @@ mod cli;
 mod collect;
 mod config;
 mod input;
+mod install;
 mod items;
 mod platform;
 mod render;

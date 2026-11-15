@@ -3,6 +3,9 @@ use std::io::{self, IsTerminal, Read, Write};
 
 use crate::collect::SystemSpawner;
 use crate::input::MAX_STDIN_BYTES;
+use crate::install::{
+    InstallEnv, InstallOptions, UninstallOptions, run_install_cli, run_uninstall_cli,
+};
 use crate::statusline::{RenderEnv, run_live_frame};
 
 pub struct CliStreams<'a> {
@@ -29,6 +32,8 @@ enum CliAction {
     Help(HelpTopic),
     Version,
     Configurator,
+    Install(InstallOptions),
+    Uninstall(UninstallOptions),
     SubcommandNotImplemented(&'static str),
     UsageError(String),
 }
@@ -90,6 +95,20 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
             );
             1
         }
+        CliAction::Install(opts) => match InstallEnv::from_process() {
+            Ok(env) => run_install_cli(&env, opts, streams),
+            Err(err) => {
+                let _ = writeln!(streams.stderr, "error: {err}");
+                1
+            }
+        },
+        CliAction::Uninstall(opts) => match InstallEnv::from_process() {
+            Ok(env) => run_uninstall_cli(&env, opts, streams),
+            Err(err) => {
+                let _ = writeln!(streams.stderr, "error: {err}");
+                1
+            }
+        },
         CliAction::SubcommandNotImplemented(subcmd) => {
             let _ = writeln!(
                 streams.stderr,
@@ -178,8 +197,8 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
             )
         }
         "preview" => parse_subcommand_stub("preview", HelpTopic::Preview, &args[2..]),
-        "install" => parse_subcommand_stub("install", HelpTopic::Install, &args[2..]),
-        "uninstall" => parse_subcommand_stub("uninstall", HelpTopic::Uninstall, &args[2..]),
+        "install" => parse_install_args(&args[2..]),
+        "uninstall" => parse_uninstall_args(&args[2..]),
         other if other.starts_with('-') => {
             CliAction::UsageError(format!("unknown flag '{other}'"))
         }
@@ -195,6 +214,70 @@ fn parse_subcommand_stub(name: &'static str, topic: HelpTopic, tail: &[OsString]
         }
     }
     CliAction::SubcommandNotImplemented(name)
+}
+
+fn parse_install_args(tail: &[OsString]) -> CliAction {
+    let mut opts = InstallOptions::default();
+    let mut idx = 0;
+    while idx < tail.len() {
+        let s = tail[idx].to_string_lossy();
+        match s.as_ref() {
+            "-h" | "--help" => return CliAction::Help(HelpTopic::Install),
+            "--dry-run" => opts.dry_run = true,
+            "-y" | "--yes" => opts.yes = true,
+            "--" => {
+                if idx + 1 < tail.len() {
+                    return CliAction::UsageError(format!(
+                        "unexpected argument '{}' for 'install'",
+                        tail[idx + 1].to_string_lossy()
+                    ));
+                }
+                break;
+            }
+            flag if flag.starts_with('-') => {
+                return CliAction::UsageError(format!("unknown flag '{flag}' for 'install'"));
+            }
+            arg => {
+                return CliAction::UsageError(format!("unexpected argument '{arg}' for 'install'"));
+            }
+        }
+        idx += 1;
+    }
+    CliAction::Install(opts)
+}
+
+fn parse_uninstall_args(tail: &[OsString]) -> CliAction {
+    let mut opts = UninstallOptions::default();
+    let mut idx = 0;
+    while idx < tail.len() {
+        let s = tail[idx].to_string_lossy();
+        match s.as_ref() {
+            "-h" | "--help" => return CliAction::Help(HelpTopic::Uninstall),
+            "--dry-run" => opts.dry_run = true,
+            "-y" | "--yes" => opts.yes = true,
+            "--reset" => opts.reset = true,
+            "--purge" => opts.purge = true,
+            "--" => {
+                if idx + 1 < tail.len() {
+                    return CliAction::UsageError(format!(
+                        "unexpected argument '{}' for 'uninstall'",
+                        tail[idx + 1].to_string_lossy()
+                    ));
+                }
+                break;
+            }
+            flag if flag.starts_with('-') => {
+                return CliAction::UsageError(format!("unknown flag '{flag}' for 'uninstall'"));
+            }
+            arg => {
+                return CliAction::UsageError(format!(
+                    "unexpected argument '{arg}' for 'uninstall'"
+                ));
+            }
+        }
+        idx += 1;
+    }
+    CliAction::Uninstall(opts)
 }
 
 fn help_text(topic: HelpTopic) -> &'static str {

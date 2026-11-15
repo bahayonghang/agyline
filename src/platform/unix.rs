@@ -6,6 +6,14 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+pub fn host_platform() -> super::PlatformKind {
+    super::PlatformKind::Unix
+}
+
+pub fn short_path_name(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
 pub fn user_home_dir(env_lookup: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     if let Some(val) = env_lookup("HOME") {
         let trimmed = val.trim();
@@ -35,4 +43,8 @@ pub fn spawn_detached_self(args: &[&OsStr]) -> io::Result<()> {
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
+pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
 }
