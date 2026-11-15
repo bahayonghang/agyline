@@ -1,0 +1,841 @@
+{
+  "cases": [
+    {
+      "id": "A01_empty_stdin",
+      "description": "Empty or whitespace-only stdin outputs 0 B with exit 0",
+      "env": {},
+      "raw_stdin": "   \n",
+      "expected_plain": "",
+      "expected_ansi": ""
+    },
+    {
+      "id": "A02_invalid_json",
+      "description": "Malformed JSON outputs 0 B with exit 0",
+      "env": {},
+      "raw_stdin": "{not-json",
+      "expected_plain": "",
+      "expected_ansi": ""
+    },
+    {
+      "id": "A03_top_level_empty_array",
+      "description": "Top-level empty JSON array [] outputs 0 B",
+      "env": {},
+      "raw_stdin": "[]",
+      "expected_plain": "",
+      "expected_ansi": ""
+    },
+    {
+      "id": "A04_top_level_nonempty_array",
+      "description": "DIV-01: Top-level non-empty JSON array [1] outputs 0 B",
+      "env": {},
+      "raw_stdin": "[1]",
+      "expected_plain": "",
+      "expected_ansi": ""
+    },
+    {
+      "id": "A05_top_level_scalar",
+      "description": "DIV-01: Top-level JSON scalar 123 outputs 0 B",
+      "env": {},
+      "raw_stdin": "123",
+      "expected_plain": "",
+      "expected_ansi": ""
+    },
+    {
+      "id": "A06_case_colliding_keys",
+      "description": "DIV-02: Case-colliding extra keys x and X parse cleanly",
+      "env": {},
+      "raw_stdin": "{\"session_id\":\"probe_a06\",\"x\":1,\"X\":2}",
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "A07_uppercase_field_names",
+      "description": "DIV-03: JSON keys are strictly case-sensitive (THINKINGLEVEL ignored)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_a07",
+        "THINKINGLEVEL": "high"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B01_missing_both_ids",
+      "description": "Empty object {} in Pre-session renders Default Line immediately",
+      "env": {},
+      "payload": {},
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B02_conversation_id_fallback",
+      "description": "Missing session_id falls back to conversation_id",
+      "env": {},
+      "payload": {
+        "conversation_id": "probe_conv_b02"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B03_empty_session_id_startup",
+      "description": "DIV-04: agy 1.5.9 Pre-session startup frame with empty IDs renders model, quota, and mode immediately",
+      "env": {},
+      "payload": {
+        "session_id": "",
+        "conversation_id": "",
+        "agent_state": "idle",
+        "model": {
+          "id": "Gemini 4 Carbon (High)",
+          "display_name": "Gemini 4 Carbon (High)",
+          "effort": "high"
+        },
+        "cycle_mode": "auto",
+        "quota": {
+          "3p-weekly": {
+            "remaining_fraction": 0.49016213
+          },
+          "gemini-5h": {
+            "remaining_fraction": 0.96379286
+          }
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon · High |  0% |  cold | 󰁾 49% quota\n  ▸▸ auto mode on (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;92m󰁾 49% quota\u001b[0m\n  \u001b[0m\u001b[0;91m▸▸ auto mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "B04_empty_session_id_with_conv_id",
+      "description": "DIV-04: Empty session_id falls back to non-empty conversation_id",
+      "env": {},
+      "payload": {
+        "session_id": "",
+        "conversation_id": "probe_conv_b04"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B04b_whitespace_session_id_with_conv_id_working",
+      "description": "DIV-04: Whitespace session_id falls back to conversation_id and warms cache on working",
+      "env": {},
+      "payload": {
+        "session_id": "   ",
+        "conversation_id": "probe_conv_b04b",
+        "agent_state": "working"
+      },
+      "expected_plain": "   Model |  0% |  5:00\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n"
+    },
+    {
+      "id": "B05_agent_state_working",
+      "description": "agent_state=working anchors warm cache TTL at 5:00",
+      "env": {},
+      "payload": {
+        "session_id": "probe_b05",
+        "agent_state": "working"
+      },
+      "expected_plain": "   Model |  0% |  5:00\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n"
+    },
+    {
+      "id": "B06_agent_state_empty_string",
+      "description": "DIV-05: Empty agent_state normalizes to idle and keeps cache cold",
+      "env": {},
+      "payload": {
+        "session_id": "probe_b06",
+        "agent_state": ""
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B07_presession_working_stays_cold",
+      "description": "Pre-session frame never anchors warm cache TTL even if agent_state=working",
+      "env": {},
+      "payload": {
+        "session_id": "  ",
+        "conversation_id": "",
+        "agent_state": "working"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "B08_startup_agent_states_stay_cold",
+      "description": "agent_state authenticating or initializing does not anchor warm cache TTL",
+      "env": {},
+      "payload": {
+        "session_id": "probe_b08",
+        "agent_state": "initializing"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C01_display_paren_effort",
+      "description": "display_name parenthetical effort and explicit model.effort",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c01",
+        "model": {
+          "id": "Gemini 4 Carbon (High)",
+          "display_name": "Gemini 4 Carbon (High)",
+          "effort": "high"
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon · High |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C02_display_middledot_no_effort",
+      "description": "DIV-06: display_name with middle dot splits into model and effort with separator color",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c02",
+        "model": {
+          "display_name": "Gemini 4 Carbon · High"
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon · High |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C03_display_middledot_with_effort",
+      "description": "DIV-06: display_name with middle dot + explicit effort strips suffix without duplication",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c03",
+        "model": {
+          "display_name": "Gemini 4 Carbon · High",
+          "effort": "high"
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon · High |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C04_display_middledot_norm_effort",
+      "description": "DIV-06: display_name with middle dot normalizes extracted medium to Med",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c04",
+        "model": {
+          "display_name": "Gemini 4 Carbon · medium"
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon · Med |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon\u001b[0;37m · \u001b[0;96mMed\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C05_effort_mapping_all_levels",
+      "description": "thinkingLevel fallback (very_high -> xHigh) and Claude 1M date-stamped slug",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c05",
+        "model": {
+          "id": "models/claude-opus-4-6-1m-20250929"
+        },
+        "thinkingLevel": "very_high"
+      },
+      "expected_plain": "   Opus 4.6 1M · xHigh |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Opus 4.6 1M\u001b[0;37m · \u001b[0;96mxHigh\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C06_empty_effort_blocks_thinkinglevel",
+      "description": "DIV-04: Empty model.effort falls back to thinkingLevel (max -> Max) and Claude B-order slug",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c06",
+        "model": {
+          "id": "claude-3-5-sonnet",
+          "effort": ""
+        },
+        "thinkingLevel": "max"
+      },
+      "expected_plain": "   Sonnet 3.5 · Max |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Sonnet 3.5\u001b[0;37m · \u001b[0;96mMax\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C07_gpt_standard_4o_32k",
+      "description": "GPT slug with digit-prefixed suffix (gpt-4o-32k -> GPT-4 O 32K)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c07",
+        "model": {
+          "id": "gpt-4o-32k"
+        }
+      },
+      "expected_plain": "   GPT-4 O 32K |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m GPT-4 O 32K\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C08_gpt_alnum_word_titlecase",
+      "description": "DIV-07: GPT alphanumeric word capitalizes only first letter (gpt-5-o4mini -> GPT-5 O4mini)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c08",
+        "model": {
+          "id": "gpt-5-o4mini"
+        }
+      },
+      "expected_plain": "   GPT-5 O4mini |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m GPT-5 O4mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C09_gpt_double_hyphen",
+      "description": "DIV-08: GPT repeated hyphens collapse to single spaces (gpt-4--mini -> GPT-4 Mini)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c09",
+        "model": {
+          "id": "gpt-4--mini"
+        }
+      },
+      "expected_plain": "   GPT-4 Mini |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m GPT-4 Mini\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C10_uppercase_prefix_suffix_slug",
+      "description": "DIV-09: Case-insensitive stripping of models/ prefix and -preview suffix",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c10",
+        "model": {
+          "id": "MODELS/gemini-2.5-pro-PREVIEW"
+        }
+      },
+      "expected_plain": "   Gemini 2.5 Pro |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 2.5 Pro\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "C11_generic_kebab_slug",
+      "description": "Generic kebab-case prettification with short alnum uppercase (v2 -> V2) and preview date strip",
+      "env": {},
+      "payload": {
+        "session_id": "probe_c11",
+        "model": {
+          "id": "gemini-4-carbon-v2-preview-05-06"
+        }
+      },
+      "expected_plain": "   Gemini 4 Carbon V2 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4 Carbon V2\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D01_workspace_fallbacks",
+      "description": "Missing cwd falls back through workspace.current_dir to workspace.project_dir and strips trailing slashes",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d01",
+        "workspace": {
+          "project_dir": "D:\\NonExistent\\agyline-demo\\\\"
+        }
+      },
+      "expected_plain": "   Model | 󰉋 agyline-demo |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m agyline-demo\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D02_empty_cwd_blocks_workspace",
+      "description": "DIV-04: Empty cwd falls back to workspace.current_dir and renders payload vcs.branch",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d02",
+        "cwd": "",
+        "workspace": {
+          "current_dir": "D:\\NonExistent\\ws-repo"
+        },
+        "vcs": {
+          "branch": "main"
+        }
+      },
+      "expected_plain": "   Model | 󰉋 ws-repo | 󰊢 main ✓ |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m ws-repo\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D03_drive_root_cwd",
+      "description": "Windows drive root cwd D:\\ renders D:",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d03",
+        "cwd": "D:\\"
+      },
+      "expected_plain": "   Model | 󰉋 D: |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m D:\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D03b_unix_root_cwd",
+      "description": "Unix root cwd / renders /",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d03b",
+        "cwd": "/"
+      },
+      "expected_plain": "   Model | 󰉋 / |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m /\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D05b_payload_dirty_and_long_branch_truncation",
+      "description": "Payload vcs.branch >24 codepoints truncates to 23 + ellipsis and vcs.dirty=true shows ●",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d05b",
+        "cwd": "D:\\NonExistent\\ab-repo",
+        "vcs": {
+          "branch": "feature/twenty-five-chars",
+          "dirty": true
+        }
+      },
+      "expected_plain": "   Model | 󰉋 ab-repo | 󰊢 feature/twenty-five-cha… ● |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m ab-repo\u001b[0;37m | \u001b[0;94m󰊢 feature/twenty-five-cha… ●\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D09_branch_emoji_utf16_vs_codepoint",
+      "description": "DIV-11: Emoji branch with 24 Unicode scalar values is not truncated or split mid-surrogate",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d09",
+        "vcs": {
+          "branch": "aaaaaaaaaaaaaaaaaaaaaa🚀b"
+        }
+      },
+      "expected_plain": "   Model | 󰊢 aaaaaaaaaaaaaaaaaaaaaa🚀b ✓ |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 aaaaaaaaaaaaaaaaaaaaaa🚀b ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D10_vcs_dirty_nonbool_int",
+      "description": "DIV-12: Integer 1 for vcs.dirty and sandbox.enabled is treated as false (strict JSON bool true)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d10",
+        "vcs": {
+          "branch": "main",
+          "dirty": 1
+        },
+        "sandbox": {
+          "enabled": 1
+        }
+      },
+      "expected_plain": "   Model | 󰊢 main ✓ |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;94m󰊢 main ✓\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "D11_cp936_non_ascii_stdin",
+      "description": "DIV-13: Non-ASCII UTF-8 cwd path renders CJK leaf directory cleanly",
+      "env": {},
+      "payload": {
+        "session_id": "probe_d11",
+        "cwd": "D:\\中文目录\\项目名",
+        "model": {
+          "display_name": "Gemini 4 (High)"
+        }
+      },
+      "expected_plain": "   Gemini 4 · High | 󰉋 项目名 |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Gemini 4\u001b[0;37m · \u001b[0;96mHigh\u001b[0;37m | \u001b[0;93m󰉋\u001b[0;92m 项目名\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "E01_ctx_tokens_and_cache_hit",
+      "description": "Context window normal (<50%), k compact tokens, warm 5:00 TTL, and 94% cache hit",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e01",
+        "agent_state": "working",
+        "context_window": {
+          "context_window_size": 1048576,
+          "current_usage": {
+            "input_tokens": 12000,
+            "output_tokens": 500,
+            "cache_read_input_tokens": 198000
+          }
+        }
+      },
+      "expected_plain": "   Model |  20% · 210k tokens |  5:00 · 94% hit\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 20%\u001b[0;37m · \u001b[0;95m210k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0;37m · \u001b[0;34m94% hit\u001b[0m\n"
+    },
+    {
+      "id": "E02_ctx_warn_and_crit_thresholds",
+      "description": "Context >=80% critical color and 1.25M -> 1.2M IEEE-754 ties-to-even compact formatting",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e02",
+        "context_window": {
+          "context_window_size": 1500000,
+          "current_usage": {
+            "input_tokens": 1250000
+          }
+        }
+      },
+      "expected_plain": "   Model |  83% · 1.2M tokens |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;31m 83%\u001b[0;37m · \u001b[0;31m1.2M tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "E02b_ctx_warn_50_pct",
+      "description": "Context >=50% warning color",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e02b",
+        "context_window": {
+          "context_window_size": 200000,
+          "current_usage": {
+            "input_tokens": 100000
+          }
+        }
+      },
+      "expected_plain": "   Model |  50% · 100k tokens |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;33m 50%\u001b[0;37m · \u001b[0;33m100k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "E03_rounding_midpoints_ties_to_even",
+      "description": "IEEE-754 ties-to-even midpoints: 10.5% -> 10%, $2.675 -> $2.67, quota 0.445 -> 44%, disabled bucket ignored",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e03",
+        "context_window": {
+          "used_percentage": 10.5,
+          "context_window_size": 200000
+        },
+        "cost": 2.675,
+        "quota": {
+          "a": {
+            "remaining_fraction": 0.445
+          },
+          "b": {
+            "remaining_fraction": 0.01,
+            "disabled": true
+          }
+        }
+      },
+      "expected_plain": "   Model |  10% · 21k tokens |  cold | 󰁼 44% quota · $2.67\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m\u001b[0;95m 10%\u001b[0;37m · \u001b[0;95m21k tokens\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m󰁼 44% quota\u001b[0;37m · \u001b[0;33m$2.67\u001b[0m\n"
+    },
+    {
+      "id": "E04_rounding_small_pct_and_subdollar_cost",
+      "description": "Small percentage 0.25% -> 0.2%, subdollar cost.total_usd 0.0625 -> $0.062, and <20% crit quota",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e04",
+        "context_window": {
+          "used_percentage": 0.25
+        },
+        "cost": {
+          "total_usd": 0.0625
+        },
+        "quota": {
+          "3p-5h": {
+            "remaining_fraction": 0.15
+          }
+        }
+      },
+      "expected_plain": "   Model |  0.2% |  cold | 󰁺 15% quota · $0.062\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0.2%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;31m󰁺 15% quota\u001b[0;37m · \u001b[0;33m$0.062\u001b[0m\n"
+    },
+    {
+      "id": "E05_cost_top_level_string",
+      "description": "DIV-14: String cost \"0.42\" is rejected (only finite JSON number or object.total_usd accepted)",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e05",
+        "cost": "0.42"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "E06_quota_fraction_gt_one",
+      "description": "DIV-15: Quota remaining_fraction > 1.0 (1.2) is out of bounds and ignored",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e06",
+        "quota": {
+          "b": {
+            "remaining_fraction": 1.2
+          }
+        }
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "E07_numeric_string_underscore_and_inf",
+      "description": "DIV-16: Non-numeric string \"inf\" in numeric field falls back to 0 without crashing",
+      "env": {},
+      "payload": {
+        "session_id": "probe_e07",
+        "task_count": "inf"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "G01_line2_all_active_runtime",
+      "description": "Line 2 all runtime segments active: yolo mode, 2/3 running subagents, singular task, queued, sandbox+net",
+      "env": {},
+      "payload": {
+        "session_id": "probe_g01",
+        "execution_mode": "yolo",
+        "subagents": [
+          {
+            "status": "running"
+          },
+          {
+            "status": "completed"
+          },
+          {
+            "status": "thinking"
+          }
+        ],
+        "task_count": 1,
+        "pending_input_count": 2,
+        "sandbox": {
+          "enabled": true,
+          "allow_network": true
+        }
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ bypass permissions on (shift+tab to cycle) |  2/3 agents running |  1 task |  2 queued |  sandbox+net\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;91m▸▸ bypass permissions on\u001b[0;90m (shift+tab to cycle)\u001b[0;37m | \u001b[0;96m 2/3 agents running\u001b[0;37m | \u001b[0;33m 1 task\u001b[0;37m | \u001b[0;95m 2 queued\u001b[0;37m | \u001b[0;96m sandbox+net\u001b[0m\n"
+    },
+    {
+      "id": "G02_line2_confirm_pending_and_idle_agents",
+      "description": "tool_confirmation_pending overrides cycle_mode, idle subagents, plural tasks, offline sandbox",
+      "env": {},
+      "payload": {
+        "session_id": "probe_g02",
+        "tool_confirmation_pending": true,
+        "cycle_mode": "auto",
+        "subagents": [
+          {
+            "status": "completed"
+          },
+          {
+            "status": "done"
+          }
+        ],
+        "task_count": 3,
+        "sandbox": {
+          "enabled": true,
+          "allow_network": false
+        }
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ⚠ approval required (waiting for tool confirmation) |  2 agents |  3 tasks |  sandbox\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;33m⚠ approval required\u001b[0;90m (waiting for tool confirmation)\u001b[0;37m | \u001b[0;90m 2 agents\u001b[0;37m | \u001b[0;33m 3 tasks\u001b[0;37m | \u001b[0;96m sandbox\u001b[0m\n"
+    },
+    {
+      "id": "G03_empty_exec_mode_blocks_cycle_mode",
+      "description": "DIV-04: Empty execution_mode falls back to cycle_mode=plan",
+      "env": {},
+      "payload": {
+        "session_id": "probe_g03",
+        "execution_mode": "",
+        "cycle_mode": "plan"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ plan mode on (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;96m▸▸ plan mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "G04_subagent_status_uppercase",
+      "description": "DIV-19: Uppercase subagents[].status RUNNING counts as running",
+      "env": {},
+      "payload": {
+        "session_id": "probe_g04",
+        "subagents": [
+          {
+            "status": "RUNNING"
+          }
+        ]
+      },
+      "expected_plain": "   Model |  0% |  cold\n   1/1 agents running\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;96m 1/1 agents running\u001b[0m\n"
+    },
+    {
+      "id": "H01_env_theme_light",
+      "description": "AGY_THEME=light switches SGR palette to light polarity",
+      "env": {
+        "AGY_THEME": "light"
+      },
+      "payload": {
+        "session_id": "probe_h01",
+        "cycle_mode": "accept-edits"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ accept edits on (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;35m▸▸ accept edits on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "H02_env_colorfgbg_auto_light_and_dark_override",
+      "description": "AGY_THEME=dark overrides COLORFGBG=0;15 back to dark polarity and renders best-of-n",
+      "env": {
+        "AGY_THEME": "dark",
+        "COLORFGBG": "0;15"
+      },
+      "payload": {
+        "session_id": "probe_h02",
+        "cycle_mode": "best-of-n"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ best-of-n mode on (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;94m▸▸ best-of-n mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "H02b_env_colorfgbg_auto_light",
+      "description": "COLORFGBG=0;15 automatically selects light polarity when AGY_THEME is unset",
+      "env": {
+        "COLORFGBG": "0;15"
+      },
+      "payload": {
+        "session_id": "probe_h02b"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "H03_env_theme_trailing_space",
+      "description": "DIV-20: AGY_THEME=\"light \" trims trailing whitespace and selects light polarity",
+      "env": {
+        "AGY_THEME": "light "
+      },
+      "payload": {
+        "session_id": "probe_h03"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;36m Model\u001b[0;90m | \u001b[0;35m 0%\u001b[0;90m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "H04_env_lines_single_mode_pill",
+      "description": "AGY_STATUSLINE_LINES=1 folds into single line and appends compact mode pill ▸▸ auto",
+      "env": {
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_h04",
+        "cycle_mode": "auto",
+        "task_count": 2
+      },
+      "expected_plain": "   Model |  0% |  cold | ▸▸ auto\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;91m▸▸ auto\u001b[0m\n"
+    },
+    {
+      "id": "H05_env_lines_single_confirm",
+      "description": "AGY_STATUSLINE_LINES=1 with tool_confirmation_pending=true appends ⚠ confirm",
+      "env": {
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_h05",
+        "tool_confirmation_pending": true
+      },
+      "expected_plain": "   Model |  0% |  cold | ⚠ confirm\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;33m⚠ confirm\u001b[0m\n"
+    },
+    {
+      "id": "H06_env_indent_custom_and_empty",
+      "description": "AGY_STATUSLINE_INDENT preserves exact four-space indent without trimming",
+      "env": {
+        "AGY_STATUSLINE_INDENT": "    "
+      },
+      "payload": {
+        "session_id": "probe_h06",
+        "cycle_mode": "auto"
+      },
+      "expected_plain": "     Model |  0% |  cold\n    ▸▸ auto mode on (shift+tab to cycle)\n",
+      "expected_ansi": "    \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n    \u001b[0m\u001b[0;91m▸▸ auto mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "H06b_env_indent_empty",
+      "description": "AGY_STATUSLINE_INDENT=\"\" overrides default indent to zero spaces",
+      "env": {
+        "AGY_STATUSLINE_INDENT": ""
+      },
+      "payload": {
+        "session_id": "probe_h06b"
+      },
+      "expected_plain": " Model |  0% |  cold\n",
+      "expected_ansi": "\u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "H07_env_show_default_mode",
+      "description": "AGY_SHOW_DEFAULT_MODE=1 renders ask mode when cycle_mode=default",
+      "env": {
+        "AGY_SHOW_DEFAULT_MODE": "1"
+      },
+      "payload": {
+        "session_id": "probe_h07",
+        "cycle_mode": "default"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ ask mode (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m▸▸ ask mode (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "H09_env_cache_relay_uppercase_OFF",
+      "description": "DIV-21: AGY_CACHE_RELAY=\"OFF\" disables relay case-insensitively",
+      "env": {
+        "AGY_CACHE_RELAY": "OFF"
+      },
+      "payload": {
+        "session_id": "probe_h09",
+        "agent_state": "working"
+      },
+      "expected_plain": "   Model |  0% |  5:00\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;34m 5:00\u001b[0m\n"
+    },
+    {
+      "id": "I01_bestn_two_line",
+      "description": "agy 1.5.9 cycle_mode=bestn normalizes to best-of-n mode on in 2-line mode",
+      "env": {},
+      "payload": {
+        "session_id": "probe_i01",
+        "cycle_mode": "bestn"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ best-of-n mode on (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;94m▸▸ best-of-n mode on\u001b[0;90m (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "I02_bestn_single_line",
+      "description": "agy 1.5.9 cycle_mode=bestn normalizes single-line pill to ▸▸ best-of-n",
+      "env": {
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_i02",
+        "cycle_mode": "bestn"
+      },
+      "expected_plain": "   Model |  0% |  cold | ▸▸ best-of-n\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0;37m | \u001b[0;91m▸▸ best-of-n\u001b[0m\n"
+    },
+    {
+      "id": "I03_empty_mode_show_default",
+      "description": "agy 1.5.9 omitted/empty cycle_mode renders ask mode when AGY_SHOW_DEFAULT_MODE=1",
+      "env": {
+        "AGY_SHOW_DEFAULT_MODE": "1"
+      },
+      "payload": {
+        "session_id": "probe_i03"
+      },
+      "expected_plain": "   Model |  0% |  cold\n  ▸▸ ask mode (shift+tab to cycle)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n  \u001b[0m\u001b[0;90m▸▸ ask mode (shift+tab to cycle)\u001b[0m\n"
+    },
+    {
+      "id": "I03b_empty_mode_show_default_single_line_omits_pill",
+      "description": "Single-line mode does not append a compact pill for default ask mode",
+      "env": {
+        "AGY_SHOW_DEFAULT_MODE": "1",
+        "AGY_STATUSLINE_LINES": "1"
+      },
+      "payload": {
+        "session_id": "probe_i03b"
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    },
+    {
+      "id": "I04_email_and_battle_ignored",
+      "description": "Payload email and undocumented battle fields are silently ignored and never rendered",
+      "env": {},
+      "payload": {
+        "session_id": "probe_i04",
+        "email": "user@example.com",
+        "battle": {
+          "active": true,
+          "secret": "do-not-render"
+        }
+      },
+      "expected_plain": "   Model |  0% |  cold\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m Model\u001b[0;37m | \u001b[0;95m 0%\u001b[0;37m | \u001b[0;34m\u001b[0;90m cold\u001b[0m\n"
+    }
+  ]
+}
