@@ -67,7 +67,10 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
     let action = parse_args(args, streams.stdin_is_terminal);
     match action {
         CliAction::LiveRender => execute_live_render(streams),
-        CliAction::HiddenRefreshGit(_tail) => 0,
+        CliAction::HiddenRefreshGit(tail) => {
+            crate::collect::run_hidden_refresh_git(&tail);
+            0
+        }
         CliAction::HiddenTouch(_tail) => 0,
         CliAction::Help(topic) => {
             let text = help_text(topic);

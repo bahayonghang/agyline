@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[cfg(unix)]
 use self::unix as imp;
@@ -44,4 +45,12 @@ pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
 
 pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
     imp::create_file_symlink(original, link)
+}
+
+pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<()> {
+    imp::replace_file_with_retry(tmp_path, dst_path)
+}
+
+pub fn configure_background_command(cmd: &mut Command) {
+    imp::configure_background_command(cmd);
 }

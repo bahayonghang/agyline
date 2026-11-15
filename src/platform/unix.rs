@@ -48,3 +48,9 @@ pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
 pub fn create_file_symlink(original: &Path, link: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(original, link)
 }
+
+pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<()> {
+    fs::rename(tmp_path, dst_path)
+}
+
+pub fn configure_background_command(_cmd: &mut Command) {}
