@@ -5,9 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::collect::{self, FrameData, Spawner};
 use crate::config::EffectiveConfig;
 use crate::input::parse_stdin_payload;
-use crate::items::evaluate_item;
+use crate::items::evaluate_slot_dual;
 use crate::platform;
-use crate::render::{RenderedFrame, StyledLine, emit_ansi, emit_plain, layout::layout_lines};
+use crate::render::{RenderedFrame, emit_ansi, emit_plain, layout::layout_evaluated_rows};
 
 pub struct RenderEnv<'a> {
     pub home_dir: PathBuf,
@@ -57,19 +57,28 @@ pub struct LiveOutput {
 }
 
 pub fn render_lines(frame: &FrameData, config: &EffectiveConfig) -> RenderedFrame {
-    let mut raw_lines = Vec::with_capacity(config.lines.len());
-    for row_items in &config.lines {
-        let mut items = Vec::with_capacity(row_items.len());
-        for &id in row_items {
-            if let Some(evaluated) = evaluate_item(id, frame, config) {
-                items.push(evaluated);
-            }
+    render_lines_with_width(frame, config, frame.payload.terminal_width)
+}
+
+pub fn render_lines_with_width(
+    frame: &FrameData,
+    config: &EffectiveConfig,
+    width_override: Option<usize>,
+) -> RenderedFrame {
+    let mut evaluated_rows = Vec::with_capacity(config.lines.len());
+    for row_slots in &config.lines {
+        let mut row = Vec::with_capacity(row_slots.len());
+        for slot in row_slots {
+            row.push(evaluate_slot_dual(slot, frame, config));
         }
-        raw_lines.push(StyledLine { items });
+        evaluated_rows.push(row);
     }
+    let (lines, slot_outcomes) =
+        layout_evaluated_rows(evaluated_rows, frame, config, width_override);
     RenderedFrame {
-        lines: layout_lines(raw_lines, frame, config),
+        lines,
         config_broken: config.config_broken,
+        slot_outcomes,
     }
 }
 

@@ -4,8 +4,12 @@ pub use collect::{
     SystemSpawner, parse_porcelain_v2, refresh_git_at, resolve_git_frame,
 };
 pub use config::{
-    ColorDepth, EffectiveConfig, GlyphSet, ItemId, OverflowMode, ThemePolarity, ThemeSetting,
-    ThresholdsConfig,
+    ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigLoadResult, ConfigSyntaxError, EffectiveConfig,
+    GlyphSet, ItemId, ItemSlot, OverflowMode, PaletteOverrides, PresetScope, ThemePolarity,
+    ThemeSetting, ThresholdsConfig, inspect_env_overrides, load_config_doc, parse_config_doc,
+    parse_config_doc_with_home,
+    presets::{PresetInfo, apply_preset, build_preset_doc, builtin_presets, discover_presets},
+    serialize_config_doc,
 };
 pub use input::{MAX_STDIN_BYTES, Payload, QuotaBucketData, SubagentSummary, parse_stdin_payload};
 pub use install::{
@@ -14,22 +18,34 @@ pub use install::{
     apply_install, apply_uninstall, command_invokes_agyline, inspect_hook, plan_install,
     plan_uninstall, resolve_command_string, run_install_cli, run_uninstall_cli,
 };
-pub use platform::{PlatformKind, create_file_symlink};
+pub use items::{
+    EvaluatedItem, ItemCatalogEntry, ItemCategory, ItemOptionKind, ItemOptionSpec, catalog,
+    evaluate_slot, evaluate_slot_dual,
+};
+pub use platform::{PlatformKind, create_file_symlink, host_platform, stdout_terminal_columns};
 pub use render::{
-    ColorToken, RenderedFrame, StyledItem, StyledLine, StyledSpan, emit_ansi, emit_plain,
+    Ansi16Color, ColorSpec, ColorToken, EffectiveColorDepth, PaletteInfo, PalettePolarity,
+    RenderedFrame, ResolvedColor, ResolvedPalette, SlotOutcome, StyledItem, StyledLine, StyledSpan,
+    builtin_palettes, discover_palettes, emit_ansi, emit_plain, parse_color_spec,
+    resolve_effective_color_depth, resolve_palette, str_display_width,
+};
+pub use scenarios::{
+    PREVIEW_ANCHOR_SEC, Scenario, builtin_scenarios, find_scenario, stateless_frame_from_payload,
 };
 pub use state::{
     GitCacheEntry, cwd_hash_hex, ensure_state_dir, git_cache_path, git_lock_path,
     maybe_sweep_stale_state, normalize_cwd_lexical, read_git_cache, write_git_cache,
 };
-pub use statusline::{LiveOutput, RenderEnv, render_lines, run_live_frame};
+pub use statusline::{
+    LiveOutput, RenderEnv, render_lines, render_lines_with_width, run_live_frame,
+};
 
 mod cli;
 mod collect;
 mod config;
 mod input;
 mod install;
-mod items;
+pub mod items;
 mod platform;
 mod render;
 mod scenarios;

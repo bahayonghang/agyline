@@ -132,8 +132,18 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
 
     let (cost_usd, subagent_cost_usd) = if let Some(Value::Object(cost_map)) = obj.get("cost") {
         (
-            finite_f64(cost_map.get("total_usd")).unwrap_or(0.0),
-            finite_f64(cost_map.get("subagent_usd")).unwrap_or(0.0),
+            finite_f64(
+                cost_map
+                    .get("total_usd")
+                    .or_else(|| cost_map.get("total_cost_usd")),
+            )
+            .unwrap_or(0.0),
+            finite_f64(
+                cost_map
+                    .get("subagent_usd")
+                    .or_else(|| cost_map.get("subagent_cost_usd")),
+            )
+            .unwrap_or(0.0),
         )
     } else if let Some(v @ Value::Number(_)) = obj.get("cost") {
         (finite_f64(Some(v)).unwrap_or(0.0), 0.0)
@@ -159,7 +169,8 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
                 .get("reset_in_seconds")
                 .filter(|v| v.is_number())
                 .map(|v| finite_i64(Some(v), 0));
-            let reset_time = first_non_blank_trimmed(&[q_obj.get("reset_time")]);
+            let reset_time =
+                first_non_blank_trimmed(&[q_obj.get("reset_time"), q_obj.get("reset_at")]);
             quota_buckets.push(QuotaBucketData {
                 name: name.clone(),
                 disabled,
@@ -186,8 +197,8 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
                 if is_running {
                     subagents_running += 1;
                 }
-                let name = first_non_blank_trimmed(&[s_obj.get("name"), s_obj.get("role")])
-                    .unwrap_or_default();
+                // Never fall back to `role`: in agy 1.5.9 `role` holds the full multi-line prompt.
+                let name = first_non_blank_trimmed(&[s_obj.get("name")]).unwrap_or_default();
                 let model = first_non_blank_trimmed(&[s_obj.get("model")]).unwrap_or_default();
                 subagents.push(SubagentSummary {
                     status,
@@ -210,26 +221,57 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
         .map(|w| w as usize);
 
     let vim_mode = if let Some(Value::Object(vim_map)) = obj.get("vim") {
-        first_non_blank_trimmed(&[vim_map.get("mode")]).unwrap_or_default()
-    } else if let Some(v @ Value::String(_)) = obj.get("vim") {
-        first_non_blank_trimmed(&[Some(v)]).unwrap_or_default()
+        first_non_blank_trimmed(&[vim_map.get("mode"), obj.get("vim_mode")]).unwrap_or_default()
     } else {
-        String::new()
+        first_non_blank_trimmed(&[obj.get("vim"), obj.get("vim_mode")]).unwrap_or_default()
     };
-    let conversation_title =
-        first_non_blank_trimmed(&[obj.get("conversation_title")]).unwrap_or_default();
-    let agent_name = if let Some(Value::Object(a_map)) = obj.get("agent") {
-        first_non_blank_trimmed(&[a_map.get("name")]).unwrap_or_default()
-    } else if let Some(v @ Value::String(_)) = obj.get("agent") {
-        first_non_blank_trimmed(&[Some(v)]).unwrap_or_default()
-    } else {
-        String::new()
-    };
-    let artifact_count = finite_i64(obj.get("artifact_count"), 0);
-    let version = first_non_blank_trimmed(&[obj.get("version")]).unwrap_or_default();
-    let plan_tier = first_non_blank_trimmed(&[obj.get("plan_tier")]).unwrap_or_default();
 
-    // Note: `email` and `battle.*` are intentionally ignored per privacy/spec boundary.
+    let conversation_title = first_non_blank_trimmed(&[
+        obj.get("conversation_title"),
+        obj.get("title"),
+        obj.get("session_title"),
+    ])
+    .unwrap_or_default();
+
+    let agent_name = if let Some(Value::Object(a_map)) = obj.get("agent") {
+        first_non_blank_trimmed(&[a_map.get("name"), obj.get("agent_name")]).unwrap_or_default()
+    } else {
+        first_non_blank_trimmed(&[obj.get("agent"), obj.get("agent_name")]).unwrap_or_default()
+    };
+
+    let artifact_count = if obj.get("artifact_count").is_some_and(Value::is_number) {
+        finite_i64(obj.get("artifact_count"), 0)
+    } else if let Some(art_val) = obj.get("artifacts") {
+        if art_val.is_number() {
+            finite_i64(Some(art_val), 0)
+        } else if let Some(arr) = art_val.as_array() {
+            arr.len() as i64
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let version = first_non_blank_trimmed(&[
+        obj.get("version"),
+        obj.get("agy_version"),
+        obj.get("cli_version"),
+    ])
+    .unwrap_or_default();
+
+    let account_obj = obj.get("account").and_then(Value::as_object);
+    let plan_tier = first_non_blank_trimmed(&[
+        obj.get("plan_tier"),
+        obj.get("plan"),
+        obj.get("tier"),
+        account_obj.and_then(|a| a.get("plan_tier")),
+        account_obj.and_then(|a| a.get("plan")),
+        account_obj.and_then(|a| a.get("tier")),
+    ])
+    .unwrap_or_default();
+
+    // Note: `email` (`obj.email`, `account.email`) and `battle.*` are intentionally ignored.
     Payload {
         session_id,
         agent_state,

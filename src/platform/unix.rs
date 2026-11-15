@@ -60,3 +60,38 @@ pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
 }
 
 pub fn configure_background_command(_cmd: &mut Command) {}
+
+#[repr(C)]
+struct Winsize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+}
+
+#[cfg(target_os = "macos")]
+const TIOCGWINSZ: core::ffi::c_ulong = 0x4008_7468;
+#[cfg(not(target_os = "macos"))]
+const TIOCGWINSZ: core::ffi::c_ulong = 0x5413;
+
+unsafe extern "C" {
+    fn ioctl(fd: core::ffi::c_int, request: core::ffi::c_ulong, ...) -> core::ffi::c_int;
+}
+
+pub fn stdout_terminal_columns() -> Option<usize> {
+    let mut ws = Winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    // SAFETY: `ws` is a valid mutable `Winsize` struct passed to `TIOCGWINSZ` on stdout fd 1.
+    let rc = unsafe { ioctl(1, TIOCGWINSZ, &mut ws) };
+    if rc == 0 && ws.ws_col > 0 {
+        return Some(usize::from(ws.ws_col));
+    }
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|&c| c > 0)
+}

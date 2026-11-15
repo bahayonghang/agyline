@@ -54,3 +54,7 @@ pub fn replace_file_with_retry(tmp_path: &Path, dst_path: &Path) -> io::Result<(
 pub fn configure_background_command(cmd: &mut Command) {
     imp::configure_background_command(cmd);
 }
+
+pub fn stdout_terminal_columns() -> Option<usize> {
+    imp::stdout_terminal_columns()
+}

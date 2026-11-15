@@ -90,6 +90,8 @@ struct GoldenCase {
     #[serde(default)]
     env: BTreeMap<String, String>,
     #[serde(default)]
+    config_toml: Option<String>,
+    #[serde(default)]
     raw_stdin: Option<String>,
     #[serde(default)]
     payload: Option<serde_json::Value>,
@@ -236,9 +238,7 @@ fn prepare_db_setup(
     None
 }
 
-#[test]
-fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
-    let fixture_raw = include_str!("fixtures/default_line_golden.json");
+fn run_golden_suite(fixture_raw: &str) {
     let suite: GoldenSuite =
         serde_json::from_str(fixture_raw).expect("golden fixture JSON must parse");
 
@@ -257,6 +257,11 @@ fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
         let temp_dir = sandbox.root.join("relay_temp");
         let conversations_dir = sandbox.root.join("conversations");
         fs::create_dir_all(&temp_dir).expect("create temp_dir");
+
+        if let Some(cfg_toml) = &case.config_toml {
+            fs::create_dir_all(&home_dir).expect("create home_dir");
+            fs::write(home_dir.join("config.toml"), cfg_toml).expect("write config.toml");
+        }
 
         if let Some(seed) = &case.session_state {
             let sessions_dir = home_dir.join("state").join("sessions");
@@ -304,6 +309,16 @@ fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
             case.expected_ansi
         );
     }
+}
+
+#[test]
+fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
+    run_golden_suite(include_str!("fixtures/default_line_golden.json"));
+}
+
+#[test]
+fn items_and_config_golden_cases_match_plain_and_ansi_bytes() {
+    run_golden_suite(include_str!("fixtures/items_and_config.json"));
 }
 
 #[test]

@@ -80,6 +80,46 @@ pub fn sandbox_icon(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+pub fn vim_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{e62b}",
+        GlyphSet::Unicode => "V",
+        GlyphSet::Ascii => "VIM",
+    }
+}
+
+pub fn title_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f0b79}",
+        GlyphSet::Unicode => "💬",
+        GlyphSet::Ascii => "ttl:",
+    }
+}
+
+pub fn agent_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f06a9}",
+        GlyphSet::Unicode => "@",
+        GlyphSet::Ascii => "@",
+    }
+}
+
+pub fn artifacts_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f1c9}",
+        GlyphSet::Unicode => "▤",
+        GlyphSet::Ascii => "art:",
+    }
+}
+
+pub fn plan_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f01a5}",
+        GlyphSet::Unicode => "★",
+        GlyphSet::Ascii => "plan:",
+    }
+}
+
 pub fn quota_icon(glyphs: GlyphSet, quota_pct: i32) -> &'static str {
     match glyphs {
         GlyphSet::Nerd => {

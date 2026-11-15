@@ -33,6 +33,9 @@ fn run_with_stdin_and_env(args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str
         .env_remove("AGY_SHOW_DEFAULT_MODE")
         .env_remove("AGY_CACHE_RELAY")
         .env_remove("COLORFGBG")
+        .env_remove("NO_COLOR")
+        .env_remove("COLORTERM")
+        .env_remove("TERM")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

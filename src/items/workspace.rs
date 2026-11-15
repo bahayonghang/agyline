@@ -1,8 +1,16 @@
 use crate::collect::FrameData;
-use crate::config::{EffectiveConfig, ItemId};
-use crate::render::{ColorToken, StyledItem, StyledSpan, glyphs};
+use crate::config::{EffectiveConfig, ItemId, ItemSlot};
+use crate::items::{
+    EvaluatedItem, coalesced_icon_body_spans, slot_custom_icon_color, slot_fg_color,
+    truncate_chars_with_ellipsis,
+};
+use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
 
-pub fn eval_model(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledItem> {
+pub fn eval_model(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
     let payload = &frame.payload;
     let raw_source = if !payload.model_display_name.trim().is_empty() {
         payload.model_display_name.as_str()
@@ -33,24 +41,39 @@ pub fn eval_model(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledI
         }
     }
 
-    let icon = glyphs::model_icon(config.glyphs);
-    let spans = if effort_label.is_empty() {
-        vec![StyledSpan::new(
-            ColorToken::Model,
-            format!("{icon} {pretty_base}"),
-        )]
-    } else {
-        vec![
-            StyledSpan::new(ColorToken::Model, format!("{icon} {pretty_base}")),
-            StyledSpan::new(ColorToken::Separator, glyphs::dot_sep(config.glyphs)),
-            StyledSpan::new(ColorToken::Model, effort_label),
-        ]
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::model_icon(config.glyphs));
+    let body_col = slot_fg_color(slot, ColorToken::Model);
+    let custom_ic = slot_custom_icon_color(slot);
+    let compact_base = truncate_chars_with_ellipsis(&pretty_base, 20, config.glyphs);
+
+    let build = |name: String| -> Vec<StyledSpan> {
+        let mut spans = coalesced_icon_body_spans(icon, custom_ic, body_col, name);
+        if !effort_label.is_empty() {
+            spans.push(StyledSpan::new(
+                ColorToken::Separator,
+                glyphs::dot_sep(config.glyphs),
+            ));
+            spans.push(StyledSpan::new(body_col, effort_label.clone()));
+        }
+        spans
     };
 
-    Some(StyledItem::new(ItemId::Model, spans))
+    Some(EvaluatedItem {
+        id: ItemId::Model,
+        priority: slot.effective_priority(),
+        full_spans: build(pretty_base),
+        compact_spans: build(compact_base),
+    })
 }
 
-pub fn eval_dir(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledItem> {
+pub fn eval_dir(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
     let cwd = &frame.payload.cwd;
     if cwd.trim().is_empty() {
         return None;
@@ -67,24 +90,40 @@ pub fn eval_dir(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledIte
     if leaf.is_empty() {
         return None;
     }
-    Some(StyledItem::new(
-        ItemId::Dir,
-        vec![
-            StyledSpan::new(ColorToken::DirIcon, glyphs::folder_icon(config.glyphs)),
-            StyledSpan::new(ColorToken::Dir, format!(" {leaf}")),
-        ],
-    ))
+
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::folder_icon(config.glyphs));
+    let icon_col = slot_custom_icon_color(slot).unwrap_or(ColorSpec::Token(ColorToken::DirIcon));
+    let body_col = slot_fg_color(slot, ColorToken::Dir);
+    let compact_leaf = truncate_chars_with_ellipsis(leaf, 12, config.glyphs);
+
+    let build = |dir_txt: &str| -> Vec<StyledSpan> {
+        if icon.is_empty() {
+            vec![StyledSpan::new(body_col, dir_txt)]
+        } else {
+            vec![
+                StyledSpan::new(icon_col, icon),
+                StyledSpan::new(body_col, format!(" {dir_txt}")),
+            ]
+        }
+    };
+
+    Some(EvaluatedItem {
+        id: ItemId::Dir,
+        priority: slot.effective_priority(),
+        full_spans: build(leaf),
+        compact_spans: build(&compact_leaf),
+    })
 }
 
-pub fn eval_git(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledItem> {
+pub fn eval_git(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
     let git = frame.git.as_ref().filter(|g| !g.branch.trim().is_empty())?;
-    let br_short = if git.branch.chars().count() > 24 {
-        let mut s: String = git.branch.chars().take(23).collect();
-        s.push_str(glyphs::ellipsis(config.glyphs));
-        s
-    } else {
-        git.branch.clone()
-    };
 
     let mut ab_txt = String::new();
     if git.ahead > 0 {
@@ -102,34 +141,43 @@ pub fn eval_git(frame: &FrameData, config: &EffectiveConfig) -> Option<StyledIte
         ));
     }
 
-    let icon = glyphs::git_icon(config.glyphs);
-    let spans = if git.has_conflict {
-        vec![
-            StyledSpan::new(ColorToken::Git, icon),
-            StyledSpan::new(
-                ColorToken::Crit,
-                format!(" {br_short} {}{ab_txt}", glyphs::warn_mark(config.glyphs)),
-            ),
-        ]
-    } else if git.dirty {
-        vec![StyledSpan::new(
-            ColorToken::Git,
-            format!(
-                "{icon} {br_short} {}{ab_txt}",
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::git_icon(config.glyphs));
+    let base_col = slot_fg_color(slot, ColorToken::Git);
+    let custom_ic = slot_custom_icon_color(slot);
+
+    let build = |branch_limit: usize| -> Vec<StyledSpan> {
+        let br_short = truncate_chars_with_ellipsis(&git.branch, branch_limit, config.glyphs);
+        if git.has_conflict {
+            let body = format!("{} {}{ab_txt}", br_short, glyphs::warn_mark(config.glyphs));
+            if icon.is_empty() {
+                vec![StyledSpan::new(ColorToken::Crit, body)]
+            } else {
+                let ic = custom_ic.unwrap_or(base_col);
+                vec![
+                    StyledSpan::new(ic, icon),
+                    StyledSpan::new(ColorToken::Crit, format!(" {body}")),
+                ]
+            }
+        } else {
+            let mark = if git.dirty {
                 glyphs::git_dirty_mark(config.glyphs)
-            ),
-        )]
-    } else {
-        vec![StyledSpan::new(
-            ColorToken::Git,
-            format!(
-                "{icon} {br_short} {}{ab_txt}",
+            } else {
                 glyphs::git_clean_mark(config.glyphs)
-            ),
-        )]
+            };
+            let body = format!("{br_short} {mark}{ab_txt}");
+            coalesced_icon_body_spans(icon, custom_ic, base_col, body)
+        }
     };
 
-    Some(StyledItem::new(ItemId::Git, spans))
+    Some(EvaluatedItem {
+        id: ItemId::Git,
+        priority: slot.effective_priority(),
+        full_spans: build(24),
+        compact_spans: build(12),
+    })
 }
 
 fn split_model_and_effort(raw: &str) -> (&str, &str) {

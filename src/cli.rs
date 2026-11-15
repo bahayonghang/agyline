@@ -1,12 +1,18 @@
 use std::ffi::OsString;
+use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::Path;
 
-use crate::collect::SystemSpawner;
-use crate::input::MAX_STDIN_BYTES;
+use crate::collect::{FrameData, NoopSpawner, SystemSpawner};
+use crate::config::EffectiveConfig;
+use crate::input::{MAX_STDIN_BYTES, parse_stdin_payload};
 use crate::install::{
     InstallEnv, InstallOptions, UninstallOptions, run_install_cli, run_uninstall_cli,
 };
-use crate::statusline::{RenderEnv, run_live_frame};
+use crate::platform;
+use crate::render::{emit_ansi, emit_plain};
+use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_payload};
+use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame};
 
 pub struct CliStreams<'a> {
     pub stdin: &'a mut dyn Read,
@@ -25,6 +31,22 @@ enum HelpTopic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum PreviewSource {
+    DefaultScenario,
+    NamedScenario(String),
+    AllScenarios,
+    ListScenarios,
+    InputPath(OsString),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PreviewOptions {
+    source: PreviewSource,
+    width: Option<usize>,
+    plain: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CliAction {
     LiveRender,
     HiddenRefreshGit(Vec<OsString>),
@@ -32,9 +54,9 @@ enum CliAction {
     Help(HelpTopic),
     Version,
     Configurator,
+    Preview(PreviewOptions),
     Install(InstallOptions),
     Uninstall(UninstallOptions),
-    SubcommandNotImplemented(&'static str),
     UsageError(String),
 }
 
@@ -98,6 +120,7 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
             );
             1
         }
+        CliAction::Preview(opts) => execute_preview(opts, streams),
         CliAction::Install(opts) => match InstallEnv::from_process() {
             Ok(env) => run_install_cli(&env, opts, streams),
             Err(err) => {
@@ -112,13 +135,6 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
                 1
             }
         },
-        CliAction::SubcommandNotImplemented(subcmd) => {
-            let _ = writeln!(
-                streams.stderr,
-                "error: subcommand '{subcmd}' is not yet available in this build"
-            );
-            1
-        }
         CliAction::UsageError(msg) => {
             let _ = writeln!(streams.stderr, "error: {msg}");
             let _ = writeln!(streams.stderr, "Run 'agyline --help' for usage.");
@@ -141,6 +157,164 @@ fn execute_live_render(streams: &mut CliStreams<'_>) -> u8 {
         let _ = streams.stdout.flush();
     }
     0
+}
+
+fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
+    if let PreviewSource::ListScenarios = opts.source {
+        for sc in builtin_scenarios() {
+            let _ = writeln!(streams.stdout, "{:<18}  {}", sc.name, sc.description);
+        }
+        let _ = streams.stdout.flush();
+        return 0;
+    }
+
+    let spawner = NoopSpawner;
+    let env = RenderEnv::from_process(&spawner);
+    let (config, loaded) = EffectiveConfig::resolve_with_diagnostics(&env.home_dir, &env.env_vars);
+
+    let emit_broken_warning = |stderr: &mut dyn Write| {
+        if let Some(ref err) = loaded.syntax_error {
+            let cfg_path = env.home_dir.join("config.toml");
+            let _ = writeln!(
+                stderr,
+                "warning: failed to parse {} ({err}); rendering fallback default configuration",
+                cfg_path.display()
+            );
+        }
+    };
+
+    match opts.source {
+        PreviewSource::ListScenarios => 0,
+        PreviewSource::DefaultScenario => {
+            emit_broken_warning(streams.stderr);
+            if let Some(sc) = find_scenario("normal") {
+                let frame = sc.frame_for_env(&env.env_vars);
+                write_preview_frame(
+                    &frame,
+                    &config,
+                    opts.width,
+                    opts.plain,
+                    streams.stdout_is_terminal,
+                    streams.stdout,
+                );
+            }
+            let _ = streams.stdout.flush();
+            0
+        }
+        PreviewSource::NamedScenario(ref name) => {
+            emit_broken_warning(streams.stderr);
+            if let Some(sc) = find_scenario(name) {
+                let frame = sc.frame_for_env(&env.env_vars);
+                write_preview_frame(
+                    &frame,
+                    &config,
+                    opts.width,
+                    opts.plain,
+                    streams.stdout_is_terminal,
+                    streams.stdout,
+                );
+            }
+            let _ = streams.stdout.flush();
+            0
+        }
+        PreviewSource::AllScenarios => {
+            emit_broken_warning(streams.stderr);
+            for (idx, sc) in builtin_scenarios().iter().enumerate() {
+                if idx > 0 {
+                    let _ = writeln!(streams.stdout);
+                }
+                let _ = writeln!(streams.stdout, "=== {} ({}) ===", sc.name, sc.description);
+                let frame = sc.frame_for_env(&env.env_vars);
+                write_preview_frame(
+                    &frame,
+                    &config,
+                    opts.width,
+                    opts.plain,
+                    streams.stdout_is_terminal,
+                    streams.stdout,
+                );
+            }
+            let _ = streams.stdout.flush();
+            0
+        }
+        PreviewSource::InputPath(ref path) => {
+            let raw_bytes = match read_preview_input(path, streams.stdin) {
+                Ok(b) => b,
+                Err(msg) => {
+                    let _ = writeln!(streams.stderr, "error: {msg}");
+                    return 1;
+                }
+            };
+            let Some(payload) = parse_stdin_payload(&raw_bytes) else {
+                let _ = writeln!(
+                    streams.stderr,
+                    "error: preview input must be a valid UTF-8 JSON object (<= 4 MiB)"
+                );
+                return 1;
+            };
+            emit_broken_warning(streams.stderr);
+            let frame = stateless_frame_from_payload(payload, (env.now_ms / 1000) as i64);
+            write_preview_frame(
+                &frame,
+                &config,
+                opts.width,
+                opts.plain,
+                streams.stdout_is_terminal,
+                streams.stdout,
+            );
+            let _ = streams.stdout.flush();
+            0
+        }
+    }
+}
+
+fn read_preview_input(path: &OsString, stdin: &mut dyn Read) -> Result<Vec<u8>, String> {
+    if path.as_os_str() == "-" {
+        let mut buf = Vec::with_capacity(4096);
+        let mut limited = stdin.take((MAX_STDIN_BYTES + 1) as u64);
+        limited
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("failed to read stdin: {e}"))?;
+        if buf.len() > MAX_STDIN_BYTES {
+            return Err("stdin payload exceeds 4 MiB limit".to_string());
+        }
+        return Ok(buf);
+    }
+
+    let p = Path::new(path);
+    let meta = fs::metadata(p).map_err(|e| format!("failed to read '{}': {e}", p.display()))?;
+    if meta.len() > MAX_STDIN_BYTES as u64 {
+        return Err(format!("'{}' exceeds 4 MiB limit", p.display()));
+    }
+    fs::read(p).map_err(|e| format!("failed to read '{}': {e}", p.display()))
+}
+
+fn write_preview_frame(
+    frame: &FrameData,
+    config: &EffectiveConfig,
+    width_flag: Option<usize>,
+    plain_flag: bool,
+    stdout_is_terminal: bool,
+    stdout: &mut dyn Write,
+) {
+    let width_budget = match width_flag {
+        Some(0) => None,
+        Some(cols) => Some(cols),
+        None => frame.payload.terminal_width.or_else(|| {
+            stdout_is_terminal
+                .then(platform::stdout_terminal_columns)
+                .flatten()
+        }),
+    };
+    let rendered = render_lines_with_width(frame, config, width_budget);
+    let text = if plain_flag {
+        emit_plain(&rendered, config)
+    } else {
+        emit_ansi(&rendered, config)
+    };
+    if !text.is_empty() {
+        let _ = stdout.write_all(text.as_bytes());
+    }
 }
 
 fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
@@ -199,7 +373,7 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
                     .to_string(),
             )
         }
-        "preview" => parse_subcommand_stub("preview", HelpTopic::Preview, &args[2..]),
+        "preview" => parse_preview_args(&args[2..]),
         "install" => parse_install_args(&args[2..]),
         "uninstall" => parse_uninstall_args(&args[2..]),
         other if other.starts_with('-') => {
@@ -209,14 +383,126 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
     }
 }
 
-fn parse_subcommand_stub(name: &'static str, topic: HelpTopic, tail: &[OsString]) -> CliAction {
+fn parse_preview_args(tail: &[OsString]) -> CliAction {
     for arg in tail {
         let s = arg.to_string_lossy();
+        if s == "--" {
+            break;
+        }
         if s == "-h" || s == "--help" {
-            return CliAction::Help(topic);
+            return CliAction::Help(HelpTopic::Preview);
         }
     }
-    CliAction::SubcommandNotImplemented(name)
+
+    let mut chosen_sources: Vec<PreviewSource> = Vec::new();
+    let mut width: Option<usize> = None;
+    let mut plain = false;
+
+    let mut idx = 0usize;
+    while idx < tail.len() {
+        let s = tail[idx].to_string_lossy();
+        match s.as_ref() {
+            "--all" => chosen_sources.push(PreviewSource::AllScenarios),
+            "--list" => chosen_sources.push(PreviewSource::ListScenarios),
+            "--plain" => plain = true,
+            "-s" | "--scenario" => {
+                let Some(next) = tail.get(idx + 1) else {
+                    return CliAction::UsageError(format!("missing scenario name after '{s}'"));
+                };
+                idx += 1;
+                chosen_sources.push(PreviewSource::NamedScenario(
+                    next.to_string_lossy().into_owned(),
+                ));
+            }
+            flag if flag.starts_with("--scenario=") => {
+                let val = &flag["--scenario=".len()..];
+                if val.is_empty() {
+                    return CliAction::UsageError(
+                        "missing scenario name after '--scenario='".to_string(),
+                    );
+                }
+                chosen_sources.push(PreviewSource::NamedScenario(val.to_string()));
+            }
+            "-i" | "--input" => {
+                let Some(next) = tail.get(idx + 1) else {
+                    return CliAction::UsageError(format!("missing path after '{s}'"));
+                };
+                idx += 1;
+                chosen_sources.push(PreviewSource::InputPath(next.clone()));
+            }
+            flag if flag.starts_with("--input=") => {
+                let val = &flag["--input=".len()..];
+                if val.is_empty() {
+                    return CliAction::UsageError("missing path after '--input='".to_string());
+                }
+                chosen_sources.push(PreviewSource::InputPath(OsString::from(val)));
+            }
+            "-w" | "--width" => {
+                let Some(next) = tail.get(idx + 1) else {
+                    return CliAction::UsageError(format!("missing column count after '{s}'"));
+                };
+                idx += 1;
+                let val_str = next.to_string_lossy();
+                let Ok(cols) = val_str.trim().parse::<usize>() else {
+                    return CliAction::UsageError(format!(
+                        "invalid '--width' value '{val_str}': expected non-negative integer"
+                    ));
+                };
+                width = Some(cols);
+            }
+            flag if flag.starts_with("--width=") => {
+                let val_str = &flag["--width=".len()..];
+                let Ok(cols) = val_str.trim().parse::<usize>() else {
+                    return CliAction::UsageError(format!(
+                        "invalid '--width' value '{val_str}': expected non-negative integer"
+                    ));
+                };
+                width = Some(cols);
+            }
+            "--" => {
+                if idx + 1 < tail.len() {
+                    return CliAction::UsageError(format!(
+                        "unexpected argument '{}' for 'preview'",
+                        tail[idx + 1].to_string_lossy()
+                    ));
+                }
+                break;
+            }
+            flag if flag.starts_with('-') => {
+                return CliAction::UsageError(format!("unknown flag '{flag}' for 'preview'"));
+            }
+            arg => {
+                return CliAction::UsageError(format!("unexpected argument '{arg}' for 'preview'"));
+            }
+        }
+        idx += 1;
+    }
+
+    if chosen_sources.len() > 1 {
+        return CliAction::UsageError(
+            "conflicting flags for 'preview': pass at most one of '--scenario', '--all', '--list', or '--input'"
+                .to_string(),
+        );
+    }
+
+    let source = chosen_sources
+        .into_iter()
+        .next()
+        .unwrap_or(PreviewSource::DefaultScenario);
+
+    if let PreviewSource::NamedScenario(ref name) = source
+        && find_scenario(name).is_none()
+    {
+        return CliAction::UsageError(format!(
+            "unknown scenario '{name}'; run 'agyline preview --list' to see built-in scenarios"
+        ));
+    }
+
+    CliAction::Preview(PreviewOptions {
+        source,
+        width,
+        plain,
+    })
 }
 
 fn parse_install_args(tail: &[OsString]) -> CliAction {
@@ -310,11 +596,11 @@ Subcommands:
 Usage: agyline preview [options]
 
 Options:
-  -s, --scenario <name>   Render a built-in preview scenario
+  -s, --scenario <name>   Render a built-in preview scenario (default: normal)
       --all               Render all built-in scenarios
       --list              List built-in scenarios
   -i, --input <path|->    Render from a JSON payload file or '-' for stdin
-  -w, --width <cols>      Override terminal width budget
+  -w, --width <cols>      Override terminal width budget (0 disables narrowing)
       --plain             Emit plain text without ANSI escape sequences
   -h, --help              Print help
 "

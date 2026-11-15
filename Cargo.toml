@@ -9,3 +9,14 @@ license = "MIT"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.8"
+unicode-segmentation = "1.12"
+unicode-width = "0.2"
+
+[[bench]]
+name = "render_micro"
+harness = false
+
+[[bench]]
+name = "pipe_e2e"
+harness = false

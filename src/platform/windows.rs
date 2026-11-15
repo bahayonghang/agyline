@@ -12,10 +12,35 @@ use std::time::Duration;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const STD_OUTPUT_HANDLE: u32 = (-11_i32) as u32;
+const INVALID_HANDLE_VALUE: isize = -1;
 const ERROR_ACCESS_DENIED: i32 = 5;
 const ERROR_SHARING_VIOLATION: i32 = 32;
 
 type Handle = *mut core::ffi::c_void;
+
+#[repr(C)]
+struct Coord {
+    x: i16,
+    y: i16,
+}
+
+#[repr(C)]
+struct SmallRect {
+    left: i16,
+    top: i16,
+    right: i16,
+    bottom: i16,
+}
+
+#[repr(C)]
+struct ConsoleScreenBufferInfo {
+    dw_size: Coord,
+    dw_cursor_position: Coord,
+    w_attributes: u16,
+    sr_window: SmallRect,
+    dw_maximum_window_size: Coord,
+}
 
 #[repr(C)]
 struct StartupInfoW {
@@ -69,6 +94,13 @@ unsafe extern "system" {
         lpsz_short_path: *mut u16,
         cch_buffer: u32,
     ) -> u32;
+
+    fn GetStdHandle(n_std_handle: u32) -> Handle;
+
+    fn GetConsoleScreenBufferInfo(
+        h_console_output: Handle,
+        lp_console_screen_buffer_info: *mut ConsoleScreenBufferInfo,
+    ) -> i32;
 }
 
 pub fn host_platform() -> super::PlatformKind {
@@ -269,4 +301,39 @@ pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
 
 pub fn configure_background_command(cmd: &mut Command) {
     cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+pub fn stdout_terminal_columns() -> Option<usize> {
+    // SAFETY: `GetStdHandle` and `GetConsoleScreenBufferInfo` take standard Win32 console arguments
+    // and write into a stack-initialized `ConsoleScreenBufferInfo`.
+    unsafe {
+        let h = GetStdHandle(STD_OUTPUT_HANDLE);
+        if !h.is_null() && (h as isize) != INVALID_HANDLE_VALUE {
+            let mut info = ConsoleScreenBufferInfo {
+                dw_size: Coord { x: 0, y: 0 },
+                dw_cursor_position: Coord { x: 0, y: 0 },
+                w_attributes: 0,
+                sr_window: SmallRect {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                },
+                dw_maximum_window_size: Coord { x: 0, y: 0 },
+            };
+            if GetConsoleScreenBufferInfo(h, &mut info) != 0
+                && info.sr_window.right >= info.sr_window.left
+            {
+                let cols =
+                    (i32::from(info.sr_window.right) - i32::from(info.sr_window.left) + 1) as usize;
+                if cols > 0 {
+                    return Some(cols);
+                }
+            }
+        }
+    }
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|&c| c > 0)
 }
