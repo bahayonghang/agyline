@@ -1,3 +1,8 @@
+//! Process contract for the compiled `agyline` binary, driven over a real stdin pipe.
+//! Pins the print path: no shell, no waiting on `git`, clean stdout/stderr separation, and
+//! exit 0 even on malformed input. Git/relay work is confined to the silent `__refresh-git`
+//! and `__touch` worker modes, so a slow background call can never hold the printed line.
+
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Cursor, Write};
@@ -13,6 +18,8 @@ fn bin_path() -> &'static str {
     env!("CARGO_BIN_EXE_agyline")
 }
 
+/// Runs the real binary with a throwaway `AGYLINE_HOME` and all `AGY_*`/color env stripped, so
+/// each case renders from a clean, isolated state and never reads or writes the user's config.
 fn run_with_stdin_and_env(args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str)]) -> Output {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -58,6 +65,7 @@ fn run_with_stdin(args: &[&str], stdin_bytes: &[u8]) -> Output {
     run_with_stdin_and_env(args, stdin_bytes, &[])
 }
 
+// Pre-session `{}` must still print the default line: stdout only, 0 B stderr, exit 0.
 #[test]
 fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     let output = run_with_stdin(&[], b"{}");
@@ -70,6 +78,8 @@ fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     );
 }
 
+// Any malformed or oversized frame is swallowed: exit 0 with 0 B on both streams, so a corrupt
+// agy frame can never crash the line. The oversized case pins the 4 MiB stdin cap.
 #[test]
 fn pipe_malformed_utf8_and_oversized_inputs_exit_zero_with_empty_streams() {
     let mut oversized = Vec::with_capacity(MAX_STDIN_BYTES + 32);
@@ -105,6 +115,7 @@ fn pipe_malformed_utf8_and_oversized_inputs_exit_zero_with_empty_streams() {
     }
 }
 
+// Version/help are user surface: stdout, exit 0, and must not leak the internal worker modes.
 #[test]
 fn cli_version_and_help_print_to_stdout_and_omit_hidden_workers() {
     for flag in ["-V", "--version"] {
@@ -129,6 +140,8 @@ fn cli_version_and_help_print_to_stdout_and_omit_hidden_workers() {
     }
 }
 
+// Usage errors exit 2 with empty stdout and a --help hint on stderr. `--config` takes no path;
+// its error must point at AGYLINE_HOME, the real config-relocation knob.
 #[test]
 fn cli_invalid_arguments_and_valued_config_flag_exit_two() {
     let invalid_invocations: &[&[&str]] = &[
@@ -164,6 +177,8 @@ fn cli_invalid_arguments_and_valued_config_flag_exit_two() {
     }
 }
 
+// The configurator needs a TTY; on a pipe `-c` must refuse (exit 1, no stdout) rather than
+// spill TUI escape codes into a non-terminal.
 #[test]
 fn cli_config_flag_on_non_tty_pipe_exits_one_without_tui_output() {
     for flag in ["-c", "--config"] {
@@ -174,6 +189,8 @@ fn cli_config_flag_on_non_tty_pipe_exits_one_without_tui_output() {
     }
 }
 
+// Detached workers must stay silent and exit 0 even on bogus args, an unsafe `bad/id` session
+// (path traversal), or a non-loopback URL: their guards reject quietly, never leaking output.
 #[test]
 fn cli_hidden_workers_are_always_silent_and_exit_zero() {
     let hidden_invocations: &[&[&str]] = &[
@@ -205,6 +222,7 @@ fn cli_hidden_workers_are_always_silent_and_exit_zero() {
     }
 }
 
+// AGY_THEME/LINES/INDENT override the live render, and payload `email` PII must never print.
 #[test]
 fn pipe_respects_agy_env_overrides_and_omits_email() {
     let payload = br#"{"session_id":"","model":{"display_name":"Gemini 4 Carbon (High)"},"cycle_mode":"bestn","email":"secret@example.com"}"#;
@@ -227,6 +245,8 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     );
 }
 
+// A corrupt unicode reset_time must degrade quietly: quota still renders, the bad countdown is
+// dropped (no `(`), exit 0 and 0 B stderr.
 #[test]
 fn pipe_ignores_malformed_unicode_quota_reset_times() {
     let home_dir = std::env::temp_dir().join(format!(
@@ -267,6 +287,8 @@ fn pipe_ignores_malformed_unicode_quota_reset_times() {
     fs::remove_dir_all(home_dir).expect("remove config home");
 }
 
+// In-process CliStreams: the configurator needs BOTH ends terminal, so a TTY stdin with a
+// redirected stdout still refuses (exit 1, 0 B stdout) instead of drawing into a pipe.
 #[test]
 fn cli_tty_stdin_with_redirected_non_tty_stdout_exits_one_with_zero_stdout() {
     let args = vec![OsString::from("agyline")];

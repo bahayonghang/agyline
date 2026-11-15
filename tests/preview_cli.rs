@@ -1,3 +1,8 @@
+//! Surface and determinism of `agyline preview`: it shares the live renderer but is stateless
+//! (NoopSpawner, fixed scenario anchor, zero AGYLINE_HOME/state writes). Pins `-s/--scenario`,
+//! `--all`, `--list`, `-i/--input` (path or `-`), `-w/--width` (0 = no narrowing), `--plain`,
+//! and the usage/error exit codes.
+
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -30,6 +35,8 @@ impl PreviewSandbox {
         Self { root, home }
     }
 
+    /// Runs the binary against this sandbox's isolated `AGYLINE_HOME` with all `AGY_*`/color env
+    /// stripped, so preview output is deterministic and never reads the user's real config.
     fn run(&self, args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str)]) -> Output {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_agyline"));
         cmd.args(args)
@@ -64,6 +71,8 @@ impl Drop for PreviewSandbox {
     }
 }
 
+// The six canonical scenarios exist in fixed order; find_scenario resolves known names and
+// rejects unknown ones, so `--list`/`-s` have a stable catalog.
 #[test]
 fn builtin_scenarios_expose_all_six_canonical_entries() {
     let all = builtin_scenarios();
@@ -153,6 +162,8 @@ fn preview_default_scenario_list_all_plain_width_and_zero_state_writes() {
     );
 }
 
+// `-i` renders a captured payload through the stateless frame builder (no git/relay/telemetry
+// collection, no state/ writes); input read/parse failures exit 1, distinct from usage exit 2.
 #[test]
 fn preview_input_file_and_stdin_dash_are_stateless_and_handle_errors() {
     let sb = PreviewSandbox::new("input");
@@ -220,6 +231,8 @@ fn preview_input_file_and_stdin_dash_are_stateless_and_handle_errors() {
     }
 }
 
+// Broken config degrades, not fails: fallback line + " ! config" badge on stdout, a line/column
+// diagnostic on stderr, exit 0 (preview surfaces the warning the silent live pipe suppresses).
 #[test]
 fn preview_broken_config_warns_with_line_col_on_stderr_and_renders_fallback_exit_zero() {
     let sb = PreviewSandbox::new("broken_cfg");
@@ -244,6 +257,8 @@ fn preview_broken_config_warns_with_line_col_on_stderr_and_renders_fallback_exit
     );
 }
 
+// Invalid flag combinations, unknown scenario, and bad/missing width are usage errors: exit 2,
+// 0 B stdout, stderr message; `--help` is the only zero-exit path and prints usage to stdout.
 #[test]
 fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
     let sb = PreviewSandbox::new("usage_errors");

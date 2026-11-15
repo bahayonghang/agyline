@@ -1,3 +1,8 @@
+//! Install/uninstall contracts against a sandboxed `settings.json`: the command string must be
+//! safe for the host shell, sibling keys and their order survive, a symlink stays a symlink, and
+//! the prior `statusLine` is snapshotted so uninstall can restore it. Plans are pure; only
+//! `apply_*` and the CLI write, and `--dry-run` writes nothing.
+
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Cursor, Write};
@@ -15,6 +20,8 @@ use agyline::{
 
 static NEXT_SANDBOX_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Throwaway root for one case, removed on drop: no test here may touch the developer's real
+/// `~/.gemini`.
 struct Sandbox {
     root: PathBuf,
 }
@@ -48,6 +55,8 @@ impl Drop for Sandbox {
     }
 }
 
+/// InstallEnv aimed at sandbox paths, with the platform and the 8.3 resolver injected so Windows
+/// command rules can be exercised on any host.
 fn make_env(
     sandbox: &Path,
     platform: PlatformKind,
@@ -71,6 +80,8 @@ fn make_env(
     }
 }
 
+// A cmd-safe path needs no quoting: in-home becomes `~/...` and separators normalize to `/` so
+// cmd.exe sees a single token.
 #[test]
 fn windows_command_resolves_clean_home_and_non_home_paths_with_forward_slashes() {
     let sb = Sandbox::new("win_clean");
@@ -89,6 +100,7 @@ fn windows_command_resolves_clean_home_and_non_home_paths_with_forward_slashes()
         "~/.cargo/bin/agyline.exe"
     );
 
+    // Outside the home prefix there is no `~` form; the absolute path must still be cmd-safe.
     let outside_home = make_env(
         sb.path(),
         PlatformKind::Windows,
@@ -103,6 +115,8 @@ fn windows_command_resolves_clean_home_and_non_home_paths_with_forward_slashes()
     );
 }
 
+// Non-ASCII is not a cmd metacharacter: a Unicode path outside home is written through unchanged
+// rather than mangled into an 8.3 alias.
 #[test]
 fn windows_command_resolves_unrelated_unicode_executable_path() {
     let sb = Sandbox::new("win_unicode");
@@ -120,6 +134,8 @@ fn windows_command_resolves_unrelated_unicode_executable_path() {
     );
 }
 
+// With spaces in the path, bare `agyline` is only safe when PATH resolves to this same
+// executable; a namesake earlier on PATH would launch a different program.
 #[test]
 fn windows_command_with_spaces_uses_bare_agyline_when_path_resolves_to_same_binary() {
     let sb = Sandbox::new("win_space_path");
@@ -131,6 +147,7 @@ fn windows_command_with_spaces_uses_bare_agyline_when_path_resolves_to_same_bina
 
     let other_dir = sb.path().join("other");
     fs::create_dir_all(&other_dir).expect("create other dir");
+    // The first PATH entry holds no agyline, so the bare name still lands on the target binary.
     let path_env = OsString::from(format!("{};{}", other_dir.display(), bin_dir.display()));
 
     let env = make_env(
@@ -147,6 +164,8 @@ fn windows_command_with_spaces_uses_bare_agyline_when_path_resolves_to_same_bina
     );
 }
 
+// When PATH would launch a different binary, fall back to the 8.3 short path, which cmd.exe can
+// run unquoted even though the real path has spaces.
 #[test]
 fn windows_command_with_spaces_falls_back_to_short_path_when_path_hits_different_binary_or_misses()
 {
@@ -179,6 +198,8 @@ fn windows_command_with_spaces_falls_back_to_short_path_when_path_hits_different
     );
 }
 
+// Never write a command cmd.exe would mis-parse: spaces, `&`, `(`, `%` must end in a refusal
+// that tells the user to fix PATH, not in a broken hook.
 #[test]
 fn windows_command_with_spaces_or_metachars_refuses_when_neither_path_nor_short_path_is_clean() {
     let sb = Sandbox::new("win_refuse");
@@ -211,6 +232,8 @@ fn windows_command_with_spaces_or_metachars_refuses_when_neither_path_nor_short_
     }
 }
 
+// Unix quoting: `~` for a clean in-home path, single quotes otherwise, and `'\''` escaping so an
+// apostrophe in the path cannot break out of the quoted command.
 #[test]
 fn unix_command_uses_tilde_for_clean_home_and_single_quotes_with_escaping_otherwise() {
     let sb = Sandbox::new("unix_cmd");
@@ -242,6 +265,7 @@ fn unix_command_uses_tilde_for_clean_home_and_single_quotes_with_escaping_otherw
         "'/usr/local/bin/agyline'"
     );
 
+    // Apostrophe and `$` must stay literal inside the single-quoted command.
     let quote_and_space = make_env(
         sb.path(),
         PlatformKind::Unix,
@@ -256,6 +280,8 @@ fn unix_command_uses_tilde_for_clean_home_and_single_quotes_with_escaping_otherw
     );
 }
 
+// A missing settings.json gets exactly the three documented keys, planning writes nothing, and
+// with no prior statusLine there is nothing to snapshot.
 #[test]
 fn fresh_install_creates_minimal_three_key_statusline_without_snapshot() {
     let sb = Sandbox::new("fresh_install");
@@ -306,10 +332,13 @@ fn fresh_install_creates_minimal_three_key_statusline_without_snapshot() {
         "fresh install must not write a previous_statusline.json snapshot"
     );
 
+    // Install is idempotent: a second plan must be a no-op, not another mutation.
     let repeat = plan_install(&env).expect("repeat plan");
     assert!(matches!(repeat, InstallPlan::AlreadyInstalled { .. }));
 }
 
+// Migrating off the reference script must keep it on disk, keep unrelated keys, order and extra
+// statusLine subkeys, and snapshot the original once so uninstall can restore it.
 #[test]
 fn migrate_from_statusline_ps1_preserves_key_order_extra_subkeys_snapshot_and_restores_on_uninstall()
  {
@@ -449,6 +478,8 @@ fn migrate_from_statusline_ps1_preserves_key_order_extra_subkeys_snapshot_and_re
     );
 }
 
+// `--reset` drops the statusLine key without reordering the rest; `--purge` removes AGYLINE_HOME
+// including config.toml, so the two scopes stay distinguishable.
 #[test]
 fn uninstall_reset_and_purge_remove_statusline_preserving_remaining_key_order_and_clean_home() {
     let sb = Sandbox::new("reset_purge");
@@ -515,6 +546,8 @@ fn uninstall_reset_and_purge_remove_statusline_preserving_remaining_key_order_an
     );
 }
 
+// A statusLine we do not own is left byte-for-byte alone, and unparseable settings must error
+// rather than be rewritten into something the user never wrote.
 #[test]
 fn uninstall_leaves_foreign_statusline_untouched_and_malformed_json_errors() {
     let sb = Sandbox::new("foreign_and_malformed");
@@ -556,6 +589,8 @@ fn uninstall_leaves_foreign_statusline_untouched_and_malformed_json_errors() {
     }
 }
 
+// Dotfiles-managed settings.json is a symlink: the atomic swap must write through it and leave
+// the link itself in place.
 #[test]
 fn install_follows_symlink_without_replacing_link_with_regular_file() {
     let sb = Sandbox::new("symlink_follow");
@@ -605,6 +640,8 @@ fn env_settings_parent(sandbox: &Path) -> PathBuf {
     sandbox.join("home").join(".gemini").join("antigravity-cli")
 }
 
+/// Runs the real binary with HOME/USERPROFILE/AGYLINE_HOME redirected into the sandbox, so CLI
+/// cases exercise process-level behavior without touching the developer's settings.
 fn run_sandboxed_bin(sandbox: &Path, args: &[&str], stdin_bytes: &[u8]) -> Output {
     let user_home = sandbox.join("home");
     let agyline_home = sandbox.join("agyline-home");
@@ -640,6 +677,8 @@ fn run_sandboxed_bin(sandbox: &Path, args: &[&str], stdin_bytes: &[u8]) -> Outpu
     child.wait_with_output().expect("wait sandboxed agyline")
 }
 
+// Help exits 0 on stdout; any unknown flag or stray argument exits 2 with a `--help` hint on
+// stderr and nothing on stdout.
 #[test]
 fn cli_install_and_uninstall_help_and_unknown_flags_contract() {
     let sb = Sandbox::new("cli_flags");
@@ -653,6 +692,7 @@ fn cli_install_and_uninstall_help_and_unknown_flags_contract() {
         }
     }
 
+    // `--reset`/`--purge` are uninstall-only; accepting them on install would widen its scope.
     let bad_cases: &[&[&str]] = &[
         &["install", "--unknown"],
         &["install", "--reset"],
@@ -674,6 +714,8 @@ fn cli_install_and_uninstall_help_and_unknown_flags_contract() {
     }
 }
 
+// The whole CLI lifecycle in one sandbox: preview, non-TTY refusal, apply, idempotence, restore.
+// Nothing may mutate settings.json without consent, and restore must be byte-exact.
 #[test]
 fn cli_dry_run_non_tty_guard_and_end_to_end_subprocess_lifecycle() {
     let sb = Sandbox::new("cli_e2e");
@@ -746,6 +788,7 @@ fn cli_dry_run_non_tty_guard_and_end_to_end_subprocess_lifecycle() {
     assert_eq!(fs::read_to_string(&settings_path).expect("read"), initial);
 }
 
+// On a TTY the default is No: only an explicit yes applies, and a cancel must leave no file.
 #[test]
 fn cli_interactive_tty_prompt_cancels_unless_yes_and_applies_on_yes() {
     let sb = Sandbox::new("cli_tty_prompt");
@@ -800,6 +843,8 @@ fn cli_interactive_tty_prompt_cancels_unless_yes_and_applies_on_yes() {
     assert!(env.settings_path.exists());
 }
 
+// Uninstall must recognize its own escaped command, and `--purge` must refuse when AGYLINE_HOME
+// is the user's home rather than a dedicated directory.
 #[test]
 fn unix_single_quoted_command_roundtrips_through_install_and_uninstall_and_guards_unsafe_purge() {
     let sb = Sandbox::new("quote_roundtrip_and_purge_guard");

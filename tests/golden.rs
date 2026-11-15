@@ -1,3 +1,8 @@
+//! Byte-exact golden parity against the reference line (`ref/agy-patch/statusline.ps1`/`.py`).
+//! Each fixture's `expected_plain`/`expected_ansi` is the reference output for that frame; any
+//! mismatch means default-line parity broke. Cases run at a fixed clock anchor with a NoopSpawner
+//! so the printed text is deterministic and no background git/relay work is triggered.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -122,6 +127,8 @@ fn push_len_field(out: &mut Vec<u8>, field_num: u64, bytes: &[u8]) {
     out.extend_from_slice(bytes);
 }
 
+/// Builds a `gen_metadata.data` protobuf blob: nested field 1.19 carries `chat_model`, while the
+/// optional top-level field 19 and padding simulate trailing bytes the bounded decoder must skip.
 fn encode_gen_metadata_blob(
     chat_model: &str,
     trailing_top_field19: Option<&str>,
@@ -142,6 +149,8 @@ fn encode_gen_metadata_blob(
     outer
 }
 
+/// Seeds `conversations/<sid>.db` for the bounded response-model lookup; `wal_stale_restart` keeps
+/// the newest row only in the WAL, so the reader must follow idx DESC, not a stale main-db tail.
 fn prepare_db_setup(
     conversations_dir: &Path,
     session_id: &str,
@@ -238,6 +247,8 @@ fn prepare_db_setup(
     None
 }
 
+/// Materializes each case's config/session/relay/DB seeds in an isolated sandbox, renders at the
+/// fixed anchor with NoopSpawner, and asserts both plain and ANSI bytes equal the golden fixture.
 fn run_golden_suite(fixture_raw: &str) {
     let suite: GoldenSuite =
         serde_json::from_str(fixture_raw).expect("golden fixture JSON must parse");
@@ -311,16 +322,22 @@ fn run_golden_suite(fixture_raw: &str) {
     }
 }
 
+// Default-line reference parity (A-I cases): stdin/model/workspace/git/context/quota/cost and
+// env overrides, plus seeded telemetry, relay, and SQLite state that alter the cache countdown.
 #[test]
 fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
     run_golden_suite(include_str!("fixtures/default_line_golden.json"));
 }
 
+// Opt-in items, glyph sets, palettes/color depth, env precedence, broken-TOML fallback, and
+// width narrowing, each compared byte-for-byte to the reference.
 #[test]
 fn items_and_config_golden_cases_match_plain_and_ansi_bytes() {
     run_golden_suite(include_str!("fixtures/items_and_config.json"));
 }
 
+// Exercises the shared `render_lines` seam directly with a hand-built FrameData, pinning exact
+// bytes for git/cache/relay/speed formatting independent of the collection path.
 #[test]
 fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() {
     let config = EffectiveConfig::default();
@@ -401,6 +418,8 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
     );
 }
 
+// Seeds a fresh git cache (now-500ms, inside the 2s window) per case so the cached branch state
+// drives the printed git text; D04-D12 pin clean/dirty/conflict/detached/junction/CJK bytes.
 #[test]
 fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     let nanos = SystemTime::now()
@@ -542,6 +561,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     for (id, payload_json, cache_entry, expected_plain, expected_ansi) in cases {
         write_git_cache(&home_dir, cache_entry).expect("seed golden git cache");
         let stdin_bytes = serde_json::to_vec(payload_json).expect("serialize");
+        // Nonexistent temp/conversations dirs prove the warm print path reads only the git cache.
         let env = RenderEnv {
             home_dir: home_dir.clone(),
             temp_dir: PathBuf::from("nonexistent_temp_dir"),

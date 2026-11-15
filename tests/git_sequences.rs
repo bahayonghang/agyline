@@ -1,3 +1,8 @@
+//! Git contracts driven as sequences: porcelain-v2 parsing, cache-file identity from the
+//! lexical cwd, and the fresh / stale-while-revalidate / expired lifecycle as the clock advances.
+//! The print path only reads the cache and requests detached `__refresh-git` workers; the worker
+//! cases run the real binary to pin lock ownership, link resolution, and pipe EOF under slow git.
+
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -18,6 +23,8 @@ use agyline::{
 
 static SANDBOX_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// Unique per-test sandbox under the OS temp dir, removed on drop so parallel tests never share
+/// state and a failing case leaves no artifacts behind.
 struct TempDirGuard {
     path: PathBuf,
 }
@@ -44,6 +51,8 @@ impl Drop for TempDirGuard {
     }
 }
 
+// Reference parity for every porcelain-v2 shape: which lines count as dirty, how a detached or
+// unborn HEAD becomes a branch label, and that non-UTF-8 output degrades instead of failing.
 #[test]
 fn porcelain_v2_parses_clean_dirty_ignored_conflict_ahead_behind_detached_and_utf8() {
     // 1. Clean repository with ignored file (`!` must NOT mark dirty)
@@ -154,6 +163,8 @@ u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 README.md\n";
     assert!(lossy_parsed.dirty);
 }
 
+// Cache identity is the normalized cwd plus the embedded cwd check: an untrusted or wrong-format
+// file is a miss, never a panic, and the next atomic write heals it.
 #[test]
 fn git_cache_store_normalizes_lexical_cwd_verifies_embedded_key_and_self_heals() {
     // Pure lexical normalization: preserve roots, strip trailing separators on subpaths
@@ -287,6 +298,8 @@ fn git_cache_store_normalizes_lexical_cwd_verifies_embedded_key_and_self_heals()
     assert_eq!(read_git_cache(home, "D:\\Work\\agyline"), Some(entry));
 }
 
+// Sweeping is bounded work: at most one scan per 24h, and each artifact class keeps its own TTL
+// (sessions 7d, git cache 24h, tmp/lock 10m) so a live worker's files survive.
 #[test]
 fn stale_state_sweep_throttles_to_24h_and_cleans_only_expired_artifacts() {
     let sandbox = TempDirGuard::new("sweep");
@@ -374,12 +387,15 @@ fn stale_state_sweep_throttles_to_24h_and_cleans_only_expired_artifacts() {
     );
 }
 
+/// Records `spawn_refresh_git` requests instead of launching processes, so a test can assert the
+/// print path only asked for work. Relay touches are out of scope here and stay a no-op.
 #[derive(Default)]
 struct RecordingSpawner {
     git_cwds: Mutex<Vec<String>>,
 }
 
 impl RecordingSpawner {
+    /// Drains the log so each assertion counts only the spawns caused by the frame under test.
     fn take_git_spawns(&self) -> Vec<String> {
         std::mem::take(&mut *self.git_cwds.lock().expect("lock spawner"))
     }
@@ -396,6 +412,8 @@ impl Spawner for RecordingSpawner {
     fn spawn_touch(&self, _session_id: &str, _relay_url: &str) {}
 }
 
+// One cache entry walked through fresh, SWR, expired and negative ages: a single frame cannot
+// show that both the served text and the spawn count depend on age and on `delta_out`.
 #[test]
 fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
     let sandbox = TempDirGuard::new("git_seq");
@@ -410,6 +428,7 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
     }))
     .expect("json");
 
+    // Injected clock: cache age comes from `now_ms`, so the lifecycle needs no real sleeps.
     let make_env = |now_ms: u64| RenderEnv {
         home_dir: home.clone(),
         temp_dir: home.join("temp"),
@@ -579,6 +598,8 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
     assert_eq!(spawner.take_git_spawns(), vec![repo_cwd.to_string()]);
 }
 
+/// Real repo with one commit on `branch`: worker cases need genuine git output, and an unborn
+/// repo would report `(initial)` instead of a branch name.
 fn init_real_git_repo(repo_dir: &Path, branch: &str) {
     fs::create_dir_all(repo_dir).expect("create repo dir");
     let run_git = |args: &[&str]| {
@@ -602,6 +623,7 @@ fn init_real_git_repo(repo_dir: &Path, branch: &str) {
     run_git(&["commit", "-m", "initial"]);
 }
 
+/// Directory link the host can create unprivileged: a junction on Windows, a symlink on Unix.
 fn create_dir_link(link_path: &Path, target_dir: &Path) {
     let out = if cfg!(windows) {
         Command::new("cmd")
@@ -626,6 +648,8 @@ fn create_dir_link(link_path: &Path, target_dir: &Path) {
     );
 }
 
+// Only the detached worker resolves the filesystem: it must find the repo behind a link or a
+// worktree `.git` file, while the rendered `dir` item keeps the literal cwd leaf.
 #[test]
 fn refresh_git_worker_resolves_junction_or_symlink_dash_cwd_and_negative_cache() {
     let sandbox = TempDirGuard::new("junction_d08");
@@ -679,6 +703,7 @@ fn refresh_git_worker_resolves_junction_or_symlink_dash_cwd_and_negative_cache()
         .env("AGYLINE_HOME", &home_dir)
         .output()
         .expect("run __refresh-git");
+    // Worker contract: exit 0 and stay silent, so it can never pollute a printed status line.
     assert_eq!(worker_out.status.code(), Some(0));
     assert!(worker_out.stdout.is_empty());
     assert!(worker_out.stderr.is_empty());
@@ -776,6 +801,8 @@ fn refresh_git_worker_resolves_junction_or_symlink_dash_cwd_and_negative_cache()
     assert_eq!(wt_cached.branch, "wt/feature");
 }
 
+// Lock ownership, not just existence: a live foreign lock blocks the refresh and must survive,
+// and only a lock this worker owns may be removed on exit.
 #[test]
 fn refresh_git_worker_enforces_30s_lock_takeover_and_ownership() {
     let sandbox = TempDirGuard::new("lock_takeover");
@@ -825,6 +852,8 @@ fn refresh_git_worker_enforces_30s_lock_takeover_and_ownership() {
     );
 }
 
+// The performance contract end to end: a 3s git must neither delay the printed line nor hold its
+// pipe open, and the recorded PIDs prove the worker really ran, so a pass is never vacuous.
 #[test]
 fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
     let sandbox = TempDirGuard::new("pipe_eof_slow_git");
@@ -868,6 +897,7 @@ fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
         String::from_utf8_lossy(&compile_out.stderr)
     );
 
+    // The worker inherits this PATH, so the fake git must win lookup over the real one.
     let mut path_entries = vec![fake_bin_dir.clone()];
     if let Some(existing_path) = std::env::var_os("PATH") {
         path_entries.extend(std::env::split_paths(&existing_path));
@@ -952,6 +982,7 @@ fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
     .expect("json");
 
     let t1 = Instant::now();
+    // agy runs the line through a host shell; that wrapper must not keep the pipe open either.
     let mut stale_cmd = if cfg!(windows) {
         let mut c = Command::new("cmd");
         c.args(["/d", "/s", "/c", bin]);

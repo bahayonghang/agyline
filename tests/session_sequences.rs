@@ -1,3 +1,8 @@
+//! Cross-frame session contracts: the output-rate baseline, the `cache_ts` fallback chain, relay
+//! touch gating, and SQLite response-model caching. Sequences are the point: one frame cannot
+//! show a baseline reset, a countdown, or a cache that must not reopen. Detached `__touch`
+//! workers run against a loopback relay stand-in, never a real network.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -15,6 +20,8 @@ use serde_json::Value;
 
 static SEQ_SANDBOX_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Per-test home/temp/conversations sandbox, removed on drop. `home_dir` is deliberately not
+/// created, so a case can assert that a frame wrote no state at all.
 struct Sandbox {
     root: PathBuf,
     home_dir: PathBuf,
@@ -49,6 +56,8 @@ impl Sandbox {
         }
     }
 
+    /// RenderEnv with an injected clock and recording spawner: no real time and no real child
+    /// processes, so a frame sequence stays deterministic.
     fn env<'a>(
         &self,
         now_ms: u64,
@@ -76,6 +85,8 @@ impl Drop for Sandbox {
     }
 }
 
+/// Counts the work the print path only requests: git refreshes, relay touches, and SQLite opens.
+/// `opens()` is the evidence that an idle frame did no database I/O.
 #[derive(Default)]
 struct RecordingSpawner {
     git_spawns: Mutex<Vec<String>>,
@@ -113,6 +124,7 @@ impl Spawner for RecordingSpawner {
     }
 }
 
+/// Sorted file names, empty when the dir is absent; used to assert no `.tmp` leftovers remain.
 fn dir_entries(dir: &Path) -> Vec<String> {
     let Ok(rd) = fs::read_dir(dir) else {
         return Vec::new();
@@ -125,6 +137,8 @@ fn dir_entries(dir: &Path) -> Vec<String> {
     names
 }
 
+// Frames without a usable session id must leave no state behind, and a startup state is not an
+// accepted turn: neither may anchor the five-minute prompt-cache clock.
 #[test]
 fn pre_session_and_startup_states_isolate_writes_and_never_anchor_warm_cache() {
     let sb = Sandbox::new("pre_session_isolation");
@@ -165,6 +179,8 @@ fn pre_session_and_startup_states_isolate_writes_and_never_anchor_warm_cache() {
     }
 }
 
+// Persisted state is a fixed field whitelist keyed by the session id alone, so payload extras
+// cannot leak to disk and a repeated frame stays a no-op.
 #[test]
 fn session_key_encoding_privacy_and_unchanged_idle_write_skip() {
     let sb = Sandbox::new("session_key_and_skip_write");
@@ -235,6 +251,8 @@ fn session_key_encoding_privacy_and_unchanged_idle_write_skip() {
     );
 }
 
+// Only a sequence shows the two clocks: tok/s keeps its last measured value across idle frames,
+// while the 300s cache countdown is re-anchored by accepted output and then runs down.
 #[test]
 fn stateful_tps_ties_to_even_and_five_minute_prompt_cache_lifecycle() {
     let sb = Sandbox::new("tps_and_cache_lifecycle");
@@ -330,6 +348,8 @@ fn stateful_tps_ties_to_even_and_five_minute_prompt_cache_lifecycle() {
     );
 }
 
+// An untrustworthy state file is a cold miss, never a panic or a bogus rate, and the frame that
+// rejected it must heal the file atomically.
 #[test]
 fn corrupt_version_mismatch_and_session_id_mismatch_self_heal_atomically() {
     let sb = Sandbox::new("self_healing");
@@ -338,6 +358,8 @@ fn corrupt_version_mismatch_and_session_id_mismatch_self_heal_atomically() {
     fs::create_dir_all(&sessions_dir).expect("create sessions_dir");
     let hello_file = sessions_dir.join("id-a430d84680aabd0b.json");
 
+    // Four ways state can be untrustworthy: truncated, wrong version, a foreign session id behind
+    // a hash collision, and missing required fields.
     let bad_payloads = [
         r#"{"version": 1, "truncated"#.to_string(),
         r#"{"version": 2, "session_id": "hello", "prev_state": "idle", "start_time_ms": 1000, "base_out": 0, "last_tps": "99.9", "resp_model": "", "prev_model_key": "Model", "cache_ts": 1700000000, "db_fingerprint": null}"#.to_string(),
@@ -371,6 +393,8 @@ fn corrupt_version_mismatch_and_session_id_mismatch_self_heal_atomically() {
     }
 }
 
+// A touch is a conjunction: last 60s of the 300s window, >= 32K prompt tokens, fewer than 4
+// touches, and a live relay. Each gate is exercised in turn against one relay state file.
 #[test]
 fn cache_relay_badges_keepalive_touch_gating_and_off_override() {
     let sb = Sandbox::new("cache_relay_and_touch_gating");
@@ -403,6 +427,8 @@ fn cache_relay_badges_keepalive_touch_gating_and_off_override() {
     let relay_dat = sb.temp_dir.join("agy_cache_sess_alpha.dat");
     fs::write(&relay_dat, "1700000000 0 live\n").expect("write relay_dat");
 
+    // Last step of the cache_ts chain: a relay anchor overrides the session-derived clock, so the
+    // countdowns below are measured from 1700000000, not from these frames.
     let payload_36k = br#"{"session_id":"sess.alpha","agent_state":"idle","context_window":{"current_usage":{"input_tokens":4000,"cache_read_input_tokens":32000}}}"#;
 
     // 1. Warm (> 60s remaining: 180s left) => green ↻ badge, zero touches spawned
@@ -478,6 +504,8 @@ fn cache_relay_badges_keepalive_touch_gating_and_off_override() {
     assert_eq!(spawner.touches().len(), 1);
 }
 
+/// Protobuf base-128 varint, so the fixture can hand-build a `gen_metadata` blob without pulling
+/// in a protobuf dependency.
 fn push_varint(out: &mut Vec<u8>, mut val: u64) {
     loop {
         if val < 0x80 {
@@ -489,6 +517,8 @@ fn push_varint(out: &mut Vec<u8>, mut val: u64) {
     }
 }
 
+/// Minimal shape the CLI writes: outer field 1 wrapping inner field 19, the model id. The decoder
+/// only needs those bytes, so the fixture stays independent of the rest of the real schema.
 fn encode_chat_model_blob(model_name: &str) -> Vec<u8> {
     let mut inner = Vec::new();
     push_varint(&mut inner, (19 << 3) | 2);
@@ -502,6 +532,8 @@ fn encode_chat_model_blob(model_name: &str) -> Vec<u8> {
     outer
 }
 
+// The DB fingerprint (len + mtime) is what gates a reopen, and a picker switch invalidates the
+// cached response model without any SQLite I/O. Only a frame sequence can separate those.
 #[test]
 fn sqlite_response_model_caching_zero_idle_opens_and_picker_switch_invalidation() {
     let sb = Sandbox::new("sqlite_caching_and_switch");
@@ -616,10 +648,14 @@ fn sqlite_response_model_caching_zero_idle_opens_and_picker_switch_invalidation(
     assert_eq!(spawner.opens(), 2);
 }
 
+// A locked conversation DB must degrade to the picker name inside the render budget, exit 0 with
+// empty stderr, and leave the fingerprint unpoisoned so the next frame recovers.
 #[test]
 fn sqlite_exclusive_write_lock_falls_back_fast_with_exit_zero() {
     let sb = Sandbox::new("sqlite_exclusive_lock");
     let sid = "550e8400-e29b-41d4-a716-446655440088";
+    // The spawned binary derives conversations_dir from HOME/USERPROFILE, not from an injected
+    // RenderEnv, so the DB has to live under this sandbox home.
     let proc_conv_dir = sb
         .root
         .join(".gemini")
@@ -723,6 +759,8 @@ fn sqlite_exclusive_write_lock_falls_back_fast_with_exit_zero() {
     );
 }
 
+/// Reads up to the end of the HTTP head under a 2s bound, so a stuck worker fails the test
+/// instead of hanging it.
 fn read_http_request_head(stream: &mut std::net::TcpStream) -> String {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
@@ -739,9 +777,12 @@ fn read_http_request_head(stream: &mut std::net::TcpStream) -> String {
     String::from_utf8_lossy(&buf).into_owned()
 }
 
+// `__touch` is the only code that opens a socket: loopback HTTP only, deduplicated by the lock,
+// and hostile input rejected silently with exit 0 and no output.
 #[test]
 fn touch_worker_loopback_http_post_lock_dedup_and_ssrf_rejection() {
     let sb = Sandbox::new("touch_worker_http_and_ssrf");
+    // Ephemeral loopback port: the relay stand-in must not need a fixed port or a real network.
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
     let port = listener.local_addr().expect("local_addr").port();
 
@@ -960,6 +1001,8 @@ fn touch_worker_loopback_http_post_lock_dedup_and_ssrf_rejection() {
     }
 }
 
+// The print path must reach pipe EOF while a 2.5s relay POST is still in flight; an inherited
+// stdio handle in the detached child would hold the parent's pipe open.
 #[test]
 fn live_render_spawns_detached_touch_without_holding_pipe_eof_on_slow_relay() {
     let sb = Sandbox::new("detached_touch_pipe_eof");
@@ -972,6 +1015,8 @@ fn live_render_spawns_detached_touch_without_holding_pipe_eof_on_slow_relay() {
         .expect("epoch")
         .as_secs();
     let relay_content = format!("{} 1 live\n", now_sec.saturating_sub(250));
+    // The worker resolves the relay dir itself: Windows honors TMPDIR/TEMP/TMP, Unix always uses
+    // /tmp, so the state file is seeded in both places.
     let relay_file_name = format!("agy_cache_{sid}.dat");
     fs::write(sb.temp_dir.join(&relay_file_name), &relay_content).expect("write sb relay file");
     let unix_tmp_relay = Path::new("/tmp").join(&relay_file_name);

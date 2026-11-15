@@ -1,3 +1,8 @@
+//! Configurator contracts on a TestBackend: the preview must equal the live renderer with no ANSI
+//! re-parsing, edits must survive navigation, modals and undo/redo, and saving must never clobber
+//! a broken or externally changed config.toml. The agy Hook tab installs and restores
+//! settings.json without implicitly saving the config draft.
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -21,6 +26,8 @@ use agyline::{
 
 static TEST_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// One temp root for the config home, settings.json and exe path, so a case can assert exactly
+/// which files the configurator created. Removed on drop.
 struct Sandbox {
     root: PathBuf,
     agyline_home: PathBuf,
@@ -54,6 +61,8 @@ impl Sandbox {
         }
     }
 
+    /// ConfiguratorEnv pinned to the scenario anchor clock and the Unix platform, so previews and
+    /// install diffs stay deterministic across hosts.
     fn env(&self, env_vars: BTreeMap<String, String>) -> ConfiguratorEnv {
         let install_env = InstallEnv {
             settings_path: self.settings_path.clone(),
@@ -106,6 +115,8 @@ fn left_click(col: u16, row: u16) -> Event {
     })
 }
 
+/// Windows console delivers Release for the same key press; the app must ignore it or every edit
+/// would apply twice.
 fn release(code: KeyCode) -> Event {
     Event::Key(KeyEvent {
         code,
@@ -115,6 +126,7 @@ fn release(code: KeyCode) -> Event {
     })
 }
 
+/// Auto-repeat event, ignored like Release so a held key cannot double-apply.
 fn repeat_key(code: KeyCode) -> Event {
     Event::Key(KeyEvent {
         code,
@@ -124,6 +136,8 @@ fn repeat_key(code: KeyCode) -> Event {
     })
 }
 
+/// Flattens the drawn buffer to trimmed rows: assertions search what is actually visible, and
+/// mouse clicks are aimed at columns found here.
 fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
     let buf = terminal.backend().buffer();
     let area = buf.area;
@@ -139,6 +153,8 @@ fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
     out
 }
 
+/// Span text per line with no styling: comparing this against `emit_plain` is what proves the
+/// preview never round-trips through ANSI.
 fn lines_to_plain_string(lines: &[ratatui::text::Line<'static>]) -> String {
     if lines.is_empty() {
         return String::new();
@@ -153,11 +169,14 @@ fn lines_to_plain_string(lines: &[ratatui::text::Line<'static>]) -> String {
     out
 }
 
+// The preview shares the live renderer: conversion must be lossless for text and for color at
+// every depth, across all built-in scenarios.
 #[test]
 fn convert_matches_render_lines_plain_text_and_maps_colors_losslessly() {
     let env_vars = BTreeMap::new();
     let mut doc = ConfigDoc::cometix_base();
 
+    // Every built-in scenario must convert to the same plain text the live renderer emits.
     for sc in builtin_scenarios() {
         let cfg = EffectiveConfig::from_doc(&doc, None, &env_vars, true);
         let frame = sc.frame_for_env(&env_vars);
@@ -223,6 +242,8 @@ fn convert_matches_render_lines_plain_text_and_maps_colors_losslessly() {
     let _ = Ansi16Color::ALL;
 }
 
+// Selection must scroll into view at both supported sizes, and a mouse click must hit the item
+// actually drawn at that cell, not the item at that index.
 #[test]
 fn layout_catalog_selection_scrolls_into_view_and_mouse_uses_visible_items() {
     for (w, h) in [(80, 22), (100, 28)] {
@@ -230,6 +251,7 @@ fn layout_catalog_selection_scrolls_into_view_and_mouse_uses_visible_items() {
         let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
         app.handle_event(Event::Resize(w, h));
         app.handle_event(press(KeyCode::Tab));
+        // Walk past the visible window so the selection has to scroll rather than clip.
         for _ in 0..19 {
             app.handle_event(press(KeyCode::Down));
         }
@@ -250,12 +272,15 @@ fn layout_catalog_selection_scrolls_into_view_and_mouse_uses_visible_items() {
     }
 }
 
+// Active Rows obeys the same scroll and mouse contract as the catalog, with a full 20-item row
+// loaded from config.toml; 'x' must remove the clicked slot, not its neighbor.
 #[test]
 fn active_rows_selection_scrolls_into_view_and_mouse_uses_visible_items() {
     for (w, h) in [(80, 22), (100, 28)] {
         let sb = Sandbox::new();
         std::fs::create_dir_all(&sb.agyline_home).expect("config home");
         let mut doc = ConfigDoc::cometix_base();
+        // Fill row 1 with every catalog item so the pane must scroll at both sizes.
         doc.lines = vec![
             ItemId::ALL.into_iter().map(ItemSlot::new).collect(),
             Vec::new(),
@@ -277,6 +302,7 @@ fn active_rows_selection_scrolls_into_view_and_mouse_uses_visible_items() {
             screen.contains("> plan P5"),
             "selected Plan must be visible at {w}x{h}:\n{screen}"
         );
+        // Hit-testing must use the scrolled viewport, not the unscrolled item list.
         app.handle_event(left_click(2, h - 4));
         app.handle_event(press(KeyCode::Char('x')));
         assert!(
@@ -292,6 +318,8 @@ fn active_rows_selection_scrolls_into_view_and_mouse_uses_visible_items() {
     }
 }
 
+// At the minimum 80x22 all four tab titles must be drawn and clickable at the column where they
+// actually appear.
 #[test]
 fn minimum_terminal_exposes_all_four_clickable_tabs() {
     let sb = Sandbox::new();
@@ -307,6 +335,7 @@ fn minimum_terminal_exposes_all_four_clickable_tabs() {
         render_tui_frame(&mut terminal, &app).expect("draw tabs");
         let screen = buffer_text(&terminal);
         let tab_line = screen.lines().nth(6).expect("tab line");
+        // Click the column where the title was drawn, not a hardcoded offset.
         let column = tab_line
             .find(title)
             .unwrap_or_else(|| panic!("missing {title}: {tab_line}"));
@@ -439,6 +468,8 @@ fn all_four_tabs_scenarios_width_ruler_and_resize_guard_render_cleanly() {
     assert!(!sb.agyline_home.exists());
 }
 
+/// Types a string as Press events: each must be consumed by the inline editor, never as a hotkey
+/// or an exit.
 fn type_str(app: &mut ConfiguratorApp, s: &str) {
     for ch in s.chars() {
         assert_eq!(
@@ -689,6 +720,7 @@ fn preset_modal_scopes_and_hundred_step_undo_redo_restore_exact_doc() {
 #[test]
 fn env_override_badges_and_effective_vs_file_only_toggle_preserve_doc() {
     let sb = Sandbox::new();
+    // AGY_* overrides must reach the preview without editing the doc or marking it dirty.
     let mut env_vars = BTreeMap::new();
     env_vars.insert("AGY_THEME".to_string(), "light".to_string());
     env_vars.insert("AGY_STATUSLINE_LINES".to_string(), "1".to_string());

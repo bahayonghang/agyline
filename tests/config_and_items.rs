@@ -1,3 +1,7 @@
+//! Config resolution and per-item evaluation: the precedence ladder (AGY_* env > config.toml >
+//! preset > built-in default), tolerant per-field degradation, palette/color-depth SGR output,
+//! and the 20-item catalog rendered through the shared width-narrowing pipeline.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
@@ -40,6 +44,8 @@ impl Drop for Sandbox {
     }
 }
 
+// Serialization round-trips losslessly: uncustomized items stay string shorthands, customized
+// items become inline tables, empty sections are omitted, and parse(serialize(doc)) == doc.
 #[test]
 fn config_doc_serializes_shorthands_and_inline_tables_and_roundtrips() {
     let mut doc = ConfigDoc::default();
@@ -84,6 +90,8 @@ items = ["model", { item = "quota", bucket = "flash", label = "fl", show_reset =
     assert_eq!(alias_doc.lines[0][1].show_reset, Some(true));
 }
 
+// Preset scope is field-limited (Layout vs Style vs All); custom presets load from AGYLINE_HOME
+// and explicit config.toml keys still override the preset's fields.
 #[test]
 fn presets_apply_scopes_and_load_custom_presets_from_agyline_home() {
     assert_eq!(builtin_presets().len(), 4);
@@ -156,6 +164,7 @@ items = ["model", "git"]
 
 #[test]
 fn palettes_color_depths_polarity_fallback_and_custom_palettes_emit_expected_sgr() {
+    // Palette catalog: 8 built-ins plus custom `palettes/*.toml` from AGYLINE_HOME.
     assert_eq!(builtin_palettes().len(), 8);
 
     let sb = Sandbox::new("palettes");
@@ -273,6 +282,8 @@ items = ["model", "context"]
     assert_eq!(out_nc.ansi, "  \u{ef23} Opus 4.6\n");
 }
 
+// Precedence: AGY_* env beats config.toml, and COLORFGBG only steers `theme = "auto"`. The
+// effective/file-only toggle applies or ignores env without mutating the loaded doc.
 #[test]
 fn env_vars_override_config_toml_and_colorfgbg_only_applies_to_auto_theme() {
     let sb = Sandbox::new("env_prec");
@@ -306,6 +317,7 @@ items = [{ id = "mode", show_default = true }]
     env_map.insert("AGY_SHOW_DEFAULT_MODE".to_string(), "0".to_string());
     env_map.insert("AGY_CACHE_RELAY".to_string(), "off".to_string());
 
+    // Only the five AGY_* knobs count as overrides; COLORFGBG is not one of them.
     let active = inspect_env_overrides(&env_map);
     assert_eq!(active.len(), 5);
 
@@ -326,6 +338,8 @@ items = [{ id = "mode", show_default = true }]
     );
 }
 
+// A syntax-broken config.toml degrades to the default line plus a red " ! config" Crit badge,
+// and the loader reports the exact line/column; the live render itself stays silent.
 #[test]
 fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnostic() {
     let sb = Sandbox::new("broken_toml");
@@ -362,6 +376,8 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     );
 }
 
+// Tolerant per-field degradation: unknown keys/items/sections are ignored, invalid enums and
+// inverted/negative thresholds reset to defaults, and a bad priority is dropped, not fatal.
 #[test]
 fn unknown_keys_unknown_items_and_inverted_thresholds_degrade_per_field() {
     let raw = r#"
@@ -400,6 +416,8 @@ items = ["model", "future_unknown_item", { id = "context", priority = 99, unknow
     assert_eq!(doc.lines[0][1].priority, None);
 }
 
+// The catalog is exactly the 20 ItemId::ALL entries in order; quota is the only repeatable item
+// (allow_multiple, 4 options), so the configurator can place independent quota buckets.
 #[test]
 fn items_catalog_exposes_all_twenty_items_with_priorities_and_options() {
     let cat = items::catalog();
@@ -418,6 +436,8 @@ fn items_catalog_exposes_all_twenty_items_with_priorities_and_options() {
     assert!(model_meta.options.is_empty());
 }
 
+// Renders all 20 items at once: email PII and subagent role prompts never reach the line, and
+// plan_tier renders but is never persisted to session state.
 #[test]
 fn all_twenty_items_evaluate_full_and_compact_and_respect_privacy_and_role_exclusions() {
     let sb = Sandbox::new("twenty_items");
@@ -570,6 +590,8 @@ items = [
 
 #[test]
 fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() {
+    // Display width is grapheme-based: Nerd PUA icons count 1, CJK and ZWJ emoji count 2, so the
+    // narrowing budget matches what the terminal actually renders.
     assert_eq!(str_display_width("abc"), 3);
     assert_eq!(str_display_width("\u{ef23} \u{f024b}"), 3);
     assert_eq!(str_display_width("中文"), 4);
