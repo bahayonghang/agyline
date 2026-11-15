@@ -106,6 +106,10 @@ fn is_safe_session_id(session_id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
+pub fn is_valid_loopback_relay_url(raw_url: &str) -> bool {
+    parse_loopback_http_url(raw_url).is_some()
+}
+
 fn parse_loopback_http_url(raw_url: &str) -> Option<LoopbackTarget> {
     let trimmed = raw_url.trim();
     if trimmed.len() < 8 || !trimmed[..7].eq_ignore_ascii_case("http://") {

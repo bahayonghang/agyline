@@ -39,6 +39,10 @@ pub use state::{
 pub use statusline::{
     LiveOutput, RenderEnv, render_lines, render_lines_with_width, run_live_frame,
 };
+pub use tui::{
+    ConfiguratorApp, ConfiguratorEnv, ConfiguratorExit, TuiTab, render_tui_frame,
+    rendered_frame_to_ratatui_lines, run_configurator,
+};
 
 mod cli;
 mod collect;
@@ -51,3 +55,4 @@ mod render;
 mod scenarios;
 mod state;
 mod statusline;
+mod tui;

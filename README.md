@@ -4,7 +4,7 @@
 
 agyline is a status line for the Antigravity CLI (`agy`): one Rust program, with its own configuration, in the place [CCometixLine](https://github.com/Haleclipse/CCometixLine) occupies for Claude Code.
 
-The Rust program is not in this tree yet. The line that runs today is the script in `ref/agy-patch`. That directory is local reference material and is listed in `.gitignore`.
+The `agyline` Rust crate lives in this repository. `ref/agy-patch` is the gitignored local reference script baseline whose default look and `AGY_*` behavior `agyline` reproduces.
 
 Agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -45,31 +45,27 @@ Per session, the script stores speed and the cache clock in `agy_telemetry_<sess
 
 Git status runs while the line is drawn. `statusline.py` stops that call after 1.5 seconds and reuses a two-second cache. `statusline.ps1` reads git on the same path.
 
-## A separate program
+## Shipped in this repository
 
-Each refresh starts PowerShell or Python. Git status runs before the line is printed, and a cache touch starts another shell.
+Unlike PowerShell or Python status line scripts, `agyline` runs as one compiled Rust binary: the printing path never spawns a shell and never waits on `git`. Stale local Git caches and prompt-cache relay touches run asynchronously in detached background worker modes (`__refresh-git`, `__touch`).
 
-Once that command is a Rust binary, the refresh is that process. It prints the line without waiting for git, and a touch does not start another shell. That binary is the goal; it is not in the tree yet.
-
-The environment variables above are the behavior to keep. People change layout and appearance in a config file. CCometixLine stores that file at `~/.claude/ccline/config.toml` and edits it by running `ccline`. agyline uses the same arrangement for `agy`.
-
-## Intended interface
-
-No code creates the pieces below. Build against these names.
-
-| Piece | Place |
+| Piece | Shipped behavior |
 | --- | --- |
-| Binary | `agyline` (GitHub Releases archives and `cargo install`; no npm wrapper) |
-| Platforms | Windows (`msvc`), macOS, and Linux (static `musl`), `x86_64` and `arm64` matching official `agy` targets; same-OS invocation only |
-| Config home | `~/.gemini/agyline/`, or the directory in `AGYLINE_HOME` |
-| Config file | `config.toml`: top-level `version`, `preset`, `palette`, `theme` (`auto`/`dark`/`light`), `glyphs`, `color_depth`, `separator`, `indent`, `single_line`, `overflow` (`fit`/`none`); tables `[thresholds]` (`context_warn`, `context_crit`, `quota_warn`, `quota_crit`, `cache_warn_secs`), `[git]` (`cache_ms`), `[cache_relay]` (`url`), `[palette_overrides]`; and `[[line]]` (`items` of `"<id>"` or `{ id, icon, fg, icon_color, priority, ... }`). Explicit `AGY_*` variables override `config.toml`; `COLORFGBG` applies when `theme = "auto"`. |
-| Runtime state | `state/` under the config home (session state, local Git cache, and background locks; `cache_relay.py` state stays read-only in the OS temp directory) |
-| Terminal run | a configurator (`agyline` or `agyline -c`), whose preview uses the same renderer as the live line |
-| Subcommands | `agyline preview` (stateless CLI preview for built-in scenarios or a payload file), `agyline install`, `agyline uninstall` |
-| `agy` hook | `statusLine.command` in `~/.gemini/antigravity-cli/settings.json`, updated via `agyline install` / `agyline uninstall` or the configurator. Show the edit before writing it, and restore the prior `statusLine` on uninstall. |
-| Default look | the reference line above |
+| Binary & `just` recipes | `agyline` single crate (`cargo install --path .`), plus `just ci`, `just install`, `just uninstall`, and `just sandbox-install-test` |
+| Live pipe render | `agy` pipes one JSON frame to `agyline`'s stdin; `agyline` renders 1 or 2 ANSI/plain lines to stdout with priority-based width narrowing (`overflow = "fit"` / `"none"`) |
+| 20-item catalog | Workspace (`model`, `dir`, `git`), Usage (`context`, `cache`, `speed`, `budget`, repeatable `quota`, `cost`), Runtime (`mode`, `subagents`, `tasks`, `queue`, `sandbox`), and Session/Identity (`vim`, `title`, `agent`, `artifacts`, `version`, `plan`) |
+| Presets & palettes | Built-in presets (`cometix`, `minimal`, `dashboard`, `cache-focus`) + custom `~/.gemini/agyline/presets/*.toml`; 8 built-in dual-polarity palettes (`terminal`, `catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `nord`, `gruvbox`, `rose-pine`, `dracula`) + custom `palettes/*.toml` |
+| Config home & file | `~/.gemini/agyline/config.toml` (or `AGYLINE_HOME`): `version`, `preset`, `palette`, `theme` (`auto`/`dark`/`light`), `glyphs` (`nerd`/`unicode`/`ascii`), `color_depth` (`auto`/`truecolor`/`256`/`16`/`none`), `separator`, `indent`, `single_line`, `overflow`; `[thresholds]`, `[git]`, `[cache_relay]`, `[palette_overrides]`, and `[[line]]`. Explicit `AGY_*` variables override `config.toml`; `COLORFGBG` applies when `theme = "auto"`. |
+| Runtime state | `state/` under `AGYLINE_HOME` (per-session telemetry, bounded SQLite response-model lookup, Git cache, background locks, and saved `previous_statusline.json` snapshot; `cache_relay.py` state stays read-only in the OS temp directory) |
+| Interactive configurator | `agyline` (on a TTY) or `agyline -c` / `--config`: 4-tab terminal workbench (`Layout`, `Style & Presets`, `Thresholds & Runtime`, `agy Hook`) sharing the live renderer without ANSI re-parsing, with 100-step undo/redo, live `TOML` drawer, `.bak` broken-TOML recovery, external `mtime` conflict guard, and standalone `settings.json` hook diff preview |
+| CLI subcommands | `agyline preview` (`--scenario`, `--all-scenarios`, `--list-scenarios`, `--input`, `--width`, `--plain`), `agyline install` (`--dry-run`, `--yes`), `agyline uninstall` (`--dry-run`, `--yes`, `--reset`, `--purge`) |
+| `agy` hook | `statusLine.command` in `~/.gemini/antigravity-cli/settings.json` (preserving symlinks and sibling keys, showing a unified diff before writing, and restoring the prior `statusLine` on uninstall) |
 
 The official `agy` and `agy.exe` binaries stay as installed. `agy` runs `agyline` as the `statusLine` command.
+
+## Planned distribution
+
+Prebuilt release archives via GitHub Releases (Windows `msvc`, macOS, and static `musl` Linux across `x86_64` and `arm64`, matching official `agy` targets; same-OS invocation only, with no npm wrapper) are planned separately from local `cargo install --path .` builds.
 
 ## What stays in the reference
 

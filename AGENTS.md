@@ -30,9 +30,9 @@ The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-C
 
 ## Status
 
-There is no Rust crate yet. Describe agyline as a planned program, and describe `ref/agy-patch` as the line that runs today.
+`agyline` is implemented as the single Rust crate in this repository. `ref/agy-patch` is the local gitignored reference baseline that `agyline`'s default line reproduces.
 
-`ref/` is gitignored local reference. Read it. Implement the application in the crate, and leave the files under `ref/` unchanged.
+`ref/` is gitignored local reference. Read it when checking parity. Implement changes in the crate, and leave the files under `ref/` unchanged.
 
 ## Default line
 

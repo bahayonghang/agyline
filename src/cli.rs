@@ -114,11 +114,13 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
                 );
                 return 1;
             }
-            let _ = writeln!(
-                streams.stderr,
-                "error: interactive configurator is not yet available in this build"
-            );
-            1
+            match crate::tui::run_configurator() {
+                Ok(_) => 0,
+                Err(err) => {
+                    let _ = writeln!(streams.stderr, "error: {err}");
+                    1
+                }
+            }
         }
         CliAction::Preview(opts) => execute_preview(opts, streams),
         CliAction::Install(opts) => match InstallEnv::from_process() {
