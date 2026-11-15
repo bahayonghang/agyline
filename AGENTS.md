@@ -67,7 +67,7 @@ Measure a change that claims to be faster. A cache that can change the printed t
 - One Cargo package until a split has a reason.
 - Imports stay at the top of the file.
 - A `match` on a union or enum ends with a `never` check.
-- Comments and commit messages are in English.
+- Comments and commit messages are in English. Comment the reason, not the statement; what earns a comment is in [.trellis/spec/code-comments.md](.trellis/spec/code-comments.md).
 - Commit only when asked. No Cursor trailer and no `Co-authored-by` for Cursor. Commit with local `git commit -F`.
 
 ## Agent skills
