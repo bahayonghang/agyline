@@ -1,3 +1,7 @@
+//! Shared helpers for the `state/` submodules: the private state dir, the FNV-1a hash behind
+//! collision-checked file keys, and the atomic tmp-then-rename write all state files use.
+//! Nothing here touches the relay's read-only `agy_cache_*.dat` in the OS temp dir.
+
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -19,12 +23,17 @@ pub mod sweep;
 
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// Creates `<home>/state` as a private (owner-only) directory and returns it. All session, git,
+/// lock, and sweep files live here, never in the world-readable temp dir the relay uses.
 pub fn ensure_state_dir(home_dir: &Path) -> io::Result<PathBuf> {
     let dir = home_dir.join("state");
     platform::ensure_private_dir(&dir)?;
     Ok(dir)
 }
 
+/// FNV-1a 64-bit hash (offset basis `0xcbf29ce484222325`, prime `0x100000001b3`). Used to derive
+/// short file keys from cwd/session ids. Callers also embed the original value: a 64-bit hash can
+/// collide, so a hash match alone is not proof of identity (treat a collision as a miss).
 pub(crate) fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in bytes {
@@ -34,6 +43,9 @@ pub(crate) fn fnv1a64(bytes: &[u8]) -> u64 {
     hash
 }
 
+/// Atomically replaces `<dir>/<target_name>`: write a unique `O_EXCL` tmp file, then rename it
+/// over the target, so a reader never sees a half-written file. The tmp name embeds pid+nanos+seq
+/// so concurrent writers cannot collide; on write failure the tmp is removed (no orphan left).
 pub(crate) fn atomic_write_bytes(dir: &Path, target_name: &str, bytes: &[u8]) -> io::Result<()> {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

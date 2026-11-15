@@ -1,7 +1,15 @@
+//! One untrusted `agy` stdin frame -> a normalized `Payload`, in a single pass with no I/O and no
+//! panics. Every field is optional; defaults and fallback chains mirror `ref/agy-patch`, so a
+//! partial frame still renders. Absent strings become "", numbers 0, and only JSON `true` is true.
+
 use serde_json::{Map, Value};
 
+/// Hard cap on piped stdin (4 MiB). The reference scripts read stdin unbounded; this bound stops a
+/// hostile or runaway frame from being buffered and parsed. Over-limit input is rejected, not cut.
 pub const MAX_STDIN_BYTES: usize = 4 * 1024 * 1024;
 
+/// A `quota.<name>` bucket. `remaining_fraction` is 0.0..=1.0, `None` when absent or out of range;
+/// `reset_in_seconds` counts seconds from now, `reset_time` is an unparsed timestamp string.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuotaBucketData {
     pub name: String,
@@ -19,14 +27,21 @@ pub struct SubagentSummary {
     pub model: String,
 }
 
+/// The normalized frame every later stage reads. Missing data becomes "" / 0 / false, never an
+/// error; `Option` marks fields whose absence changes the line, not merely the JSON shape.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload {
+    /// `session_id`, else `conversation_id`; `None` when both are missing or blank (pre-session).
     pub session_id: Option<String>,
+    /// As sent, defaulting to "idle", which is not an active turn for speed or cache anchoring.
     pub agent_state: String,
+    /// `execution_mode`, else `cycle_mode`; "" when neither is present.
     pub exec_mode: String,
     pub model_display_name: String,
     pub model_id: String,
+    /// Raw `model.effort`, else `thinkingLevel`; items normalize it to Low/Med/High/xHigh/Max.
     pub model_effort: String,
+    /// `cwd`, else `workspace.current_dir`, else `workspace.project_dir`, kept verbatim.
     pub cwd: String,
     pub vcs_branch: String,
     pub vcs_dirty: bool,
@@ -36,19 +51,28 @@ pub struct Payload {
     pub output_tokens: i64,
     pub cache_read_input_tokens: i64,
     pub total_output_tokens: i64,
+    /// Window size in tokens; f64 because agy may send the number as a float.
     pub context_window_size: f64,
+    /// Reported percent (0-100), used only when token counts or the window size are unavailable.
     pub used_percentage: f64,
+    /// `None` when absent or non-finite; only read for a `show_remaining` context slot.
     pub remaining_percentage: Option<f64>,
+    /// USD. `cost` may be an object (`total_usd`) or a bare number; both shapes are accepted.
     pub cost_usd: f64,
+    /// USD attributed to subagents; 0 unless `cost` is an object that carries it.
     pub subagent_cost_usd: f64,
+    /// One entry per `quota.<name>` object; empty when `quota` is absent or not an object.
     pub quota_buckets: Vec<QuotaBucketData>,
     pub subagents_total: usize,
+    /// Entries whose status is running, working or thinking, as the reference counts them.
     pub subagents_running: usize,
     pub subagents: Vec<SubagentSummary>,
     pub task_count: i64,
     pub pending_input_count: i64,
     pub tool_confirmation_pending: bool,
+    /// Columns agy reports; `None` when absent or non-positive, which leaves the line un-narrowed.
     pub terminal_width: Option<usize>,
+    // Session/identity extras: the reference scripts never read these, agyline's catalog does.
     pub vim_mode: String,
     pub conversation_title: String,
     pub agent_name: String,
@@ -58,11 +82,15 @@ pub struct Payload {
 }
 
 impl Payload {
+    /// True when no usable session id arrived: `collect` then skips session telemetry, cache
+    /// anchoring, the relay and the SQLite lookup, and renders a cold startup line.
     pub fn is_pre_session(&self) -> bool {
         self.session_id.is_none()
     }
 }
 
+/// Parses one frame, or returns `None` for over-limit, non-UTF-8, blank, malformed or non-object
+/// input. Never panics and never logs; the live caller prints nothing and exits 0 on `None`.
 pub fn parse_stdin_payload(raw: &[u8]) -> Option<Payload> {
     if raw.len() > MAX_STDIN_BYTES {
         return None;
@@ -79,6 +107,7 @@ pub fn parse_stdin_payload(raw: &[u8]) -> Option<Payload> {
 }
 
 fn extract_from_object(obj: &Map<String, Value>) -> Payload {
+    // Reference fallback order; a blank id stays absent, so the frame is treated as pre-session.
     let session_id = first_non_blank_trimmed(&[obj.get("session_id"), obj.get("conversation_id")]);
     let agent_state =
         first_non_blank_trimmed(&[obj.get("agent_state")]).unwrap_or_else(|| "idle".to_string());
@@ -130,6 +159,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
     let used_percentage = finite_f64(ctx_obj.and_then(|c| c.get("used_percentage"))).unwrap_or(0.0);
     let remaining_percentage = finite_f64(ctx_obj.and_then(|c| c.get("remaining_percentage")));
 
+    // `cost` is an object or a bare number; both `*_usd` and `*_cost_usd` spellings are accepted.
     let (cost_usd, subagent_cost_usd) = if let Some(Value::Object(cost_map)) = obj.get("cost") {
         (
             finite_f64(
@@ -159,6 +189,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
                 continue;
             };
             let disabled = strict_bool(q_obj.get("disabled"));
+            // Only 0.0..=1.0 is usable; statusline.ps1 skips out-of-range buckets in the minimum.
             let remaining_fraction =
                 finite_f64(q_obj.get("remaining_fraction")).filter(|rf| (0.0..=1.0).contains(rf));
             let remaining_amount = q_obj
@@ -191,6 +222,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
         for entry in arr {
             if let Some(s_obj) = entry.as_object() {
                 let status = first_non_blank_trimmed(&[s_obj.get("status")]).unwrap_or_default();
+                // Exactly the three statuses the reference counts as running; no others qualify.
                 let is_running = status.eq_ignore_ascii_case("running")
                     || status.eq_ignore_ascii_case("working")
                     || status.eq_ignore_ascii_case("thinking");
@@ -213,6 +245,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
     let pending_input_count = finite_i64(obj.get("pending_input_count"), 0);
     let tool_confirmation_pending = strict_bool(obj.get("tool_confirmation_pending"));
 
+    // agy omits the key when unknown; a non-positive width must not become a 0-column budget.
     let terminal_width = obj
         .get("terminal_width")
         .filter(|v| v.is_number())
@@ -220,6 +253,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
         .filter(|&w| w > 0)
         .map(|w| w as usize);
 
+    // Both shapes occur: an object (`vim.mode`, `agent.name`) or a bare string, plus flat aliases.
     let vim_mode = if let Some(Value::Object(vim_map)) = obj.get("vim") {
         first_non_blank_trimmed(&[vim_map.get("mode"), obj.get("vim_mode")]).unwrap_or_default()
     } else {
@@ -239,6 +273,7 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
         first_non_blank_trimmed(&[obj.get("agent"), obj.get("agent_name")]).unwrap_or_default()
     };
 
+    // `artifacts` may be a count or the array itself; an array is counted, never summed.
     let artifact_count = if obj.get("artifact_count").is_some_and(Value::is_number) {
         finite_i64(obj.get("artifact_count"), 0)
     } else if let Some(art_val) = obj.get("artifacts") {
@@ -310,6 +345,8 @@ fn extract_from_object(obj: &Map<String, Value>) -> Payload {
     }
 }
 
+/// The string verbatim, or `None` when absent, non-string or blank. Used for cwd and model names,
+/// which are passed on exactly as agy sent them rather than trimmed.
 fn non_blank_raw_str(val: Option<&Value>) -> Option<String> {
     let s = val?.as_str()?;
     if s.trim().is_empty() {
@@ -319,6 +356,7 @@ fn non_blank_raw_str(val: Option<&Value>) -> Option<String> {
     }
 }
 
+/// First non-blank string candidate, verbatim; `None` when every candidate is absent or blank.
 fn first_non_blank_raw(candidates: &[Option<&Value>]) -> Option<String> {
     for &candidate in candidates {
         if let Some(s) = non_blank_raw_str(candidate) {
@@ -328,6 +366,8 @@ fn first_non_blank_raw(candidates: &[Option<&Value>]) -> Option<String> {
     None
 }
 
+/// First non-blank string candidate, trimmed; `None` when all are absent, non-string or blank.
+/// Candidate order is the reference's fallback order, so it must not be reshuffled.
 fn first_non_blank_trimmed(candidates: &[Option<&Value>]) -> Option<String> {
     for &candidate in candidates {
         if let Some(s) = candidate.and_then(Value::as_str) {
@@ -340,19 +380,23 @@ fn first_non_blank_trimmed(candidates: &[Option<&Value>]) -> Option<String> {
     None
 }
 
+/// Only a real JSON `true` counts (reference: `-eq $true` / `is True`); 1 and "true" do not.
 fn strict_bool(val: Option<&Value>) -> bool {
     matches!(val, Some(Value::Bool(true)))
 }
 
+/// A finite JSON number as f64, else `None`; non-numeric and non-finite values are dropped.
 fn finite_f64(val: Option<&Value>) -> Option<f64> {
     let num = val?.as_number()?;
     let f = num.as_f64()?;
     if !f.is_finite() {
         return None;
     }
+    // Collapse -0.0: it equals 0.0 but would otherwise reach the line as a negative zero.
     if f == 0.0 { Some(0.0) } else { Some(f) }
 }
 
+/// A JSON number as i64, or `default` when absent, non-numeric or out of range; floats truncate.
 fn finite_i64(val: Option<&Value>, default: i64) -> i64 {
     let Some(num) = val.and_then(Value::as_number) else {
         return default;

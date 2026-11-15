@@ -1,3 +1,8 @@
+//! Frame collection: turns one `agy` JSON payload plus persisted per-session state into the
+//! `FrameData` the renderer prints. It owns the output-rate baseline, the cache clock, and the
+//! relay-touch gate, all matching the reference scripts. The printing path spawns no shell and
+//! waits on no `git`; git refresh and relay touches go through `Spawner` to detached workers.
+
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -19,12 +24,17 @@ pub mod git;
 pub mod sqlite;
 pub mod touch;
 
+/// Seam that keeps the printing path from spawning anything: the render calls these and the real
+/// work runs in detached `__refresh-git` / `__touch` workers, never inside the render itself.
 pub trait Spawner: Send + Sync {
     fn spawn_refresh_git(&self, cwd: &str);
     fn spawn_touch(&self, session_id: &str, relay_url: &str);
+    /// Observability hook fired just before a bounded SQLite open; a no-op by default.
     fn on_sqlite_open(&self, _db_path: &Path) {}
 }
 
+/// Spawner that does nothing: the printing path used by tests and `preview`, where no background
+/// worker may run. Keeps collection pure so the same renderer serves live and preview output.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoopSpawner;
 
@@ -34,6 +44,8 @@ impl Spawner for NoopSpawner {
     fn spawn_touch(&self, _session_id: &str, _relay_url: &str) {}
 }
 
+/// Production spawner: launches detached `__refresh-git` / `__touch` workers via the platform
+/// seam and returns immediately, so the render never blocks on git or the relay HTTP call.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemSpawner;
 
@@ -57,6 +69,7 @@ impl Spawner for SystemSpawner {
     }
 }
 
+/// Relay liveness from the third field of the relay `.dat`; only `Live` permits a touch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelayStatus {
     Live,
@@ -72,6 +85,8 @@ pub struct GitFrameState {
     pub behind: i64,
 }
 
+/// Prompt-cache segment state: `cache_ts` is the unix-second anchor of the last accepted turn
+/// (`None` before any turn); `relay_touches`/`relay_status` come from the read-only relay file.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CacheFrameState {
     pub cache_ts: Option<i64>,
@@ -79,6 +94,8 @@ pub struct CacheFrameState {
     pub relay_status: Option<RelayStatus>,
 }
 
+/// Everything the renderer needs for one frame: the payload plus resolved git, cache, speed, and
+/// response-model side data. `last_tps`/`response_model` are `None` when not yet measured/known.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FrameData {
     pub payload: Payload,
@@ -89,9 +106,13 @@ pub struct FrameData {
     pub response_model: Option<String>,
 }
 
+/// Collects one frame: reads/rewrites per-session state, resolves git from a stale cache (never
+/// running git here), and gates a detached relay touch. `env.now_ms` is the frame clock; one
+/// call serves the live render and `preview` (which passes a `NoopSpawner` so nothing spawns).
 pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv<'_>) -> FrameData {
     let now_sec = (env.now_ms / 1000) as i64;
 
+    // Before a session exists there is no telemetry or cache clock; only git can resolve.
     if payload.is_pre_session() {
         let git = git::resolve_git_frame(&payload, config, env, 0);
         return FrameData {
@@ -135,6 +156,7 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         resp_model = s.resp_model.clone();
         cache_ts = s.cache_ts;
         db_fingerprint = s.db_fingerprint.clone();
+        // Switching the picker model invalidates the cached response model from the old model.
         if !s.prev_model_key.is_empty() && s.prev_model_key != cur_model_key {
             resp_model.clear();
         }
@@ -145,30 +167,41 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
     let tot_out = payload.total_output_tokens;
     let cur_out = payload.output_tokens;
 
+    // Output-rate baseline (per the reference): keep `base_out`/`start_time_ms` across frames so
+    // TPS measures only new output, resetting at each turn boundary.
     if tot_out < base_out {
+        // Counter went backwards (session reset); rebase so the delta cannot be negative.
         base_out = tot_out;
     } else if !prev_active && cur_active {
+        // idle -> active: start a fresh measurement window for the new turn.
         start_time_ms = env.now_ms;
         base_out = tot_out;
     } else if !prev_active && !cur_active && base_out == 0 && tot_out > 0 {
+        // No baseline yet but output exists: adopt it so the first delta starts at zero.
         base_out = tot_out;
     }
 
     let mut delta_out = tot_out - base_out;
     if delta_out > 0 {
+        // Not previously active: the delta can span idle time, so cap it at this turn's output.
         if cur_out > 0 && delta_out > cur_out && !prev_active {
             delta_out = cur_out;
         }
         let elapsed_sec = (env.now_ms.saturating_sub(start_time_ms) as f64) / 1000.0;
+        // Floor dt at 50 ms so a near-instant frame cannot divide by ~0 into an absurd TPS.
         let dt = elapsed_sec.max(0.05);
         let tps = (delta_out as f64) / dt;
         last_tps = format_tps(tps);
+        // Measured: advance the window and stamp the cache clock at this accepted output.
         start_time_ms = env.now_ms;
         base_out = tot_out;
         cache_ts = now_sec;
     } else if payload.tool_confirmation_pending {
+        // Tool approval pending: restart the clock without counting tokens, so the wait is not
+        // billed as output time when the turn resumes.
         start_time_ms = env.now_ms;
     } else if cur_active {
+        // Active turn with no new output yet: keep the cache clock fresh.
         cache_ts = now_sec;
     }
 
@@ -177,6 +210,8 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
     let conv_db = session_db_path(&env.conversations_dir, &session_id);
     let current_fp = conv_db.as_deref().and_then(read_db_fingerprint);
 
+    // No turn stamped cache_ts yet: fall back to the conversation DB mtime, else now. The relay
+    // anchor below wins: cache_relay.py knows the true last-touch time.
     if cache_ts == 0 && tot_out > 0 {
         if let Some(ref fp) = current_fp
             && let Some(ref db_stamp) = fp.db
@@ -202,6 +237,7 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
     if relay_url.is_some()
         && let Some(relay_state) = read_relay_state(&env.temp_dir, &session_id)
     {
+        // Relay anchor wins: it is the last time cache_relay.py actually replayed the prompt.
         if let Some(anchor_ts) = relay_state.anchor_ts {
             cache_ts = anchor_ts;
         }
@@ -209,6 +245,7 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         relay_status = relay_state.status;
     }
 
+    // Query the response model only on new output, or when it is unknown and the DB changed.
     let db_fingerprint_changed = db_fingerprint != current_fp;
     let should_query_sqlite =
         delta_out > 0 || (resp_model.is_empty() && tot_out > 0 && db_fingerprint_changed);
@@ -224,8 +261,10 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
                 db_fingerprint = current_fp;
             }
             SqliteLookup::Empty => {
+                // Record the fingerprint even when empty so an unchanged DB is not re-queried.
                 db_fingerprint = current_fp;
             }
+            // Unavailable (timeout/locked): leave the fingerprint so the next frame retries.
             SqliteLookup::Unavailable => {}
         }
     }
@@ -243,10 +282,12 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         db_fingerprint,
     };
 
+    // Skip the write when nothing changed: avoids needless disk I/O on every idle frame.
     if loaded.as_ref() != Some(&next_state) {
         write_session_state(&env.home_dir, &next_state);
     }
 
+    // A touch replays the prompt via the relay worker; only attempt it while the relay is live.
     if let Some(url) = relay_url
         && cache_ts > 0
         && relay_status == Some(RelayStatus::Live)
@@ -256,6 +297,8 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
             .input_tokens
             .max(0)
             .saturating_add(payload.cache_read_input_tokens.max(0));
+        // cache_relay.py / reference gate: touch only in the last 60s of the 300s cache window,
+        // only for a >= 32K-token prompt, and at most 4 times per idle stretch.
         if (1..=60).contains(&cache_rem) && tot_prompt >= 32_000 && relay_touches < 4 {
             env.spawner.spawn_touch(&session_id, url);
         }
@@ -277,6 +320,8 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
     }
 }
 
+/// True only for a real turn. idle, authenticating, initializing, and empty are excluded, so the
+/// baseline reset and cache clock do not treat startup or waiting as output-producing.
 fn is_active_turn_state(state: &str) -> bool {
     let s = state.trim();
     !s.is_empty()
@@ -285,6 +330,8 @@ fn is_active_turn_state(state: &str) -> bool {
         && !s.eq_ignore_ascii_case("initializing")
 }
 
+/// Stable key for the picker model: display name, else id, else `Model`, whitespace runs -> `_`.
+/// A key change means a different model, so the cached response model is dropped.
 fn compute_model_key(payload: &Payload) -> String {
     let source = if !payload.model_display_name.is_empty() {
         payload.model_display_name.as_str()
@@ -309,14 +356,18 @@ fn compute_model_key(payload: &Payload) -> String {
     out
 }
 
+/// TPS label: integer at >= 100 tokens/s, else one decimal (reference `F0`/`F1` split).
 fn format_tps(tps: f64) -> String {
     if tps >= 100.0 {
+        // Banker's rounding to match .NET `F0` / Python `.0f` in the reference scripts.
         format!("{:.0}", tps.round_ties_even())
     } else {
         format!("{tps:.1}")
     }
 }
 
+/// Conversation DB path for a session id; `None` when the id is empty or unsafe. The id is
+/// untrusted stdin, so `.`, `..`, separators, `:` and NUL are rejected to block path traversal.
 fn session_db_path(conversations_dir: &Path, session_id: &str) -> Option<PathBuf> {
     if session_id.is_empty()
         || session_id == "."

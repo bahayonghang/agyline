@@ -1,3 +1,8 @@
+//! Process entry: the mode comes from argv plus stdin/stdout TTY-ness. No args over a pipe is the
+//! live render `agy` invokes; a TTY opens the configurator; `preview`/`install`/`uninstall` are
+//! user subcommands. `__refresh-git` and `__touch` are hidden re-entries for detached workers, the
+//! mechanism keeping git and relay HTTP off the printing path. Exit: 0 ok, 1 failure, 2 bad args.
+
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
@@ -14,6 +19,8 @@ use crate::render::{emit_ansi, emit_plain};
 use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_payload};
 use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame};
 
+/// The three streams and their TTY flags, injected so tests can drive every mode without a real
+/// terminal. Mode selection reads the flags, never the stream contents.
 pub struct CliStreams<'a> {
     pub stdin: &'a mut dyn Read,
     pub stdin_is_terminal: bool,
@@ -46,6 +53,8 @@ struct PreviewOptions {
     plain: bool,
 }
 
+/// Parsed intent. The `Hidden*` variants are worker re-entry and stay out of help; `UsageError`
+/// carries its message so parsing stays pure and the caller decides what to print.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CliAction {
     LiveRender,
@@ -60,6 +69,7 @@ enum CliAction {
     UsageError(String),
 }
 
+/// Binds the real std streams, samples their TTY-ness and returns the exit code for `main`.
 pub fn run_cli_from_process() -> u8 {
     let args: Vec<OsString> = std::env::args_os().collect();
     let stdin = io::stdin();
@@ -80,8 +90,11 @@ pub fn run_cli_from_process() -> u8 {
     run_cli(&args, &mut streams)
 }
 
+/// Dispatches one invocation and returns its exit code. The live render and hidden workers must
+/// stay silent on stderr; the interactive paths may explain themselves there.
 pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
     // Fast path: zero arguments over a non-terminal stdin pipe.
+    // The `agy` hook always invokes this shape, so it skips argument parsing entirely.
     if args.len() <= 1 && !streams.stdin_is_terminal {
         return execute_live_render(streams);
     }
@@ -89,6 +102,7 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
     let action = parse_args(args, streams.stdin_is_terminal);
     match action {
         CliAction::LiveRender => execute_live_render(streams),
+        // Worker re-entry: the git call and relay POST happen here, never on the printing path.
         CliAction::HiddenRefreshGit(tail) => {
             crate::collect::run_hidden_refresh_git(&tail);
             0
@@ -107,6 +121,8 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
             0
         }
         CliAction::Configurator => {
+            // Raw-mode keys come from stdin and the alternate screen goes to stdout: a redirected
+            // stream on either side would leave the UI unreadable or spill escapes into a pipe.
             if !streams.stdin_is_terminal || !streams.stdout_is_terminal {
                 let _ = writeln!(
                     streams.stderr,
@@ -145,10 +161,14 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
     }
 }
 
+/// The hot path: read one bounded frame, render it, write it. Never fails the invocation, because
+/// `agy` shows a statusline error banner on a non-zero exit instead of the line.
 fn execute_live_render(streams: &mut CliStreams<'_>) -> u8 {
     let mut buf = Vec::with_capacity(4096);
+    // One byte past the cap, so an oversized frame is detected rather than silently truncated.
     let mut limited = streams.stdin.take((MAX_STDIN_BYTES + 1) as u64);
     if limited.read_to_end(&mut buf).is_err() || buf.len() > MAX_STDIN_BYTES {
+        // Unreadable or oversized stdin: write nothing rather than a partial line, and exit 0.
         return 0;
     }
     let spawner = SystemSpawner;
@@ -170,10 +190,12 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
         return 0;
     }
 
+    // Preview spawns no workers and writes no state: AGYLINE_HOME must stay untouched.
     let spawner = NoopSpawner;
     let env = RenderEnv::from_process(&spawner);
     let (config, loaded) = EffectiveConfig::resolve_with_diagnostics(&env.home_dir, &env.env_vars);
 
+    // Unlike the silent live path, preview may report a broken config.toml and use defaults.
     let emit_broken_warning = |stderr: &mut dyn Write| {
         if let Some(ref err) = loaded.syntax_error {
             let cfg_path = env.home_dir.join("config.toml");
@@ -255,6 +277,7 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
                 return 1;
             };
             emit_broken_warning(streams.stderr);
+            // A captured payload uses the real clock; only built-in scenarios are anchor-pinned.
             let frame = stateless_frame_from_payload(payload, (env.now_ms / 1000) as i64);
             write_preview_frame(
                 &frame,
@@ -270,6 +293,8 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
     }
 }
 
+/// Reads a preview payload from `path`, or from stdin when `path` is `-`. The error string is
+/// user-facing; anything over `MAX_STDIN_BYTES` is refused rather than read.
 fn read_preview_input(path: &OsString, stdin: &mut dyn Read) -> Result<Vec<u8>, String> {
     if path.as_os_str() == "-" {
         let mut buf = Vec::with_capacity(4096);
@@ -284,6 +309,7 @@ fn read_preview_input(path: &OsString, stdin: &mut dyn Read) -> Result<Vec<u8>, 
     }
 
     let p = Path::new(path);
+    // Size first, so an oversized file is refused without buffering it into memory.
     let meta = fs::metadata(p).map_err(|e| format!("failed to read '{}': {e}", p.display()))?;
     if meta.len() > MAX_STDIN_BYTES as u64 {
         return Err(format!("'{}' exceeds 4 MiB limit", p.display()));
@@ -291,6 +317,9 @@ fn read_preview_input(path: &OsString, stdin: &mut dyn Read) -> Result<Vec<u8>, 
     fs::read(p).map_err(|e| format!("failed to read '{}': {e}", p.display()))
 }
 
+/// Emits one preview frame through the live renderer. Width precedence: `--width` (0 means no
+/// narrowing), then the payload's `terminal_width`, then the real terminal width when stdout is a
+/// TTY. A pipe with no reported width stays un-narrowed.
 fn write_preview_frame(
     frame: &FrameData,
     config: &EffectiveConfig,
@@ -329,6 +358,7 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
     }
 
     let first = args[1].to_string_lossy();
+    // Worker modes are matched before flags, so their own --cwd/--session are not usage errors.
     if first == "__refresh-git" {
         return CliAction::HiddenRefreshGit(args[2..].to_vec());
     }
@@ -386,6 +416,7 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
 }
 
 fn parse_preview_args(tail: &[OsString]) -> CliAction {
+    // Help is scanned first so `preview --help --bogus` prints help, not a usage error.
     for arg in tail {
         let s = arg.to_string_lossy();
         if s == "--" {
@@ -396,6 +427,7 @@ fn parse_preview_args(tail: &[OsString]) -> CliAction {
         }
     }
 
+    // Every source flag is collected so two of them are a usage error, not last-one-wins.
     let mut chosen_sources: Vec<PreviewSource> = Vec::new();
     let mut width: Option<usize> = None;
     let mut plain = false;
@@ -572,6 +604,7 @@ fn parse_uninstall_args(tail: &[OsString]) -> CliAction {
 }
 
 fn help_text(topic: HelpTopic) -> &'static str {
+    // The hidden worker modes are deliberately absent: internal re-entry, not user commands.
     match topic {
         HelpTopic::Root => {
             "\

@@ -1,11 +1,19 @@
+//! Canned frames for `agyline preview` and the configurator's preview pane: six hand-built
+//! scenarios that exercise the catalog with no session, repo or relay behind them. All of it is
+//! deterministic (fixed anchor clock, no I/O, no state writes), so repeat runs and goldens agree.
+
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use crate::collect::{CacheFrameState, FrameData, GitFrameState, RelayStatus};
 use crate::input::{Payload, QuotaBucketData, SubagentSummary};
 
+/// Fixed `now_sec` (Unix seconds) for every built-in frame, so cache countdowns and quota reset
+/// timers do not drift with the wall clock. Configurator tests pin the same instant in ms.
 pub const PREVIEW_ANCHOR_SEC: i64 = 1_700_000_300;
 
+/// One canned frame. `name` is the CLI selector, `label` the configurator's display name, and
+/// `default_width` the simulated width the configurator starts at (a starting point, not a cap).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scenario {
     pub name: &'static str,
@@ -16,11 +24,14 @@ pub struct Scenario {
 }
 
 impl Scenario {
+    /// The frame with the caller's `AGY_CACHE_RELAY` applied, so preview matches the live line
+    /// in the same environment. Blank or `off` clears it; unset leaves it as authored.
     pub fn frame_for_env(&self, env_vars: &BTreeMap<String, String>) -> FrameData {
         let mut out = self.frame.clone();
         if let Some(raw_relay) = env_vars.get("AGY_CACHE_RELAY").map(|s| s.trim())
             && (raw_relay.is_empty() || raw_relay.eq_ignore_ascii_case("off"))
         {
+            // Off drops the badge and touch count only; the 5-minute countdown still renders.
             out.cache.relay_status = None;
             out.cache.relay_touches = 0;
         }
@@ -28,11 +39,15 @@ impl Scenario {
     }
 }
 
+/// The six canonical scenarios, built once and shared. Order is the `--all` and configurator cycle
+/// order, so it is part of the observable output, not an implementation detail.
 pub fn builtin_scenarios() -> &'static [Scenario] {
     static SCENARIOS: OnceLock<Vec<Scenario>> = OnceLock::new();
     SCENARIOS.get_or_init(build_scenarios).as_slice()
 }
 
+/// Case-insensitive lookup on a trimmed name; `None` for an unknown scenario, which the CLI turns
+/// into a usage error listing `preview --list`.
 pub fn find_scenario(name: &str) -> Option<&'static Scenario> {
     let target = name.trim();
     builtin_scenarios()
@@ -40,7 +55,12 @@ pub fn find_scenario(name: &str) -> Option<&'static Scenario> {
         .find(|sc| sc.name.eq_ignore_ascii_case(target))
 }
 
+/// A preview frame from a captured payload with no persisted session state: no telemetry, git
+/// cache, relay file or SQLite is read and nothing is written, so preview stays repeatable and
+/// side-effect free. Cache, speed and response model stay cold; `now_sec` is Unix seconds.
 pub fn stateless_frame_from_payload(payload: Payload, now_sec: i64) -> FrameData {
+    // Ahead/behind and conflicts would need a git call, which preview never makes: only the
+    // payload's own branch and dirty flag are shown.
     let git = if payload.vcs_branch.trim().is_empty() {
         None
     } else {
@@ -62,6 +82,8 @@ pub fn stateless_frame_from_payload(payload: Payload, now_sec: i64) -> FrameData
     }
 }
 
+/// Every field at its parse default; each scenario overrides only what it exercises. "Model" is
+/// the reference's fallback label when neither `display_name` nor `id` is present.
 fn empty_payload() -> Payload {
     Payload {
         session_id: None,
@@ -101,6 +123,8 @@ fn empty_payload() -> Payload {
     }
 }
 
+/// `pct` is a percentage (0-100), stored as the 0.0-1.0 fraction the payload carries; `reset_secs`
+/// is seconds until reset, which the quota item prefers over an absolute `reset_time`.
 fn bucket(name: &str, pct: f64, reset_secs: i64) -> QuotaBucketData {
     QuotaBucketData {
         name: name.to_string(),
@@ -155,6 +179,7 @@ fn build_scenarios() -> Vec<Scenario> {
                 behind: 0,
             }),
             cache: CacheFrameState {
+                // `300 - 222` reads as "222 s left": 300 s is the reference prompt-cache window.
                 cache_ts: Some(now_sec - (300 - 222)),
                 relay_touches: 0,
                 relay_status: None,
@@ -243,6 +268,7 @@ fn build_scenarios() -> Vec<Scenario> {
                 behind: 0,
             }),
             cache: CacheFrameState {
+                // 44 s left: inside the reference's last-60 s touch window, 2 of 4 touches used.
                 cache_ts: Some(now_sec - (300 - 44)),
                 relay_touches: 2,
                 relay_status: Some(RelayStatus::Live),
@@ -320,6 +346,7 @@ fn build_scenarios() -> Vec<Scenario> {
                 behind: 1,
             }),
             cache: CacheFrameState {
+                // 275 s left: relay live, but outside the touch window, so no keepalive is due.
                 cache_ts: Some(now_sec - (300 - 275)),
                 relay_touches: 0,
                 relay_status: Some(RelayStatus::Live),
@@ -380,6 +407,7 @@ fn build_scenarios() -> Vec<Scenario> {
                 behind: 3,
             }),
             cache: CacheFrameState {
+                // 25 s left with a failed relay: the badge reads Fail, not a live keepalive.
                 cache_ts: Some(now_sec - (300 - 25)),
                 relay_touches: 1,
                 relay_status: Some(RelayStatus::Fail),
@@ -426,6 +454,7 @@ fn build_scenarios() -> Vec<Scenario> {
     ];
     p_narrow.task_count = 2;
     p_narrow.pending_input_count = 1;
+    // Narrowing budget when no `--width` is passed: 74 columns, matching `default_width` below.
     p_narrow.terminal_width = Some(74);
     p_narrow.vim_mode = "NORMAL".to_string();
     p_narrow.conversation_title =

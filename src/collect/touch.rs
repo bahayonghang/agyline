@@ -1,3 +1,7 @@
+//! Detached `__touch` worker: replays the prompt-cache keepalive by POSTing the relay's `_touch`
+//! route. Never runs on the printing path. The URL must be loopback HTTP and the session id safe,
+//! so a hostile frame cannot turn this into SSRF or a path escape. A per-session lock serializes
+//! touches; the relay's own state file stays read-only (see `state::relay`).
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
@@ -7,8 +11,12 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::platform;
 use crate::state::{self, lock::ScopedLock, session::session_key};
 
+// Stale window = connect (5s) + IO budget (120s), so a still-running touch is never treated as
+// stale and a second worker cannot steal its lock and double-touch the relay.
 pub const TOUCH_LOCK_STALE_MS: u64 = 125_000;
+// TCP connect bound; the relay is loopback, so a slow connect means it is down.
 const TOUCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+// Total IO budget, matching the reference relay's 120s touch timeout.
 const TOUCH_IO_BUDGET: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +32,9 @@ struct LoopbackTarget {
     base_path: String,
 }
 
+/// Entry point for the detached `__touch` worker. Validates args, session id, and loopback URL,
+/// takes the per-session lock, POSTs the touch, then sweeps. Always returns 0: a worker must
+/// not fail the spawn or print. Bad input or a held lock is a silent no-op (a touch is optional).
 pub fn run_touch_worker(tail: &[OsString]) -> u8 {
     let Some(args) = parse_touch_args(tail) else {
         return 0;
@@ -42,6 +53,8 @@ pub fn run_touch_worker(tail: &[OsString]) -> u8 {
     let home_dir = resolve_agyline_home();
     let now_ms = current_epoch_ms();
     let lock_name = format!("touch-{key}.lock");
+    // One touch per session at a time: if another worker holds the lock, skip (the relay also
+    // rejects concurrent touches). Stale takeover uses TOUCH_LOCK_STALE_MS.
     let Some(_guard) = ScopedLock::acquire(&home_dir, &lock_name, now_ms, TOUCH_LOCK_STALE_MS)
     else {
         return 0;
@@ -54,6 +67,8 @@ pub fn run_touch_worker(tail: &[OsString]) -> u8 {
     0
 }
 
+/// Parses `--session`/`--url` (`--k v` and `--k=v`). Rejects duplicates or missing values so a
+/// malformed invocation is a silent no-op rather than a touch with partial args.
 fn parse_touch_args(tail: &[OsString]) -> Option<TouchArgs> {
     let mut session_id: Option<String> = None;
     let mut url: Option<String> = None;
@@ -97,6 +112,9 @@ fn parse_touch_args(tail: &[OsString]) -> Option<TouchArgs> {
     })
 }
 
+/// Session ids allowed into the touch URL path and lock filename: ASCII alphanumeric, `_`, `-`,
+/// at most 256 bytes. Anything else (separators, control chars, whitespace) is rejected to block
+/// path traversal and request-line injection from an untrusted id.
 fn is_safe_session_id(session_id: &str) -> bool {
     !session_id.is_empty()
         && session_id.len() <= 256
@@ -105,16 +123,22 @@ fn is_safe_session_id(session_id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
+/// True if `raw_url` is a loopback HTTP URL the touch worker would accept. The public form of the
+/// worker's URL gate, so the configurator can reject a non-loopback relay URL before use.
 pub fn is_valid_loopback_relay_url(raw_url: &str) -> bool {
     parse_loopback_http_url(raw_url).is_some()
 }
 
+/// Parses and vets the relay URL: `http://` only, loopback authority, no userinfo/query/fragment
+/// or control chars. Returns the connect target, or `None` if unsafe. This is the SSRF guard: a
+/// touch must only ever reach the local relay, never an arbitrary host.
 fn parse_loopback_http_url(raw_url: &str) -> Option<LoopbackTarget> {
     let trimmed = raw_url.trim();
     if !trimmed.get(..7)?.eq_ignore_ascii_case("http://") {
         return None;
     }
     let rest = &trimmed[7..];
+    // Reject control/whitespace/?# chars: they could inject headers or hide a second authority.
     if rest.is_empty()
         || rest
             .chars()
@@ -127,6 +151,7 @@ fn parse_loopback_http_url(raw_url: &str) -> Option<LoopbackTarget> {
         Some(idx) => (&rest[..idx], &rest[idx..]),
         None => (rest, ""),
     };
+    // No userinfo (`@`): it could disguise the real host and bypass the loopback check.
     if authority.is_empty() || authority.contains('@') {
         return None;
     }
@@ -141,6 +166,9 @@ fn parse_loopback_http_url(raw_url: &str) -> Option<LoopbackTarget> {
     })
 }
 
+/// Resolves the authority to a loopback `SocketAddr` plus the Host header string. Accepts only
+/// `127.0.0.1`, `localhost`, or `::1` (bracketed or bare), with an optional non-zero port.
+/// The Host header keeps the original spelling so the relay sees the authority the config used.
 fn parse_loopback_authority(authority: &str) -> Option<(SocketAddr, String)> {
     if let Some(after_open) = authority.strip_prefix('[') {
         let close_idx = after_open.find(']')?;
@@ -192,6 +220,7 @@ fn parse_loopback_authority(authority: &str) -> Option<(SocketAddr, String)> {
     Some((SocketAddr::from((Ipv4Addr::LOCALHOST, port)), host_header))
 }
 
+/// Parses a decimal port, rejecting empty/non-digit input and port 0 (not a connectable target).
 fn parse_nonzero_port(s: &str) -> Option<u16> {
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -200,6 +229,9 @@ fn parse_nonzero_port(s: &str) -> Option<u16> {
     (port > 0).then_some(port)
 }
 
+/// POSTs the keepalive to `<base>/_touch/<session>` (empty body, `Connection: close`), then drains
+/// the response. Bounded by a 5s connect and a 120s IO deadline (the reference relay's timeout).
+/// Fire-and-forget: errors are ignored, since a missed touch only shortens prompt-cache life.
 fn send_touch_post(target: &LoopbackTarget, session_id: &str) {
     let Ok(mut stream) = TcpStream::connect_timeout(&target.addr, TOUCH_CONNECT_TIMEOUT) else {
         return;
@@ -222,6 +254,7 @@ fn send_touch_post(target: &LoopbackTarget, session_id: &str) {
     }
     let _ = stream.flush();
 
+    // Drain until EOF or the deadline; the response body is irrelevant, only the touch matters.
     let mut scratch = [0_u8; 1024];
     while let Some(read_rem) = deadline.checked_duration_since(Instant::now()) {
         if read_rem.is_zero() || stream.set_read_timeout(Some(read_rem)).is_err() {

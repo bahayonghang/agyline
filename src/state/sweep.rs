@@ -1,3 +1,7 @@
+//! Bounded garbage collection for `<home>/state`, run only from detached workers (never the render
+//! path). At most once per SWEEP_INTERVAL_MS it drops orphaned tmp and expired session/git/lock
+//! files. Age comes from the embedded timestamp when present, else mtime, so a copied file is
+//! judged by its own recorded age. Best-effort: a sweep failure never affects the printed line.
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -6,16 +10,25 @@ use serde::Deserialize;
 
 use crate::state::git_cache::atomic_write_in_dir;
 
+// Min gap between sweeps; the last_sweep stamp gates it so concurrent workers do not all sweep.
 const SWEEP_INTERVAL_MS: u64 = 24 * 60 * 60 * 1000;
+// Session state older than 7 days is dropped (a long-idle conversation will not resume).
 const SESSION_MAX_AGE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+// Git cache older than 24h is dropped; a refresh re-creates it on the next render that needs it.
 const GIT_CACHE_MAX_AGE_MS: u64 = 24 * 60 * 60 * 1000;
+// Orphaned tmp files and locks older than 10 min are dropped: past any live worker's lifetime.
 const TMP_AND_LOCK_MAX_AGE_MS: u64 = 10 * 60 * 1000;
 
+/// Just the `updated_at_ms` field of a git-cache JSON, read to judge age without parsing it all.
+/// `None` if the file lacks the field, so the sweep falls back to mtime.
 #[derive(Deserialize)]
 struct TimestampHeader {
     updated_at_ms: Option<u64>,
 }
 
+/// Sweeps stale state at most once per SWEEP_INTERVAL_MS, and only from detached workers (never
+/// the render path). The last_sweep stamp is written FIRST so concurrent workers see it and skip,
+/// bounding the work to one sweeper. A missing dir or a recent sweep is a no-op.
 pub fn maybe_sweep_stale_state(home_dir: &Path, now_ms: u64) {
     let state_dir = home_dir.join("state");
     if !state_dir.is_dir() {
@@ -118,18 +131,21 @@ fn sweep_locks_dir(dir: &Path, now_ms: u64) {
     }
 }
 
+/// Age from the git entry's embedded `updated_at_ms`, so a restored file keeps its true age.
 fn embedded_git_updated_age_ms(path: &Path, now_ms: u64) -> Option<u64> {
     let raw = fs::read_to_string(path).ok()?;
     let hdr: TimestampHeader = serde_json::from_str(&raw).ok()?;
     Some(now_ms.saturating_sub(hdr.updated_at_ms?))
 }
 
+/// Age from the lock token's embedded created-ms (first field), matching the lock's stale check.
 fn embedded_lock_age_ms(path: &Path, now_ms: u64) -> Option<u64> {
     let raw = fs::read_to_string(path).ok()?;
     let created_ms = raw.split_whitespace().next()?.parse::<u64>().ok()?;
     Some(now_ms.saturating_sub(created_ms))
 }
 
+/// Fallback age from filesystem mtime when no embedded timestamp is available.
 fn mtime_age_ms(path: &Path, now_ms: u64) -> Option<u64> {
     let modified = fs::metadata(path).ok()?.modified().ok()?;
     let mtime_ms = modified.duration_since(UNIX_EPOCH).ok()?.as_millis() as u64;

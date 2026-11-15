@@ -1,3 +1,8 @@
+//! Public surface of the crate. Pipeline: `input` (one stdin JSON frame) -> `collect` (session
+//! state, git cache, relay, bounded SQLite) -> `items` (slots) -> `render` (layout, ANSI/plain),
+//! over `config`/`state`/`platform`. `cli`, `statusline` and `tui` share a renderer whose default
+//! must reproduce `ref/agy-patch`; the printing path spawns no shell and waits on no `git`.
+
 pub use cli::{CliStreams, run_cli, run_cli_from_process};
 pub use collect::{
     CacheFrameState, FrameData, GitFrameState, NoopSpawner, ParsedGitStatus, RelayStatus, Spawner,
