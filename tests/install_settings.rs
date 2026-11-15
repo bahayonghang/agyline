@@ -104,6 +104,23 @@ fn windows_command_resolves_clean_home_and_non_home_paths_with_forward_slashes()
 }
 
 #[test]
+fn windows_command_resolves_unrelated_unicode_executable_path() {
+    let sb = Sandbox::new("win_unicode");
+    let env = make_env(
+        sb.path(),
+        PlatformKind::Windows,
+        Some(PathBuf::from("C:/Users/name")),
+        PathBuf::from("D:/中文中文/agyline.exe"),
+        None,
+        |_| None,
+    );
+    assert_eq!(
+        resolve_command_string(&env).expect("outside-home Unicode path"),
+        "D:/中文中文/agyline.exe"
+    );
+}
+
+#[test]
 fn windows_command_with_spaces_uses_bare_agyline_when_path_resolves_to_same_binary() {
     let sb = Sandbox::new("win_space_path");
     let user_home = sb.path().join("Users").join("John Doe");

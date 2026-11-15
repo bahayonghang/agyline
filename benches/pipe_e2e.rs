@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use agyline::{GitCacheEntry, PlatformKind, host_platform, write_git_cache};
+use agyline::{GitCacheEntry, PlatformKind, git_lock_path, host_platform, write_git_cache};
 use rusqlite::{Connection, params};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,21 +69,37 @@ fn encode_gen_metadata_blob(chat_model: &str) -> Vec<u8> {
 
 fn create_slow_git_shim(bin_dir: &Path) {
     fs::create_dir_all(bin_dir).expect("create fake git dir");
-    match host_platform() {
-        PlatformKind::Windows => {
-            let bat = bin_dir.join("git.cmd");
-            fs::write(
-                &bat,
-                "@echo off\r\nping -n 3 127.0.0.1 >nul\r\nexit /b 0\r\n",
-            )
-            .expect("write git.cmd");
-        }
-        PlatformKind::Unix => {
-            let sh = bin_dir.join("git");
-            fs::write(&sh, "#!/bin/sh\nsleep 2\nexit 0\n").expect("write git shim");
-            let _ = Command::new("chmod").arg("+x").arg(&sh).status();
-        }
-    }
+    let source = bin_dir.join("slow_git.rs");
+    fs::write(
+        &source,
+        r##"fn main() {
+    let mut args = std::env::args_os();
+    let cwd = args.find(|arg| arg == "-C").and_then(|_| args.next()).expect("git -C cwd");
+    let marker = std::path::PathBuf::from(cwd).join("git-started");
+    std::fs::write(marker, std::process::id().to_string()).expect("record Git invocation");
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    println!("# branch.oid 0123456789abcdef\n# branch.head main");
+}
+"##,
+    )
+    .expect("write native Git shim source");
+    let name = match host_platform() {
+        PlatformKind::Windows => "git.exe",
+        PlatformKind::Unix => "git",
+    };
+    let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let output = Command::new(rustc)
+        .arg(&source)
+        .arg("-O")
+        .arg("-o")
+        .arg(bin_dir.join(name))
+        .output()
+        .expect("compile native Git shim");
+    assert!(
+        output.status.success(),
+        "Git shim compilation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn spawn_once(
@@ -118,6 +134,10 @@ fn spawn_once(
         .env_remove("AGY_STATUSLINE_INDENT")
         .env_remove("AGY_SHOW_DEFAULT_MODE")
         .env_remove("AGY_CACHE_RELAY")
+        .env_remove("COLORFGBG")
+        .env_remove("NO_COLOR")
+        .env_remove("COLORTERM")
+        .env_remove("TERM")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -140,6 +160,7 @@ fn spawn_once(
     let out = child.wait_with_output().expect("wait_with_output");
     let elapsed = t0.elapsed();
     assert!(out.status.success(), "agyline exited non-zero");
+    assert!(out.stderr.is_empty(), "render must emit no stderr");
     assert!(!out.stdout.is_empty(), "expected non-empty rendered line");
     elapsed
 }
@@ -237,6 +258,11 @@ fn main() {
         },
     )
     .expect("seed warm git cache");
+    fs::write(
+        home_warm.join("config.toml"),
+        "[git]\ncache_ms = 9223372036854775807\n",
+    )
+    .expect("keep the warm benchmark cache fresh throughout sampling");
 
     let warm_payload = serde_json::to_vec(&serde_json::json!({
         "session_id": "bench_warm",
@@ -316,23 +342,46 @@ fn main() {
         || {
             cold_seq += 1;
             let fresh_cwd = root.join(format!("cold_repo_{cold_seq}"));
-            let _ = fs::create_dir_all(&fresh_cwd);
+            fs::create_dir_all(fresh_cwd.join(".git")).expect("seed cold Git repository marker");
             let payload = serde_json::to_vec(&serde_json::json!({
                 "session_id": "bench_cold",
                 "cwd": fresh_cwd.to_string_lossy(),
                 "model": { "display_name": "Opus 4.6" }
             }))
             .expect("cold payload");
-            spawn_once(
+            let elapsed = spawn_once(
                 &bin,
                 InvokeMode::Direct,
                 &home_cold,
                 &user_home,
                 Some(&slow_git_dir),
                 &payload,
-            )
+            );
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while !fresh_cwd.join("git-started").is_file() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(
+                fresh_cwd.join("git-started").is_file(),
+                "cold workload must invoke the native sleeping Git shim"
+            );
+            elapsed
         },
     );
+
+    println!("cold_slow_git evidence: {cold_seq}/{cold_seq} native sleeping Git workers started");
+    let worker_deadline = Instant::now() + Duration::from_secs(3);
+    for seq in 1..=cold_seq {
+        let cwd = root.join(format!("cold_repo_{seq}"));
+        let lock = git_lock_path(&home_cold, &cwd.to_string_lossy()).expect("Git lock path");
+        while lock.exists() && Instant::now() < worker_deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !lock.exists(),
+            "sleeping Git worker must finish before sandbox cleanup"
+        );
+    }
 
     let mut sql_out_tok = 100_i64;
     measure_workload(

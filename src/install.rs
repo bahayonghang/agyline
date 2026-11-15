@@ -55,12 +55,7 @@ impl InstallEnv {
             .join(".gemini")
             .join("antigravity-cli")
             .join("settings.json");
-        let agyline_home = std::env::var("AGYLINE_HOME")
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".gemini").join("agyline"));
+        let agyline_home = crate::config::resolve_home_dir(&lookup, home);
         let exe_path = std::env::current_exe().map_err(|err| InstallError::Io {
             path: PathBuf::from("<current_exe>"),
             message: err.to_string(),
@@ -1417,7 +1412,7 @@ fn strip_home_prefix_windows<'a>(exe_norm: &'a str, home_norm: &str) -> Option<&
     if home_norm.is_empty() || exe_norm.len() <= home_norm.len() {
         return None;
     }
-    let (prefix, rest) = exe_norm.split_at(home_norm.len());
+    let (prefix, rest) = exe_norm.split_at_checked(home_norm.len())?;
     if !prefix.eq_ignore_ascii_case(home_norm) {
         return None;
     }

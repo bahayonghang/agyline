@@ -54,11 +54,11 @@ Windows 上是 `statusline.ps1`，另一份是 Python 的 `statusline.py`。外�
 | 二进制与 `just` 命令 | 单一 `agyline` crate（`cargo install --path .`），提供 `just ci`、`just install`、`just uninstall` 与 `just sandbox-install-test` |
 | 实时管道渲染 | `agy` 将单帧 JSON 写入 `agyline` 标准输入；`agyline` 输出 1 或 2 行 ANSI/纯文本状态栏，并支持按优先级的窄屏自适应压缩（`overflow = "fit"` / `"none"`） |
 | 20 项状态目录 | 工作区（`model`、`dir`、`git`）、用量（`context`、`cache`、`speed`、`budget`、可重复添加多桶的 `quota`、`cost`）、运行态（`mode`、`subagents`、`tasks`、`queue`、`sandbox`）与会话标识（`vim`、`title`、`agent`、`artifacts`、`version`、`plan`） |
-| 预设与调色板 | 内置预设（`cometix`、`minimal`、`dashboard`、`cache-focus`）及自定义 `~/.gemini/agyline/presets/*.toml`；内置 8 套明暗双极性调色板（`terminal`、`catppuccin-mocha`、`catppuccin-latte`、`tokyo-night`、`nord`、`gruvbox`、`rose-pine`、`dracula`）及自定义 `palettes/*.toml` |
+| 预设与调色板 | 内置预设（`cometix`、`minimal`、`dashboard`、`cache-focus`）及自定义 `~/.gemini/agyline/presets/*.toml`；内置 8 套调色板（`terminal`、`catppuccin-mocha`、`catppuccin-latte`、`tokyo-night`、`nord`、`gruvbox`、`rose-pine`、`dracula`）及自定义 `palettes/*.toml`；`terminal` 支持明暗双极性，其余 7 套 RGB 调色板各有固定极性，不匹配时回退到 `terminal` |
 | 配置目录与文件 | `~/.gemini/agyline/config.toml`（或 `AGYLINE_HOME`）：`version`、`preset`、`palette`、`theme`（`auto`/`dark`/`light`）、`glyphs`（`nerd`/`unicode`/`ascii`）、`color_depth`（`auto`/`truecolor`/`256`/`16`/`none`）、`separator`、`indent`、`single_line`、`overflow`；子表 `[thresholds]`、`[git]`、`[cache_relay]`、`[palette_overrides]` 与 `[[line]]`。显式 `AGY_*` 环境变量优先于 `config.toml`；`COLORFGBG` 在 `theme = "auto"` 时生效 |
 | 运行期状态 | `AGYLINE_HOME` 下的 `state/`（每会话遥测、有界 SQLite 响应模型查询、本地 Git 缓存、后台锁与 `previous_statusline.json` 快照；`cache_relay.py` 状态文件仍从系统临时目录只读） |
 | 交互式终端配置器 | 在终端直接运行 `agyline` 或 `agyline -c` / `--config`：四标签工作台（`Layout`、`Style & Presets`、`Thresholds & Runtime`、`agy Hook`），与实时状态栏无损共用渲染管线（零 ANSI 反解析），支持 100 步撤销/重做、实时只读 `TOML` 抽屉、损坏 `config.toml` 的 `.bak` 备份恢复、外部 `mtime` 冲突保护以及独立的 `settings.json` diff 预览确认 |
-| 公开子命令 | `agyline preview`（`--scenario`、`--all-scenarios`、`--list-scenarios`、`--input`、`--width`、`--plain`）、`agyline install`（`--dry-run`、`--yes`）、`agyline uninstall`（`--dry-run`、`--yes`、`--reset`、`--purge`） |
+| 公开子命令 | `agyline preview`（`--scenario`、`--all`、`--list`、`--input`、`--width`、`--plain`）、`agyline install`（`--dry-run`、`--yes`）、`agyline uninstall`（`--dry-run`、`--yes`、`--reset`、`--purge`） |
 | 接到 `agy` | `~/.gemini/antigravity-cli/settings.json` 的 `statusLine.command`（保留符号链接与其余键，写入前展示 unified diff，卸载时恢复原有 `statusLine`） |
 
 官方的 `agy` 和 `agy.exe` 保持安装时的样子。`agy` 把 `agyline` 当作 `statusLine` 命令来跑。

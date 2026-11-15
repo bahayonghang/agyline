@@ -14,9 +14,9 @@ use ratatui::style::Color;
 
 use agyline::{
     Ansi16Color, ColorDepth, ConfigDoc, ConfiguratorApp, ConfiguratorEnv, ConfiguratorExit,
-    EffectiveConfig, InstallEnv, ItemId, PlatformKind, SlotOutcome, TuiTab, builtin_scenarios,
-    emit_plain, render_lines_with_width, render_tui_frame, rendered_frame_to_ratatui_lines,
-    serialize_config_doc,
+    EffectiveConfig, InstallEnv, ItemId, ItemSlot, PlatformKind, SlotOutcome, TuiTab,
+    builtin_scenarios, emit_plain, render_lines_with_width, render_tui_frame,
+    rendered_frame_to_ratatui_lines, serialize_config_doc,
 };
 
 static TEST_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -221,6 +221,98 @@ fn convert_matches_render_lines_plain_text_and_maps_colors_losslessly() {
         "ColorDepth::None must emit uncolored spans"
     );
     let _ = Ansi16Color::ALL;
+}
+
+#[test]
+fn layout_catalog_selection_scrolls_into_view_and_mouse_uses_visible_items() {
+    for (w, h) in [(80, 22), (100, 28)] {
+        let sb = Sandbox::new();
+        let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+        app.handle_event(Event::Resize(w, h));
+        app.handle_event(press(KeyCode::Tab));
+        for _ in 0..19 {
+            app.handle_event(press(KeyCode::Down));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).expect("terminal");
+        render_tui_frame(&mut terminal, &app).expect("draw last catalog item");
+        let screen = buffer_text(&terminal);
+        assert!(
+            screen.contains("> [ ] plan"),
+            "selected Plan must be visible at {w}x{h}:\n{screen}"
+        );
+        // Click the preceding visible Catalog item, then add it to the active row.
+        app.handle_event(left_click(w * 34 / 100 + 2, h - 4));
+        app.handle_event(press(KeyCode::Enter));
+        assert_eq!(
+            app.doc().lines[0].last().map(|s| s.id),
+            Some(ItemId::Version)
+        );
+    }
+}
+
+#[test]
+fn active_rows_selection_scrolls_into_view_and_mouse_uses_visible_items() {
+    for (w, h) in [(80, 22), (100, 28)] {
+        let sb = Sandbox::new();
+        std::fs::create_dir_all(&sb.agyline_home).expect("config home");
+        let mut doc = ConfigDoc::cometix_base();
+        doc.lines = vec![
+            ItemId::ALL.into_iter().map(ItemSlot::new).collect(),
+            Vec::new(),
+        ];
+        std::fs::write(
+            sb.agyline_home.join("config.toml"),
+            serialize_config_doc(&doc),
+        )
+        .expect("config");
+        let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+        app.handle_event(Event::Resize(w, h));
+        for _ in 0..19 {
+            app.handle_event(press(KeyCode::Down));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).expect("terminal");
+        render_tui_frame(&mut terminal, &app).expect("draw last active item");
+        let screen = buffer_text(&terminal);
+        assert!(
+            screen.contains("> plan P5"),
+            "selected Plan must be visible at {w}x{h}:\n{screen}"
+        );
+        app.handle_event(left_click(2, h - 4));
+        app.handle_event(press(KeyCode::Char('x')));
+        assert!(
+            !app.doc().lines[0]
+                .iter()
+                .any(|slot| slot.id == ItemId::Version)
+        );
+        assert!(
+            app.doc().lines[0]
+                .iter()
+                .any(|slot| slot.id == ItemId::Plan)
+        );
+    }
+}
+
+#[test]
+fn minimum_terminal_exposes_all_four_clickable_tabs() {
+    let sb = Sandbox::new();
+    let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+    app.handle_event(Event::Resize(80, 22));
+    let mut terminal = Terminal::new(TestBackend::new(80, 22)).expect("terminal");
+    for (title, tab) in [
+        ("1: Layout", TuiTab::Layout),
+        ("2: Style", TuiTab::StylePresets),
+        ("3: Runtime", TuiTab::ThresholdsRuntime),
+        ("4: agy Hook", TuiTab::AgyHook),
+    ] {
+        render_tui_frame(&mut terminal, &app).expect("draw tabs");
+        let screen = buffer_text(&terminal);
+        let tab_line = screen.lines().nth(6).expect("tab line");
+        let column = tab_line
+            .find(title)
+            .unwrap_or_else(|| panic!("missing {title}: {tab_line}"));
+        app.handle_event(left_click(column as u16 + 2, 6));
+        assert_eq!(app.active_tab(), tab);
+    }
 }
 
 #[test]

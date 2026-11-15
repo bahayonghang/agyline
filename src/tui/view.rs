@@ -317,7 +317,7 @@ fn draw_tab_bar(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
 
     let titles: Vec<Line<'static>> = TuiTab::ALL
         .iter()
-        .map(|t| Line::from(format!(" {} ", t.title())))
+        .map(|t| Line::from(t.title_for_width(area.width)))
         .collect();
     let tabs = Tabs::new(titles)
         .select(app.active_tab.index())
@@ -381,6 +381,9 @@ fn draw_layout_tab(
             Constraint::Percentage(33),
         ])
         .split(area);
+
+    let (rows_offset, catalog_offset) =
+        app.layout_list_offsets(area.height.saturating_sub(2) as usize);
 
     // Pane 0: Active Rows
     let rows_focused = match app.layout_pane {
@@ -465,7 +468,10 @@ fn draw_layout_tab(
             Color::DarkGray
         }))
         .title(" Active Rows (J/K order, m row, x del) ");
-    frame.render_widget(List::new(row_items).block(rows_block), cols[0]);
+    frame.render_widget(
+        List::new(row_items.into_iter().skip(rows_offset).collect::<Vec<_>>()).block(rows_block),
+        cols[0],
+    );
 
     // Pane 1: Catalog
     let cat_focused = match app.layout_pane {
@@ -521,7 +527,16 @@ fn draw_layout_tab(
             Color::DarkGray
         }))
         .title(format!(" Catalog -> Line {} ", app.selected_row + 1));
-    frame.render_widget(List::new(cat_items).block(cat_block), cols[1]);
+    frame.render_widget(
+        List::new(
+            cat_items
+                .into_iter()
+                .skip(catalog_offset)
+                .collect::<Vec<_>>(),
+        )
+        .block(cat_block),
+        cols[1],
+    );
 
     // Pane 2: Inspector
     let insp_focused = match app.layout_pane {

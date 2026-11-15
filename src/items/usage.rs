@@ -531,7 +531,7 @@ fn format_reset_suffix(bucket: &QuotaBucketData, now_sec: i64) -> Option<String>
 
 fn parse_rfc3339_epoch_secs(raw: &str) -> Option<i64> {
     let s = raw.trim();
-    if s.len() < 19 {
+    if s.len() < 19 || !s.is_ascii() {
         return None;
     }
     let b = s.as_bytes();

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::render::palette::{
     ColorSpec, ColorToken, EffectiveColorDepth, ResolvedColor, ResolvedPalette, parse_color_spec,
@@ -9,6 +9,17 @@ use crate::render::palette::{
 };
 
 pub mod presets;
+
+pub(crate) fn resolve_home_dir(
+    lookup: &dyn Fn(&str) -> Option<String>,
+    user_home: &Path,
+) -> PathBuf {
+    lookup("AGYLINE_HOME")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| user_home.join(".gemini").join("agyline"))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeSetting {

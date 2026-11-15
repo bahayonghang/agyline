@@ -1,5 +1,5 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::platform;
-use crate::state::ensure_state_dir;
+use crate::state::{ensure_state_dir, lock::ScopedLock};
 
 const FNV1A_64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV1A_64_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -181,80 +181,13 @@ pub fn write_git_cache(home_dir: &Path, entry: &GitCacheEntry) -> io::Result<()>
     atomic_write_in_dir(&git_dir, &format!("{hash}.json"), &dst_path, &bytes)
 }
 
-pub(crate) struct GitRefreshLock {
-    path: PathBuf,
-    marker: String,
-}
-
-impl Drop for GitRefreshLock {
-    fn drop(&mut self) {
-        if let Ok(current) = fs::read_to_string(&self.path)
-            && current == self.marker
-        {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
-}
-
-pub(crate) fn acquire_git_lock(
-    home_dir: &Path,
-    raw_cwd: &str,
-    now_ms: u64,
-) -> Option<GitRefreshLock> {
+pub(crate) fn acquire_git_lock(home_dir: &Path, raw_cwd: &str, now_ms: u64) -> Option<ScopedLock> {
     let norm = normalize_cwd_lexical(raw_cwd);
     if norm.is_empty() {
         return None;
     }
-    let state_dir = ensure_state_dir(home_dir).ok()?;
-    let locks_dir = state_dir.join("locks");
-    platform::ensure_private_dir(&locks_dir).ok()?;
-
-    let hash = cwd_hash_hex(&norm);
-    let lock_path = locks_dir.join(format!("git-{hash}.lock"));
-    let marker = format!("{now_ms} {}\n", std::process::id());
-
-    match try_create_lock(&lock_path, &marker) {
-        Ok(lock) => Some(lock),
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-            if is_lock_stale(&lock_path, now_ms) {
-                let _ = fs::remove_file(&lock_path);
-                try_create_lock(&lock_path, &marker).ok()
-            } else {
-                None
-            }
-        }
-        Err(_) => None,
-    }
-}
-
-fn try_create_lock(lock_path: &Path, marker: &str) -> io::Result<GitRefreshLock> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(lock_path)?;
-    file.write_all(marker.as_bytes())?;
-    drop(file);
-    Ok(GitRefreshLock {
-        path: lock_path.to_path_buf(),
-        marker: marker.to_string(),
-    })
-}
-
-fn is_lock_stale(lock_path: &Path, now_ms: u64) -> bool {
-    if let Ok(raw) = fs::read_to_string(lock_path)
-        && let Some(first) = raw.split_whitespace().next()
-        && let Ok(created_ms) = first.parse::<u64>()
-    {
-        return now_ms.saturating_sub(created_ms) >= GIT_LOCK_STALE_MS;
-    }
-    if let Ok(meta) = fs::metadata(lock_path)
-        && let Ok(modified) = meta.modified()
-        && let Ok(dur) = modified.duration_since(UNIX_EPOCH)
-    {
-        let mtime_ms = dur.as_millis() as u64;
-        return now_ms.saturating_sub(mtime_ms) >= GIT_LOCK_STALE_MS;
-    }
-    false
+    let lock_name = format!("git-{}.lock", cwd_hash_hex(&norm));
+    ScopedLock::acquire(home_dir, &lock_name, now_ms, GIT_LOCK_STALE_MS)
 }
 
 pub(crate) fn atomic_write_in_dir(

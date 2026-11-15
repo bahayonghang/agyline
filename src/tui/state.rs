@@ -42,12 +42,7 @@ impl ConfiguratorEnv {
         let env_vars: BTreeMap<String, String> = std::env::vars().collect();
         let lookup = |k: &str| env_vars.get(k).cloned();
         let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
-        let home_dir = env_vars
-            .get("AGYLINE_HOME")
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| user_home.join(".gemini").join("agyline"));
+        let home_dir = crate::config::resolve_home_dir(&lookup, &user_home);
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -112,6 +107,18 @@ impl TuiTab {
             Self::Layout => "1: Layout",
             Self::StylePresets => "2: Style & Presets",
             Self::ThresholdsRuntime => "3: Thresholds & Runtime",
+            Self::AgyHook => "4: agy Hook",
+        }
+    }
+
+    pub(crate) const fn title_for_width(self, width: u16) -> &'static str {
+        if width >= 100 {
+            return self.title();
+        }
+        match self {
+            Self::Layout => "1: Layout",
+            Self::StylePresets => "2: Style",
+            Self::ThresholdsRuntime => "3: Runtime",
             Self::AgyHook => "4: agy Hook",
         }
     }
@@ -645,6 +652,31 @@ pub struct ConfiguratorApp {
 }
 
 impl ConfiguratorApp {
+    pub(crate) fn layout_list_offsets(&self, visible_rows: usize) -> (usize, usize) {
+        let active_index = self
+            .doc
+            .lines
+            .iter()
+            .take(self.selected_row)
+            .map(|row| row.len().max(1) + 1)
+            .sum::<usize>()
+            + self.selected_slot
+            + 1;
+        let entries = ordered_catalog_entries();
+        let mut catalog_index = self.catalog_idx;
+        let mut last_category = None;
+        for entry in entries.iter().take(self.catalog_idx + 1) {
+            if last_category != Some(entry.category) {
+                catalog_index += 1;
+                last_category = Some(entry.category);
+            }
+        }
+        (
+            (active_index + 1).saturating_sub(visible_rows),
+            (catalog_index + 1).saturating_sub(visible_rows),
+        )
+    }
+
     pub fn new(env: ConfiguratorEnv) -> Self {
         maybe_sweep_stale_state(&env.home_dir, env.now_ms);
 

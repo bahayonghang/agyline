@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
@@ -112,7 +111,7 @@ pub fn is_valid_loopback_relay_url(raw_url: &str) -> bool {
 
 fn parse_loopback_http_url(raw_url: &str) -> Option<LoopbackTarget> {
     let trimmed = raw_url.trim();
-    if trimmed.len() < 8 || !trimmed[..7].eq_ignore_ascii_case("http://") {
+    if !trimmed.get(..7)?.eq_ignore_ascii_case("http://") {
         return None;
     }
     let rest = &trimmed[7..];
@@ -237,18 +236,9 @@ fn send_touch_post(target: &LoopbackTarget, session_id: &str) {
 }
 
 fn resolve_agyline_home() -> PathBuf {
-    let env_vars: BTreeMap<String, String> = std::env::vars().collect();
-    let lookup = |k: &str| env_vars.get(k).cloned();
-    if let Some(explicit) = env_vars
-        .get("AGYLINE_HOME")
-        .map(String::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        return PathBuf::from(explicit);
-    }
+    let lookup = |k: &str| std::env::var(k).ok();
     let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
-    user_home.join(".gemini").join("agyline")
+    crate::config::resolve_home_dir(&lookup, &user_home)
 }
 
 fn current_epoch_ms() -> u64 {

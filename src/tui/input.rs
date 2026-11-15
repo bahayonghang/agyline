@@ -1442,7 +1442,7 @@ impl ConfiguratorApp {
         if row == tabs_y {
             let mut cursor_x = 0u16;
             for (idx, tab) in TuiTab::ALL.iter().copied().enumerate() {
-                let seg_w = (tab.title().chars().count() as u16) + 2;
+                let seg_w = (tab.title_for_width(self.term_size.0).chars().count() as u16) + 2;
                 if col >= cursor_x && col < cursor_x + seg_w {
                     self.active_tab = tab;
                     return;
@@ -1471,14 +1471,19 @@ impl ConfiguratorApp {
         let inner_row = row.saturating_sub(body_y + 1) as usize;
         match self.active_tab {
             TuiTab::Layout => {
+                if row == body_y || row == footer_y.saturating_sub(1) {
+                    return;
+                }
+                let (rows_offset, catalog_offset) =
+                    self.layout_list_offsets(footer_y.saturating_sub(body_y + 2) as usize);
                 let c0 = (main_w * 34) / 100;
                 let c1 = c0 + (main_w * 33) / 100;
                 if col < c0 {
                     self.layout_pane = LayoutPane::ActiveRows;
-                    self.click_active_rows_item(inner_row);
+                    self.click_active_rows_item(inner_row + rows_offset);
                 } else if col < c1 {
                     self.layout_pane = LayoutPane::Catalog;
-                    self.click_catalog_item(inner_row);
+                    self.click_catalog_item(inner_row + catalog_offset);
                 } else {
                     self.layout_pane = LayoutPane::Inspector;
                     if inner_row >= 1 {

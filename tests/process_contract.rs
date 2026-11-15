@@ -181,6 +181,7 @@ fn cli_hidden_workers_are_always_silent_and_exit_zero() {
         &["__refresh-git", "--cwd", "nonexistent"],
         &["__refresh-git", "--bogus"],
         &["__touch"],
+        &["__touch", "--session", "x", "--url", "中文中文"],
         &[
             "__touch",
             "--session",
@@ -224,6 +225,46 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
         text,
         "    \x1b[0m\x1b[0;36m\u{ef23} Gemini 4 Carbon\x1b[0;90m \u{00b7} \x1b[0;36mHigh\x1b[0;90m | \x1b[0;35m\u{f49b} 0%\x1b[0;90m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0;90m | \x1b[0;31m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
     );
+}
+
+#[test]
+fn pipe_ignores_malformed_unicode_quota_reset_times() {
+    let home_dir = std::env::temp_dir().join(format!(
+        "agyline_bad_reset_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(&home_dir).expect("create config home");
+    fs::write(
+        home_dir.join("config.toml"),
+        "[[line]]\nitems = [{ id = \"quota\", bucket = \"gemini-5h\", label = \"gem\", show_reset = true }]\n",
+    )
+    .expect("write config");
+    for reset_time in ["2026-01-01T00:00:中", "2099-01-01T00:00:00+中0"] {
+        let payload = serde_json::json!({
+            "quota": { "gemini-5h": { "remaining_fraction": 0.53, "reset_time": reset_time } }
+        });
+        let out = run_with_stdin_and_env(
+            &[],
+            payload.to_string().as_bytes(),
+            &[(
+                "AGYLINE_HOME",
+                home_dir.to_str().expect("config home UTF-8"),
+            )],
+        );
+        assert_eq!(out.status.code(), Some(0), "reset time {reset_time:?}");
+        assert!(out.stderr.is_empty(), "malformed reset must be silent");
+        let text = String::from_utf8(out.stdout).expect("UTF-8 output");
+        assert!(
+            text.contains("53% gem"),
+            "quota must still render: {text:?}"
+        );
+        assert!(
+            !text.contains('('),
+            "malformed reset must be omitted: {text:?}"
+        );
+    }
+    fs::remove_dir_all(home_dir).expect("remove config home");
 }
 
 #[test]

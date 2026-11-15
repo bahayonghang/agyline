@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Read;
@@ -174,15 +173,9 @@ fn parse_refresh_git_args(tail: &[OsString]) -> Option<OsString> {
 }
 
 fn resolve_process_home_dir() -> PathBuf {
-    let env_vars: BTreeMap<String, String> = std::env::vars().collect();
-    let lookup = |k: &str| env_vars.get(k).cloned();
+    let lookup = |k: &str| std::env::var(k).ok();
     let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
-    env_vars
-        .get("AGYLINE_HOME")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| user_home.join(".gemini").join("agyline"))
+    crate::config::resolve_home_dir(&lookup, &user_home)
 }
 
 fn has_git_marker_upward(start_dir: &Path) -> bool {

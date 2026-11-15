@@ -23,12 +23,7 @@ impl<'a> RenderEnv<'a> {
         let env_vars: BTreeMap<String, String> = std::env::vars().collect();
         let lookup = |k: &str| env_vars.get(k).cloned();
         let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
-        let home_dir = env_vars
-            .get("AGYLINE_HOME")
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| user_home.join(".gemini").join("agyline"));
+        let home_dir = crate::config::resolve_home_dir(&lookup, &user_home);
         let temp_dir = platform::relay_temp_dir(&lookup);
         let conversations_dir = user_home
             .join(".gemini")
