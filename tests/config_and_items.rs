@@ -94,7 +94,7 @@ items = ["model", { item = "quota", bucket = "flash", label = "fl", show_reset =
 // and explicit config.toml keys still override the preset's fields.
 #[test]
 fn presets_apply_scopes_and_load_custom_presets_from_agyline_home() {
-    assert_eq!(builtin_presets().len(), 4);
+    assert_eq!(builtin_presets().len(), 5);
 
     let mut doc = ConfigDoc {
         separator: " / ".to_string(),
@@ -627,7 +627,8 @@ fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() 
     };
 
     // Seed session so speed is active ("64.5")
-    let mut cfg = EffectiveConfig::default();
+    let mut cfg =
+        EffectiveConfig::from_doc(&ConfigDoc::cometix_base(), None, &BTreeMap::new(), false);
     let parsed = agyline::parse_stdin_payload(&raw).expect("parse");
     let mut frame = agyline::FrameData {
         payload: parsed,

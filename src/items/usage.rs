@@ -4,7 +4,7 @@
 //! `statusline.py`. Inputs are already in `FrameData`; nothing here reads state or the network.
 
 use crate::collect::{FrameData, RelayStatus};
-use crate::config::{EffectiveConfig, ItemId, ItemSlot};
+use crate::config::{EffectiveConfig, ItemId, ItemSlot, ModelQuotaPeriod};
 use crate::input::QuotaBucketData;
 use crate::items::{
     EvaluatedItem, coalesced_icon_body_spans, slot_custom_icon_color, slot_fg_color,
@@ -333,11 +333,20 @@ pub fn eval_quota(
     let show_reset = slot.show_reset.unwrap_or(false);
     let show_amount = slot.show_amount.unwrap_or(false);
     let label = slot.label.as_deref().unwrap_or("quota");
-    let bucket = select_quota_bucket(
-        &frame.payload.quota_buckets,
-        slot.bucket.as_deref(),
-        show_amount,
-    )?;
+    let payload = &frame.payload;
+    let bucket = if let Some(period) = slot.model_quota_period() {
+        let key = model_quota_bucket(&payload.model_id, period)
+            .or_else(|| model_quota_bucket(&payload.model_display_name, period))?;
+        payload.quota_buckets.iter().find(|bucket| {
+            bucket.name.eq_ignore_ascii_case(key)
+                && !bucket.disabled
+                && bucket
+                    .remaining_fraction
+                    .is_some_and(|rf| (0.0..=1.0).contains(&rf))
+        })
+    } else {
+        select_quota_bucket(&payload.quota_buckets, slot.bucket.as_deref(), show_amount)
+    }?;
     let (full_spans, compact_spans) = render_quota_spans(
         slot,
         bucket,
@@ -354,6 +363,26 @@ pub fn eval_quota(
         full_spans,
         compact_spans,
     })
+}
+
+fn model_quota_bucket(model: &str, period: ModelQuotaPeriod) -> Option<&'static str> {
+    let normalized = model.trim().to_ascii_lowercase();
+    let model = normalized.strip_prefix("models/").unwrap_or(&normalized);
+    let mut parts = model
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty());
+    let gemini = match parts.next()? {
+        "gemini" => true,
+        "orchestrator" if matches!(parts.next(), Some("carbon" | "argon")) => true,
+        "claude" | "gpt" => false,
+        _ => return None,
+    };
+    match (gemini, period) {
+        (true, ModelQuotaPeriod::FiveHours) => Some("gemini-5h"),
+        (true, ModelQuotaPeriod::Weekly) => Some("gemini-weekly"),
+        (false, ModelQuotaPeriod::FiveHours) => Some("3p-5h"),
+        (false, ModelQuotaPeriod::Weekly) => Some("3p-weekly"),
+    }
 }
 
 /// Session USD cost; `None` at zero. The warn color and the `$` formatting are the reference's.

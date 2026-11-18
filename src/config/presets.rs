@@ -1,6 +1,6 @@
-//! Preset catalog: four built-ins plus custom TOML files under `<home>/presets`. A preset is a
+//! Preset catalog: five built-ins plus custom TOML files under `<home>/presets`. A preset is a
 //! whole `ConfigDoc` applied by `PresetScope`, so the configurator can swap layout without
-//! restyling. `cometix` is the reference-parity default: it must keep matching statusline.ps1.
+//! restyling. `cometix` keeps the layout from statusline.ps1.
 
 use std::fs;
 use std::path::Path;
@@ -14,10 +14,10 @@ pub struct PresetInfo {
     pub summary: &'static str,
 }
 
-const BUILTIN_PRESETS: [PresetInfo; 4] = [
+const BUILTIN_PRESETS: [PresetInfo; 5] = [
     PresetInfo {
         name: "cometix",
-        summary: "Reference Line 1:1 default (2 lines, terminal plain, 7 + 5 items)",
+        summary: "Reference layout with a combined quota and cost item",
     },
     PresetInfo {
         name: "minimal",
@@ -30,6 +30,10 @@ const BUILTIN_PRESETS: [PresetInfo; 4] = [
     PresetInfo {
         name: "cache-focus",
         summary: "Prompt-cache & budget oriented layout with Catppuccin Mocha palette",
+    },
+    PresetInfo {
+        name: "default",
+        summary: "Workspace and usage with 5-hour and weekly limits for the current model",
     },
 ];
 
@@ -65,6 +69,10 @@ pub fn discover_presets(home_dir: &Path) -> Vec<String> {
 /// The reference layout: `statusline.ps1`'s `$line1` (7 items) then `$line2` (5), in that order.
 /// `budget` is the reference's quota-plus-cost pair drawn as one segment, not two.
 pub fn default_cometix_lines() -> Vec<Vec<ItemSlot>> {
+    workspace_and_runtime_lines(ItemId::Budget)
+}
+
+pub(super) fn workspace_and_runtime_lines(usage: ItemId) -> Vec<Vec<ItemSlot>> {
     vec![
         vec![
             ItemSlot::new(ItemId::Model),
@@ -73,7 +81,7 @@ pub fn default_cometix_lines() -> Vec<Vec<ItemSlot>> {
             ItemSlot::new(ItemId::Context),
             ItemSlot::new(ItemId::Cache),
             ItemSlot::new(ItemId::Speed),
-            ItemSlot::new(ItemId::Budget),
+            ItemSlot::new(usage),
         ],
         vec![
             ItemSlot::new(ItemId::Mode),
@@ -91,6 +99,7 @@ pub fn default_cometix_lines() -> Vec<Vec<ItemSlot>> {
 pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc> {
     let key = name.trim().to_ascii_lowercase();
     match key.as_str() {
+        "default" => Some(ConfigDoc::default()),
         "cometix" => Some(ConfigDoc::cometix_base()),
         "minimal" => {
             let mut doc = ConfigDoc::cometix_base();

@@ -249,7 +249,7 @@ fn prepare_db_setup(
 
 /// Materializes each case's config/session/relay/DB seeds in an isolated sandbox, renders at the
 /// fixed anchor with NoopSpawner, and asserts both plain and ANSI bytes equal the golden fixture.
-fn run_golden_suite(fixture_raw: &str) {
+fn run_golden_suite(fixture_raw: &str, config_fallback: Option<&str>) {
     let suite: GoldenSuite =
         serde_json::from_str(fixture_raw).expect("golden fixture JSON must parse");
 
@@ -269,7 +269,7 @@ fn run_golden_suite(fixture_raw: &str) {
         let conversations_dir = sandbox.root.join("conversations");
         fs::create_dir_all(&temp_dir).expect("create temp_dir");
 
-        if let Some(cfg_toml) = &case.config_toml {
+        if let Some(cfg_toml) = case.config_toml.as_deref().or(config_fallback) {
             fs::create_dir_all(&home_dir).expect("create home_dir");
             fs::write(home_dir.join("config.toml"), cfg_toml).expect("write config.toml");
         }
@@ -322,18 +322,21 @@ fn run_golden_suite(fixture_raw: &str) {
     }
 }
 
-// Default-line reference parity (A-I cases): stdin/model/workspace/git/context/quota/cost and
+// Cometix reference parity (A-I cases): stdin/model/workspace/git/context/quota/cost and
 // env overrides, plus seeded telemetry, relay, and SQLite state that alter the cache countdown.
 #[test]
-fn stateless_default_line_golden_cases_match_plain_and_ansi_bytes() {
-    run_golden_suite(include_str!("fixtures/default_line_golden.json"));
+fn cometix_line_golden_cases_match_plain_and_ansi_bytes() {
+    run_golden_suite(
+        include_str!("fixtures/default_line_golden.json"),
+        Some("preset = \"cometix\"\n"),
+    );
 }
 
 // Opt-in items, glyph sets, palettes/color depth, env precedence, broken-TOML fallback, and
 // width narrowing, each compared byte-for-byte to the reference.
 #[test]
 fn items_and_config_golden_cases_match_plain_and_ansi_bytes() {
-    run_golden_suite(include_str!("fixtures/items_and_config.json"));
+    run_golden_suite(include_str!("fixtures/items_and_config.json"), None);
 }
 
 // Exercises the shared `render_lines` seam directly with a hand-built FrameData, pinning exact

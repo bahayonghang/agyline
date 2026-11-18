@@ -109,7 +109,7 @@ const QUOTA_OPTS: [ItemOptionSpec; 4] = [
     ItemOptionSpec {
         key: "bucket",
         kind: ItemOptionKind::Text,
-        summary: "Quota bucket filter (empty = minimum remaining)",
+        summary: "Bucket filter or @model/5h / @model/weekly",
     },
     ItemOptionSpec {
         key: "label",

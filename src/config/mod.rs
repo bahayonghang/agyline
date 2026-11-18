@@ -273,6 +273,21 @@ impl ItemId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ModelQuotaPeriod {
+    FiveHours,
+    Weekly,
+}
+
+impl ModelQuotaPeriod {
+    pub(crate) const fn selector(self) -> &'static str {
+        match self {
+            Self::FiveHours => "@model/5h",
+            Self::Weekly => "@model/weekly",
+        }
+    }
+}
+
 /// One `[[line]].items` entry. Options are `None` when the file omits them, so the item's own
 /// default applies; only the options an item understands have any effect.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,7 +303,8 @@ pub struct ItemSlot {
     pub priority: Option<u8>,
     /// Context: show remaining percent instead of used percent.
     pub show_remaining: Option<bool>,
-    /// Quota/budget: bucket name filter, exact then substring; unset picks the lowest remaining.
+    /// Quota/budget: exact then substring bucket filter; unset picks the lowest remaining.
+    /// Quota also accepts `@model/5h` and `@model/weekly`.
     pub bucket: Option<String>,
     /// Quota: label after the percentage, default `quota`.
     pub label: Option<String>,
@@ -307,6 +323,16 @@ pub struct ItemSlot {
 }
 
 impl ItemSlot {
+    pub(crate) fn model_quota_period(&self) -> Option<ModelQuotaPeriod> {
+        if self.id != ItemId::Quota {
+            return None;
+        }
+        let selector = self.bucket.as_deref()?.trim();
+        [ModelQuotaPeriod::FiveHours, ModelQuotaPeriod::Weekly]
+            .into_iter()
+            .find(|period| selector.eq_ignore_ascii_case(period.selector()))
+    }
+
     pub const fn new(id: ItemId) -> Self {
         Self {
             id,
@@ -457,12 +483,16 @@ pub struct ConfigDoc {
 }
 
 impl ConfigDoc {
-    /// The default document, reproducing `ref/agy-patch/statusline.ps1` (`cometix` preset,
-    /// `terminal` palette, plain skin). Every parse starts here and overlays only the keys set.
+    /// The reference preset, reproducing `ref/agy-patch/statusline.ps1` (`cometix` preset,
+    /// `terminal` palette, plain skin).
     pub fn cometix_base() -> Self {
+        Self::base("cometix", presets::default_cometix_lines())
+    }
+
+    fn base(preset: &str, lines: Vec<Vec<ItemSlot>>) -> Self {
         Self {
             version: 1,
-            preset: "cometix".to_string(),
+            preset: preset.to_string(),
             palette: "terminal".to_string(),
             theme: ThemeSetting::Auto,
             glyphs: GlyphSet::Nerd,
@@ -478,14 +508,33 @@ impl ConfigDoc {
             cache_relay_url: String::new(),
             thresholds: ThresholdsConfig::default(),
             palette_overrides: PaletteOverrides::default(),
-            lines: presets::default_cometix_lines(),
+            lines,
         }
     }
 }
 
 impl Default for ConfigDoc {
     fn default() -> Self {
-        Self::cometix_base()
+        let mut doc = Self::base(
+            "default",
+            presets::workspace_and_runtime_lines(ItemId::Cost),
+        );
+        doc.lines[1].splice(
+            1..1,
+            [
+                (ModelQuotaPeriod::FiveHours, "5h"),
+                (ModelQuotaPeriod::Weekly, "weekly"),
+            ]
+            .map(|(period, label)| {
+                let mut slot = ItemSlot::new(ItemId::Quota);
+                slot.bucket = Some(period.selector().to_string());
+                slot.label = Some(label.to_string());
+                slot.show_reset = Some(true);
+                slot.priority = Some(2);
+                slot
+            }),
+        );
+        doc
     }
 }
 
@@ -584,7 +633,7 @@ pub fn parse_config_doc(raw: &str) -> Result<(ConfigDoc, Vec<String>), ConfigSyn
     parse_config_doc_with_home(raw, None)
 }
 
-/// Tolerant overlay onto `cometix_base`: bad values become warnings and only TOML syntax errors
+/// Tolerant overlay onto the default preset: bad values become warnings and only TOML syntax errors
 /// are `Err`, so a typo never costs the user their line.
 pub fn parse_config_doc_with_home(
     raw: &str,
@@ -599,19 +648,19 @@ pub fn parse_config_doc_with_home(
             message: "expected top-level TOML table".to_string(),
         });
     };
-    let mut doc = ConfigDoc::cometix_base();
+    let mut doc = ConfigDoc::default();
     let mut warnings = Vec::new();
     parse_config_overlay_with_home(tbl, &mut doc, &mut warnings, true, home_dir);
     Ok((doc, warnings))
 }
 
-/// Reads `<home>/config.toml`. Missing, unreadable and unparsable all return the reference default
+/// Reads `<home>/config.toml`. Missing, unreadable and unparsable all return the default preset
 /// with diagnostics set, never an error.
 pub fn load_config_doc(home_dir: &Path) -> ConfigLoadResult {
     let config_path = home_dir.join("config.toml");
     if !config_path.exists() {
         return ConfigLoadResult {
-            doc: ConfigDoc::cometix_base(),
+            doc: ConfigDoc::default(),
             config_exists: false,
             syntax_error: None,
             warnings: Vec::new(),
@@ -622,7 +671,7 @@ pub fn load_config_doc(home_dir: &Path) -> ConfigLoadResult {
         Ok(text) => text,
         Err(err) => {
             return ConfigLoadResult {
-                doc: ConfigDoc::cometix_base(),
+                doc: ConfigDoc::default(),
                 config_exists: true,
                 syntax_error: Some(ConfigSyntaxError {
                     line: None,
@@ -642,7 +691,7 @@ pub fn load_config_doc(home_dir: &Path) -> ConfigLoadResult {
             warnings,
         },
         Err(err) => ConfigLoadResult {
-            doc: ConfigDoc::cometix_base(),
+            doc: ConfigDoc::default(),
             config_exists: true,
             syntax_error: Some(err),
             warnings: Vec::new(),
@@ -757,7 +806,7 @@ pub struct EffectiveConfig {
 
 impl Default for EffectiveConfig {
     fn default() -> Self {
-        Self::from_doc(&ConfigDoc::cometix_base(), None, &BTreeMap::new(), false)
+        Self::from_doc(&ConfigDoc::default(), None, &BTreeMap::new(), false)
     }
 }
 
@@ -913,7 +962,7 @@ fn parse_config_overlay_with_home(
                 && !presets::apply_preset(doc, trimmed, PresetScope::All, home_dir)
             {
                 warnings.push(format!(
-                    "unknown preset '{trimmed}', falling back to 'cometix'"
+                    "unknown preset '{trimmed}', using the default layout"
                 ));
             }
         } else {

@@ -4,7 +4,7 @@
 
 agyline is a status line for the Antigravity CLI (`agy`): one Rust program, with its own configuration, in the place [CCometixLine](https://github.com/Haleclipse/CCometixLine) occupies for Claude Code.
 
-The `agyline` Rust crate lives in this repository. `ref/agy-patch` is the gitignored local reference script baseline whose default look and `AGY_*` behavior `agyline` reproduces.
+The `agyline` Rust crate lives in this repository. The `cometix` preset follows the gitignored reference scripts in `ref/agy-patch`.
 
 Agent instructions are in [AGENTS.md](AGENTS.md).
 
@@ -47,6 +47,10 @@ Git status runs while the line is drawn. `statusline.py` stops that call after 1
 
 ## Shipped in this repository
 
+The `default` preset shows the selected model group's remaining five-hour and weekly quotas on the second line, for example `94% 5h (2h14m) | 78% weekly (3d6h)`. The parenthesized values are time until reset. Narrowing can hide the countdowns, and single-line mode carries the compact quota items into the first line. Choose the `cometix` layout in the configurator to restore the reference layout, or set `preset = "cometix"` in a config without custom `[[line]]` entries.
+
+Custom `quota` items can use `bucket = "@model/5h"` or `bucket = "@model/weekly"` to follow the selected model. Set `show_reset = true` to include the countdown when available.
+
 Unlike PowerShell or Python status line scripts, `agyline` runs as one compiled Rust binary: the printing path never spawns a shell and never waits on `git`. Stale local Git caches and prompt-cache relay touches run asynchronously in detached background worker modes (`__refresh-git`, `__touch`).
 
 | Piece | Shipped behavior |
@@ -54,7 +58,7 @@ Unlike PowerShell or Python status line scripts, `agyline` runs as one compiled 
 | Binary & `just` recipes | `agyline` single crate (`cargo install --path .`; rustc 1.88), plus `just ci`, `just install`, `just uninstall`, and `just sandbox-install-test` |
 | Live pipe render | `agy` pipes one JSON frame to `agyline`'s stdin; `agyline` renders 1 or 2 ANSI/plain lines to stdout with priority-based width narrowing (`overflow = "fit"` / `"none"`) |
 | 20-item catalog | Workspace (`model`, `dir`, `git`), Usage (`context`, `cache`, `speed`, `budget`, repeatable `quota`, `cost`), Runtime (`mode`, `subagents`, `tasks`, `queue`, `sandbox`), and Session/Identity (`vim`, `title`, `agent`, `artifacts`, `version`, `plan`) |
-| Presets & palettes | Built-in presets (`cometix`, `minimal`, `dashboard`, `cache-focus`) + custom `~/.gemini/agyline/presets/*.toml`; 8 built-in palettes (`terminal`, `catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `nord`, `gruvbox`, `rose-pine`, `dracula`) + custom `palettes/*.toml`; `terminal` supports both polarities, while the seven RGB palettes have a fixed polarity and fall back to `terminal` on a mismatch |
+| Presets & palettes | Built-in presets (`default`, `cometix`, `minimal`, `dashboard`, `cache-focus`) + custom `~/.gemini/agyline/presets/*.toml`; 8 built-in palettes (`terminal`, `catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `nord`, `gruvbox`, `rose-pine`, `dracula`) + custom `palettes/*.toml`; `terminal` supports both polarities, while the seven RGB palettes have a fixed polarity and fall back to `terminal` on a mismatch |
 | Config home & file | `~/.gemini/agyline/config.toml` (or `AGYLINE_HOME`): `version`, `preset`, `palette`, `theme` (`auto`/`dark`/`light`), `glyphs` (`nerd`/`unicode`/`ascii`), `color_depth` (`auto`/`truecolor`/`256`/`16`/`none`), `separator`, `indent`, `single_line`, `overflow`; `[thresholds]`, `[git]`, `[cache_relay]`, `[palette_overrides]`, and `[[line]]`. Explicit `AGY_*` variables override `config.toml`; `COLORFGBG` applies when `theme = "auto"`. |
 | Runtime state | `state/` under `AGYLINE_HOME` (per-session telemetry, bounded SQLite response-model lookup, Git cache, background locks, and saved `previous_statusline.json` snapshot; `cache_relay.py` state stays read-only in the OS temp directory) |
 | Interactive configurator | `agyline` (on a TTY) or `agyline -c` / `--config`: 4-tab terminal workbench (`Layout`, `Style & Presets`, `Thresholds & Runtime`, `agy Hook`) sharing the live renderer without ANSI re-parsing, with 100-step undo/redo, live `TOML` drawer, `.bak` broken-TOML recovery, external `mtime` conflict guard, and standalone `settings.json` hook diff preview |
@@ -73,7 +77,7 @@ These parts of `ref/agy-patch` remain reference material under the current goal.
 
 | Path | Role |
 | --- | --- |
-| `statusline.ps1`, `statusline.py` | Default line for agyline to match |
+| `statusline.ps1`, `statusline.py` | Layout baseline for the `cometix` preset |
 | `install.ps1` | How `settings.json` is pointed at the script today |
 | `cache_relay.py` | Prompt-cache keepalive. The line may keep reading its state file. A Rust relay is a separate decision. |
 | `hub-wrapper.ps1`, `hub-wrapper.sh` | Gateway environment for a local CLIProxyAPI |

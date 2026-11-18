@@ -649,7 +649,7 @@ fn preset_modal_scopes_and_hundred_step_undo_redo_restore_exact_doc() {
     let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
     let initial_doc = app.doc().clone();
 
-    // Open Preset modal via 'r': presets = [cometix, minimal, dashboard, cache-focus]
+    // Open the preset modal from the default layout.
     app.handle_event(press(KeyCode::Char('r')));
     assert!(app.has_active_modal());
     // Select 'dashboard' (Down x2), scope 'Style' (Right x2: All -> Layout -> Style), Enter!
@@ -749,7 +749,7 @@ fn env_override_badges_and_effective_vs_file_only_toggle_preserve_doc() {
     app.handle_event(press(KeyCode::Char('e')));
     assert!(!app.is_effective_preview_mode());
     assert!(!app.is_dirty());
-    assert_eq!(app.doc(), &ConfigDoc::cometix_base());
+    assert_eq!(app.doc(), &ConfigDoc::default());
 
     let (rendered_file, cfg_file) = app.preview_rendered_frame();
     assert!(!cfg_file.single_line);
@@ -803,7 +803,7 @@ fn broken_toml_banner_protects_file_on_cancel_and_writes_bak_on_confirm() {
     assert!(!app_save.loaded_from_broken_toml());
     assert_eq!(std::fs::read_to_string(&bak_path).unwrap(), broken_raw);
     let clean_saved = std::fs::read_to_string(&cfg_path).unwrap();
-    assert!(clean_saved.contains("preset = \"cometix\""));
+    assert!(clean_saved.contains("preset = \"default\""));
 }
 
 #[test]

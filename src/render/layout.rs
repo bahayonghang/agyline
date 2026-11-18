@@ -26,7 +26,7 @@ pub enum SlotOutcome {
 #[derive(Debug, Clone)]
 struct ActiveSlot {
     // None for the synthesized single-line mode pill, which has no config slot to report on.
-    orig_slot_idx: Option<usize>,
+    origin: Option<(usize, usize)>,
     eval: EvaluatedItem,
     use_compact: bool,
     dropped: bool,
@@ -109,68 +109,51 @@ pub fn layout_evaluated_rows(
         })
         .collect();
 
-    let mut working_rows: Vec<(usize, Vec<ActiveSlot>)> = Vec::with_capacity(evaluated_rows.len());
+    let single_line = config.single_line && evaluated_rows.len() > 1;
+    let row_count = if single_line { 1 } else { evaluated_rows.len() };
+    let mut working_rows = vec![Vec::new(); row_count];
+    let mut secondary_has_items = false;
 
-    if config.single_line && evaluated_rows.len() > 1 {
-        let mut secondary_has_items = false;
-        for (r_idx, row) in evaluated_rows.iter().enumerate().skip(1) {
-            for (s_idx, opt) in row.iter().enumerate() {
-                if opt.is_some() {
-                    secondary_has_items = true;
-                    slot_outcomes[r_idx][s_idx] = SlotOutcome::Dropped;
+    for (row_idx, row) in evaluated_rows.into_iter().enumerate() {
+        for (slot_idx, eval) in row.into_iter().enumerate() {
+            let Some(eval) = eval else { continue };
+            let promote = single_line && row_idx > 0;
+            if promote {
+                secondary_has_items = true;
+                let model_quota = config
+                    .lines
+                    .get(row_idx)
+                    .and_then(|line| line.get(slot_idx))
+                    .and_then(|slot| slot.model_quota_period())
+                    .is_some();
+                if !model_quota {
+                    slot_outcomes[row_idx][slot_idx] = SlotOutcome::Dropped;
+                    continue;
+                }
+                if eval.has_compact_diff() {
+                    slot_outcomes[row_idx][slot_idx] = SlotOutcome::Compact;
                 }
             }
-        }
-        let mut row0_active: Vec<ActiveSlot> = evaluated_rows
-            .into_iter()
-            .next()
-            .unwrap_or_default()
-            .into_iter()
-            .enumerate()
-            .filter_map(|(idx, opt)| {
-                opt.map(|eval| ActiveSlot {
-                    orig_slot_idx: Some(idx),
-                    eval,
-                    use_compact: false,
-                    dropped: false,
-                })
-            })
-            .collect();
-
-        // Collapsing rows would hide runtime state, so synthesize a mode pill when row 0 has no
-        // Mode slot of its own. It has no config slot, so it records no outcome.
-        if secondary_has_items
-            && !row0_active.iter().any(|s| s.eval.id == ItemId::Mode)
-            && let Some(pill) = eval_single_line_mode_pill(frame, config)
-        {
-            row0_active.push(ActiveSlot {
-                orig_slot_idx: None,
-                eval: pill,
-                use_compact: false,
+            working_rows[if promote { 0 } else { row_idx }].push(ActiveSlot {
+                origin: Some((row_idx, slot_idx)),
+                eval,
+                use_compact: promote,
                 dropped: false,
             });
         }
-        if !row0_active.is_empty() {
-            working_rows.push((0, row0_active));
-        }
-    } else {
-        for (r_idx, row) in evaluated_rows.into_iter().enumerate() {
-            let active: Vec<ActiveSlot> = row
-                .into_iter()
-                .enumerate()
-                .filter_map(|(idx, opt)| {
-                    opt.map(|eval| ActiveSlot {
-                        orig_slot_idx: Some(idx),
-                        eval,
-                        use_compact: false,
-                        dropped: false,
-                    })
-                })
-                .collect();
-            if !active.is_empty() {
-                working_rows.push((r_idx, active));
-            }
-        }
+    }
+
+    // Keep the mode cue when its configured row was hidden.
+    if secondary_has_items
+        && !working_rows[0].iter().any(|s| s.eval.id == ItemId::Mode)
+        && let Some(pill) = eval_single_line_mode_pill(frame, config)
+    {
+        working_rows[0].push(ActiveSlot {
+            origin: None,
+            eval: pill,
+            use_compact: false,
+            dropped: false,
+        });
     }
 
     // A zero budget counts as no budget: narrowing to 0 columns would print nothing useful.
@@ -180,11 +163,11 @@ pub fn layout_evaluated_rows(
     };
 
     let mut out_lines = Vec::with_capacity(working_rows.len());
-    for (emitted_idx, (orig_row_idx, mut active)) in working_rows.into_iter().enumerate() {
-        let append_broken = config.config_broken && emitted_idx == 0;
+    for mut active in working_rows.into_iter().filter(|row| !row.is_empty()) {
+        let append_broken = config.config_broken && out_lines.is_empty();
         let line = narrow_single_row(
             &mut active,
-            &mut slot_outcomes[orig_row_idx],
+            &mut slot_outcomes,
             config,
             width_budget,
             append_broken,
@@ -199,7 +182,7 @@ pub fn layout_evaluated_rows(
 // stop at the first stage that fits. `order` visits P5 first and P1 (model, context, mode) last.
 fn narrow_single_row(
     active: &mut [ActiveSlot],
-    row_outcomes: &mut [SlotOutcome],
+    slot_outcomes: &mut [Vec<SlotOutcome>],
     config: &EffectiveConfig,
     width_budget: Option<usize>,
     append_broken: bool,
@@ -239,10 +222,10 @@ fn narrow_single_row(
     // Stage 1: Downgrade eligible items from Full -> Compact.
     for &idx in &order {
         // Skip items whose compact form is identical: downgrading them would save no columns.
-        if active[idx].eval.has_compact_diff() {
+        if !active[idx].use_compact && active[idx].eval.has_compact_diff() {
             active[idx].use_compact = true;
-            if let Some(orig) = active[idx].orig_slot_idx {
-                row_outcomes[orig] = SlotOutcome::Compact;
+            if let Some((row, slot)) = active[idx].origin {
+                slot_outcomes[row][slot] = SlotOutcome::Compact;
             }
             if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
                 return StyledLine {
@@ -263,8 +246,8 @@ fn narrow_single_row(
         }
         active[idx].dropped = true;
         surviving_count -= 1;
-        if let Some(orig) = active[idx].orig_slot_idx {
-            row_outcomes[orig] = SlotOutcome::Dropped;
+        if let Some((row, slot)) = active[idx].origin {
+            slot_outcomes[row][slot] = SlotOutcome::Dropped;
         }
         if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
             return StyledLine {
@@ -283,8 +266,8 @@ fn narrow_single_row(
             broken_suffix: default_broken,
         };
     };
-    if let Some(orig) = surviving.orig_slot_idx {
-        row_outcomes[orig] = SlotOutcome::Truncated;
+    if let Some((row, slot)) = surviving.origin {
+        slot_outcomes[row][slot] = SlotOutcome::Truncated;
     }
 
     let ell = glyphs::ellipsis(config.glyphs);
