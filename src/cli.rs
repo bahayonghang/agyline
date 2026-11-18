@@ -658,7 +658,7 @@ Options:
       --dry-run           Show settings.json diff without writing
   -y, --yes               Apply without interactive prompt
       --reset             Remove statusLine instead of restoring previous snapshot
-      --purge             Remove <AGYLINE_HOME> directory
+      --purge             Remove a dedicated <AGYLINE_HOME>; refuses home, .gemini, and mixed directories
   -h, --help              Print help
 "
         }

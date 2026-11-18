@@ -882,6 +882,10 @@ fn unix_single_quoted_command_roundtrips_through_install_and_uninstall_and_guard
     )
     .expect_err("must refuse purging user_home");
     assert!(matches!(err, InstallError::UnsafePurgePath { .. }));
+    assert!(
+        err.to_string().contains("user home"),
+        "home refusal must say why, got: {err}"
+    );
 
     // Also exercise host process short_path_resolver without touching real settings.json.
     if let Ok(proc_env) = InstallEnv::from_process() {
@@ -894,4 +898,178 @@ fn unix_single_quoted_command_roundtrips_through_install_and_uninstall_and_guard
             (proc_env.short_path_resolver)(&sb.path().join("does_not_exist_12345.exe")).is_none()
         );
     }
+}
+
+fn purge_yes() -> UninstallOptions {
+    UninstallOptions {
+        dry_run: false,
+        yes: true,
+        reset: false,
+        purge: true,
+    }
+}
+
+fn assert_purge_refused(env: &InstallEnv, needle: &str) {
+    let err = plan_uninstall(env, purge_yes()).expect_err("purge must refuse before any delete");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("refusing to purge") && msg.contains(needle),
+        "expected refusal mentioning {needle}, got: {msg}"
+    );
+}
+
+fn create_dir_symlink(original: &Path, link: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_dir(original, link)
+    }
+    #[cfg(not(windows))]
+    {
+        std::os::unix::fs::symlink(original, link)
+    }
+}
+
+// `--purge` is `remove_dir_all` on AGYLINE_HOME, and `-y` skips the prompt. A home pointed at
+// `~/.gemini` (or any parent of settings.json / the user profile) must fail closed even then.
+#[test]
+fn purge_refuses_parent_dirs_roots_symlinks_and_mixed_contents_even_with_yes() {
+    let sb = Sandbox::new("purge_guard");
+    let user_home = sb.path().join("home");
+    let gemini = user_home.join(".gemini");
+    let settings = gemini.join("antigravity-cli").join("settings.json");
+    fs::create_dir_all(settings.parent().expect("settings parent")).expect("cli dir");
+    fs::write(&settings, "{}\n").expect("settings");
+    fs::write(gemini.join("keep.txt"), "keep").expect("sibling marker");
+
+    let mut env = make_env(
+        sb.path(),
+        PlatformKind::Unix,
+        Some(user_home.clone()),
+        user_home.join(".cargo").join("bin").join("agyline"),
+        None,
+        |_| None,
+    );
+
+    env.agyline_home = gemini.clone();
+    assert_purge_refused(&env, "settings");
+
+    let mut stdin = Cursor::new(Vec::new());
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let code = {
+        let mut streams = CliStreams {
+            stdin: &mut stdin,
+            stdin_is_terminal: false,
+            stdout: &mut stdout,
+            stdout_is_terminal: false,
+            stderr: &mut stderr,
+        };
+        agyline::run_uninstall_cli(&env, purge_yes(), &mut streams)
+    };
+    assert_eq!(code, 1, "-y must not bypass the purge guard");
+    assert!(
+        String::from_utf8_lossy(&stderr).contains("refusing to purge"),
+        "stderr must explain the refusal"
+    );
+    assert_eq!(
+        fs::read_to_string(gemini.join("keep.txt")).expect("keep"),
+        "keep"
+    );
+    assert!(
+        settings.is_file(),
+        "settings.json must survive a refused purge"
+    );
+
+    env.agyline_home = gemini.join("antigravity-cli");
+    assert_purge_refused(&env, "settings");
+    assert!(settings.is_file());
+
+    env.agyline_home = gemini.join("agyline").join("..");
+    assert_purge_refused(&env, "settings");
+    assert!(gemini.join("keep.txt").is_file());
+
+    env.agyline_home = sb.path().to_path_buf();
+    assert_purge_refused(&env, "user home");
+    assert!(gemini.join("keep.txt").is_file());
+
+    env.agyline_home = PathBuf::from("agyline");
+    assert_purge_refused(&env, "absolute");
+
+    env.agyline_home = if cfg!(windows) {
+        PathBuf::from(r"C:\")
+    } else {
+        PathBuf::from("/")
+    };
+    assert_purge_refused(&env, "root");
+
+    let mixed = sb.path().join("mixed-home");
+    fs::create_dir_all(&mixed).expect("mixed");
+    fs::write(mixed.join("config.toml"), "version = 1\n").expect("config");
+    env.agyline_home = mixed.clone();
+    let plan = plan_uninstall(&env, purge_yes()).expect("dedicated dir is purgeable");
+    fs::write(mixed.join("notes.txt"), "keep").expect("foreign file");
+    let err = apply_uninstall(&env, &plan).expect_err("apply must re-check contents");
+    assert!(
+        err.to_string().contains("notes.txt"),
+        "apply-time refusal must name the foreign entry, got: {err}"
+    );
+    assert!(mixed.join("notes.txt").is_file());
+    assert!(mixed.join("config.toml").is_file());
+
+    let link = sb.path().join("gemini-link");
+    if create_dir_symlink(&gemini, &link).is_ok() {
+        env.agyline_home = link;
+        assert_purge_refused(&env, "symbolic link");
+        assert!(gemini.join("keep.txt").is_file());
+    }
+}
+
+// The default home is `~/.gemini/agyline`, a sibling of `antigravity-cli`. Purge removes that
+// directory, including state files, and leaves the rest of `~/.gemini` in place.
+#[test]
+fn purge_removes_dedicated_agyline_home_and_leaves_gemini_siblings() {
+    let sb = Sandbox::new("purge_dedicated");
+    let user_home = sb.path().join("home");
+    let gemini = user_home.join(".gemini");
+    let agyline_home = gemini.join("agyline");
+    let settings = gemini.join("antigravity-cli").join("settings.json");
+    fs::create_dir_all(&agyline_home).expect("agyline home");
+    fs::create_dir_all(settings.parent().expect("settings parent")).expect("cli dir");
+    fs::write(&settings, "{}\n").expect("settings");
+    fs::write(gemini.join("keep.txt"), "keep").expect("sibling");
+    fs::write(agyline_home.join("config.toml"), "version = 1\n").expect("config");
+    fs::write(agyline_home.join("config.toml.bak"), "old\n").expect("bak");
+    fs::write(agyline_home.join(".config.toml.9.8.7.tmp"), "tmp").expect("tmp");
+    fs::write(agyline_home.join(".DS_Store"), "ds").expect("ds");
+    fs::create_dir_all(agyline_home.join("presets")).expect("presets");
+    fs::write(agyline_home.join("presets").join("mine.toml"), "x").expect("custom preset");
+    fs::create_dir_all(agyline_home.join("palettes")).expect("palettes");
+    fs::create_dir_all(agyline_home.join("state")).expect("state");
+    fs::write(agyline_home.join("state").join("notes.txt"), "inside").expect("state file");
+
+    let mut env = make_env(
+        sb.path(),
+        PlatformKind::Unix,
+        Some(user_home.clone()),
+        user_home.join(".cargo").join("bin").join("agyline"),
+        None,
+        |_| None,
+    );
+    env.agyline_home = agyline_home.clone();
+
+    let plan = plan_uninstall(&env, purge_yes()).expect("plan dedicated purge");
+    apply_uninstall(&env, &plan).expect("apply dedicated purge");
+
+    assert!(
+        !agyline_home.exists(),
+        "dedicated AGYLINE_HOME must be removed"
+    );
+    assert_eq!(
+        fs::read_to_string(gemini.join("keep.txt")).expect("sibling remains"),
+        "keep"
+    );
+    assert_eq!(
+        fs::read_to_string(&settings).expect("settings remain"),
+        "{}\n"
+    );
 }

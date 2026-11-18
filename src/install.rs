@@ -3,11 +3,11 @@
 //! damage: keep sibling keys, write through symlinks, snapshot the prior `statusLine` for exact
 //! restore, and leave the file untouched on failure. The official `agy` binary is never modified.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -99,7 +99,7 @@ pub enum InstallError {
     UnsafeCommandPath { exe_path: PathBuf, reason: String },
     InvalidSettingsJson { path: PathBuf, reason: String },
     InvalidSnapshotJson { path: PathBuf, reason: String },
-    UnsafePurgePath { path: PathBuf },
+    UnsafePurgePath { path: PathBuf, reason: String },
     Io { path: PathBuf, message: String },
 }
 
@@ -140,10 +140,10 @@ impl fmt::Display for InstallError {
                     path.display()
                 )
             }
-            Self::UnsafePurgePath { path } => {
+            Self::UnsafePurgePath { path, reason } => {
                 write!(
                     f,
-                    "refusing to purge unsafe AGYLINE_HOME directory '{}'",
+                    "refusing to purge AGYLINE_HOME '{}': {reason}",
                     path.display()
                 )
             }
@@ -163,7 +163,8 @@ pub struct InstallOptions {
 }
 
 /// `reset` removes `statusLine` outright instead of restoring the snapshot (and discards it);
-/// `purge` additionally deletes the whole AGYLINE_HOME directory after the settings change.
+/// `purge` deletes `AGYLINE_HOME` afterwards only when that directory is a dedicated agyline home.
+/// `-y` skips the prompt and does not skip the path guard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct UninstallOptions {
     pub dry_run: bool,
@@ -524,7 +525,11 @@ pub fn plan_uninstall(
     opts: UninstallOptions,
 ) -> Result<UninstallPlan, InstallError> {
     let purge_dir = if opts.purge {
-        validate_safe_purge_path(&env.agyline_home, env.user_home.as_deref())?;
+        validate_safe_purge_path(
+            &env.agyline_home,
+            env.user_home.as_deref(),
+            &env.settings_path,
+        )?;
         if env.agyline_home.exists() {
             Some(env.agyline_home.clone())
         } else {
@@ -616,10 +621,10 @@ pub fn plan_uninstall(
 /// Settings first, then snapshot cleanup, then purge: the restore is durable before the snapshot
 /// is deleted, and a purge failure cannot undo an already-restored settings.json.
 pub fn apply_uninstall(
-    _env: &InstallEnv,
-    _plan: &UninstallPlan,
+    env: &InstallEnv,
+    plan: &UninstallPlan,
 ) -> Result<ApplyOutcome, InstallError> {
-    match _plan {
+    match plan {
         UninstallPlan::NotInstalled {
             settings_path: _,
             purge_dir,
@@ -629,7 +634,7 @@ pub fn apply_uninstall(
             current_command: _,
             purge_dir,
         } => {
-            let purged_dir = execute_purge(purge_dir.as_deref())?;
+            let purged_dir = execute_purge(env, purge_dir.as_deref())?;
             Ok(ApplyOutcome {
                 updated_settings: None,
                 snapshot_saved: None,
@@ -659,7 +664,7 @@ pub fn apply_uninstall(
                 | SnapshotAction::SaveNew { .. }
                 | SnapshotAction::PreserveExisting { .. } => {}
             }
-            let purged_dir = execute_purge(purge_dir.as_deref())?;
+            let purged_dir = execute_purge(env, purge_dir.as_deref())?;
             Ok(ApplyOutcome {
                 updated_settings: Some(mutation.settings_path.clone()),
                 snapshot_saved: None,
@@ -924,10 +929,16 @@ fn read_yes_confirmation(stdin: &mut dyn Read) -> bool {
     trimmed.eq_ignore_ascii_case("y") || trimmed.eq_ignore_ascii_case("yes")
 }
 
-fn execute_purge(purge_dir: Option<&Path>) -> Result<Option<PathBuf>, InstallError> {
+fn execute_purge(
+    env: &InstallEnv,
+    purge_dir: Option<&Path>,
+) -> Result<Option<PathBuf>, InstallError> {
     let Some(dir) = purge_dir else {
         return Ok(None);
     };
+    // Re-check at apply time: `-y` already skipped the prompt, and the directory may have
+    // gained sibling data since the plan was built.
+    validate_safe_purge_path(dir, env.user_home.as_deref(), &env.settings_path)?;
     match fs::remove_dir_all(dir) {
         Ok(()) => Ok(Some(dir.to_path_buf())),
         // A directory that vanished between plan and apply is not an error.
@@ -939,32 +950,262 @@ fn execute_purge(purge_dir: Option<&Path>) -> Result<Option<PathBuf>, InstallErr
     }
 }
 
-/// Guards `--purge`: refuses an empty path, a filesystem root, or the user's home (compared
-/// canonically, so a symlink to home is caught too). `remove_dir_all` on those is unrecoverable.
+/// Refuses `--purge` of a path `remove_dir_all` must not take. `-y` skips the prompt, so this
+/// check is the only stop for `AGYLINE_HOME=~/.gemini` and any other non-dedicated directory.
 fn validate_safe_purge_path(
     agyline_home: &Path,
     user_home: Option<&Path>,
+    settings_path: &Path,
 ) -> Result<(), InstallError> {
-    if agyline_home.as_os_str().is_empty() || agyline_home.parent().is_none() {
-        return Err(InstallError::UnsafePurgePath {
-            path: agyline_home.to_path_buf(),
-        });
+    if let Some(reason) = structural_purge_reason(agyline_home, user_home, settings_path) {
+        return Err(unsafe_purge(agyline_home, reason));
     }
-    if let Some(home) = user_home {
-        if agyline_home == home {
-            return Err(InstallError::UnsafePurgePath {
-                path: agyline_home.to_path_buf(),
-            });
+    let meta = match fs::symlink_metadata(agyline_home) {
+        Ok(meta) => meta,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(unsafe_purge(
+                agyline_home,
+                format!("path could not be resolved: {err}"),
+            ));
         }
-        if let (Ok(ca), Ok(ch)) = (fs::canonicalize(agyline_home), fs::canonicalize(home))
-            && ca == ch
+    };
+    // `remove_dir_all` on a symlink removes the link and reports success, leaving the target.
+    if meta.file_type().is_symlink() {
+        return Err(unsafe_purge(
+            agyline_home,
+            "path is a symbolic link; purge does not follow it",
+        ));
+    }
+    let canon = fs::canonicalize(agyline_home)
+        .map(clean_canonical_path)
+        .map_err(|err| unsafe_purge(agyline_home, format!("path could not be resolved: {err}")))?;
+    if let Some(reason) = structural_purge_reason(&canon, user_home, settings_path) {
+        return Err(unsafe_purge(agyline_home, reason));
+    }
+    if !canon.is_dir() {
+        return Err(unsafe_purge(agyline_home, "path is not a directory"));
+    }
+    ensure_dedicated_agyline_dir(&canon)?;
+    Ok(())
+}
+
+fn unsafe_purge(path: &Path, reason: impl Into<String>) -> InstallError {
+    InstallError::UnsafePurgePath {
+        path: path.to_path_buf(),
+        reason: reason.into(),
+    }
+}
+
+fn structural_purge_reason(
+    path: &Path,
+    user_home: Option<&Path>,
+    settings_path: &Path,
+) -> Option<String> {
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return Some("path must be absolute".to_string());
+    }
+    let Some(norm) = normalize_absolute(path) else {
+        return Some("path must be absolute".to_string());
+    };
+    if is_fs_root(&norm) {
+        return Some("path is a filesystem root".to_string());
+    }
+    if let Some(home) = user_home
+        && is_same_or_ancestor(path, home)
+    {
+        return Some("path is the user home directory or a parent of it".to_string());
+    }
+    if is_same_or_ancestor(path, settings_path) {
+        return Some("path contains the agy settings directory".to_string());
+    }
+    None
+}
+
+// Home-root names agyline writes. Anything else means the directory is shared, so purge must
+// not take sibling data with it. OS junk is listed so opening the folder does not trap a real home.
+const OWNED_HOME_ENTRIES: &[&str] = &[
+    "config.toml",
+    "config.toml.bak",
+    "presets",
+    "palettes",
+    "state",
+    ".DS_Store",
+    "Thumbs.db",
+    "desktop.ini",
+];
+
+fn ensure_dedicated_agyline_dir(dir: &Path) -> Result<(), InstallError> {
+    let entries = fs::read_dir(dir)
+        .map_err(|err| unsafe_purge(dir, format!("could not list directory: {err}")))?;
+    let mut offender: Option<OsString> = None;
+    for entry in entries {
+        let entry =
+            entry.map_err(|err| unsafe_purge(dir, format!("could not list directory: {err}")))?;
+        let name = entry.file_name();
+        if is_owned_home_entry(&name) {
+            continue;
+        }
+        if offender
+            .as_ref()
+            .is_none_or(|prev| name.as_os_str() < prev.as_os_str())
         {
-            return Err(InstallError::UnsafePurgePath {
-                path: agyline_home.to_path_buf(),
-            });
+            offender = Some(name);
         }
+    }
+    if let Some(name) = offender {
+        let label = name.to_str().unwrap_or("<non-utf8>");
+        return Err(unsafe_purge(
+            dir,
+            format!("directory contains '{label}', which is not an agyline file"),
+        ));
     }
     Ok(())
+}
+
+fn is_owned_home_entry(name: &OsStr) -> bool {
+    let Some(text) = name.to_str() else {
+        return false;
+    };
+    if OWNED_HOME_ENTRIES
+        .iter()
+        .any(|owned| entry_name_eq(text, owned))
+    {
+        return true;
+    }
+    // Configurator saves use `.{file}.{pid}.{nanos}.{seq}.tmp` beside config.toml.
+    is_config_tmp(text)
+}
+
+fn is_config_tmp(name: &str) -> bool {
+    let folded = name.to_ascii_lowercase();
+    let Some(rest) = folded.strip_prefix(".config.toml.") else {
+        return false;
+    };
+    let Some(rest) = rest.strip_suffix(".tmp") else {
+        return false;
+    };
+    let mut parts = rest.split('.');
+    parts.next().is_some_and(is_ascii_digits)
+        && parts.next().is_some_and(is_ascii_digits)
+        && parts.next().is_some_and(is_ascii_digits)
+        && parts.next().is_none()
+}
+
+fn is_ascii_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn entry_name_eq(found: &str, expected: &str) -> bool {
+    #[cfg(windows)]
+    {
+        found.eq_ignore_ascii_case(expected)
+    }
+    #[cfg(not(windows))]
+    {
+        found == expected
+    }
+}
+
+enum NormComp {
+    Prefix(String),
+    Root,
+    Normal(OsString),
+}
+
+fn normalize_absolute(path: &Path) -> Option<Vec<NormComp>> {
+    let cleaned = clean_canonical_path(path.to_path_buf());
+    if cleaned.as_os_str().is_empty() || !cleaned.is_absolute() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for comp in cleaned.components() {
+        match comp {
+            Component::Prefix(prefix) => {
+                out.push(NormComp::Prefix(
+                    prefix.as_os_str().to_string_lossy().into_owned(),
+                ));
+            }
+            Component::RootDir => out.push(NormComp::Root),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(out.last(), Some(NormComp::Normal(_))) {
+                    out.pop();
+                }
+            }
+            Component::Normal(part) => out.push(NormComp::Normal(part.to_os_string())),
+        }
+    }
+    Some(out)
+}
+
+fn is_fs_root(norm: &[NormComp]) -> bool {
+    !norm.is_empty() && !norm.iter().any(|comp| matches!(comp, NormComp::Normal(_)))
+}
+
+/// `candidate` is `protected`, or a parent of it. Component-wise, so `agyline` is not a prefix
+/// of `agyline-extra`. `..` is collapsed first, and an existing protected path is also compared
+/// in canonical form (8.3 names and junctions).
+fn is_same_or_ancestor(candidate: &Path, protected: &Path) -> bool {
+    if candidate == protected {
+        return true;
+    }
+    let Some(cand_norm) = normalize_absolute(candidate) else {
+        return false;
+    };
+    if let Some(prot_norm) = normalize_absolute(protected)
+        && norm_covers(&cand_norm, &prot_norm)
+    {
+        return true;
+    }
+    if protected.exists()
+        && let Ok(canon) = fs::canonicalize(protected)
+    {
+        let canon = clean_canonical_path(canon);
+        if let Some(prot_norm) = normalize_absolute(&canon)
+            && norm_covers(&cand_norm, &prot_norm)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn norm_covers(ancestor: &[NormComp], child: &[NormComp]) -> bool {
+    if ancestor.is_empty() || ancestor.len() > child.len() {
+        return false;
+    }
+    ancestor
+        .iter()
+        .zip(child)
+        .all(|(left, right)| norm_eq(left, right))
+}
+
+fn norm_eq(left: &NormComp, right: &NormComp) -> bool {
+    match (left, right) {
+        (NormComp::Root, NormComp::Root) => true,
+        (NormComp::Prefix(left), NormComp::Prefix(right)) => left.eq_ignore_ascii_case(right),
+        (NormComp::Normal(left), NormComp::Normal(right)) => os_eq(left, right),
+        (NormComp::Root, NormComp::Prefix(_) | NormComp::Normal(_))
+        | (NormComp::Prefix(_), NormComp::Root | NormComp::Normal(_))
+        | (NormComp::Normal(_), NormComp::Root | NormComp::Prefix(_)) => false,
+    }
+}
+
+fn os_eq(left: &OsStr, right: &OsStr) -> bool {
+    if left == right {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        left.to_str()
+            .zip(right.to_str())
+            .is_some_and(|(left, right)| left.eq_ignore_ascii_case(right))
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 /// Repoints only type/command/enabled, preserving extra statusLine subkeys like `padding`.

@@ -2,6 +2,8 @@
 name = "agyline"
 version = "0.1.0"
 edition = "2024"
+# Let-chains shipped in 1.88. Locked deps `instability` and `darling` declare the same floor.
+rust-version = "1.88"
 description = "Fast, configurable status line for the Antigravity CLI (agy)"
 license = "MIT"
 
