@@ -1,0 +1,40 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       <email> (<plan-tier>)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Carbon (High)
+   ▄▀▀    ▀▀▄     D:/Documents/Code/Web/Exp/agyline
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Switch Model
+
+  Search:
+          ────────────────────
+
+> Gemini 4 Carbon       (current)
+  Gemini 4 Argon
+  Gemini 4 Hydrogen
+  Orchestrator (Carbon)
+  Orchestrator (Argon)
+  Gemini 3.8 Flash
+  Claude Opus 5.5
+  Claude Sonnet 5.5
+  GPT-OSS 120B (Medium)
+
+  Effort  ◂        ●━━━━━━━━━━━━━━●━━━━━━━━━━━━━━◉        ▸
+                  low          medium          high
+            Deeper reasoning for complex problems — slower but stronger
+
+Keyboard: ↑/↓ Navigate  ←/→ Effort  enter Select  esc Go Back
+
+
+
+
+
+
+
+
+
+

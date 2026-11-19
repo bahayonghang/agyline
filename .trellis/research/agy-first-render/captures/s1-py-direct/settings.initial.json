@@ -1,0 +1,11 @@
+{
+  "trustedWorkspaces": [
+    "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-py-direct\\ws"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "python -I D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.py",
+    "enabled": true
+  },
+  "colorScheme": "colorblind-friendly dark"
+}

@@ -1,0 +1,74 @@
+{
+ "seq": 1,
+ "mode": "wrap",
+ "t_process_created": 1794645732.6675396,
+ "t_start": 1794645732.7246504,
+ "pid": 76048,
+ "argv": [
+  "D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-py/invocations",
+  "wrap",
+  "--",
+  "python",
+  "-I",
+  "D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.py"
+ ],
+ "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-py\\ws",
+ "ancestors": [
+  {
+   "pid": 76048,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 43212,
+   "exe": "cmd.exe"
+  },
+  {
+   "pid": 49784,
+   "exe": "agy.exe"
+  },
+  {
+   "pid": 24352,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 66144,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 65392,
+   "exe": "pwsh.exe"
+  }
+ ],
+ "parent_command_line": "cmd /c \"python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-py/invocations wrap -- python -I D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.py\"",
+ "stdin_isatty": false,
+ "stdout_isatty": false,
+ "env_names_agy": [
+  "AGY_CLI_DISABLE_AUTO_UPDATE",
+  "GEMINI_API_KEY"
+ ],
+ "env_term": {
+  "TERM": "xterm-256color",
+  "COLORTERM": "truecolor",
+  "COLUMNS": null,
+  "LINES": null,
+  "COLORFGBG": null,
+  "NO_COLOR": "1"
+ },
+ "t_stdin_eof": 1794645732.754747,
+ "stdin_len": 803,
+ "wrapped": [
+  "python",
+  "-I",
+  "D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.py"
+ ],
+ "t_child_start": 1794645732.7558365,
+ "t_child_end": 1794645732.9421015,
+ "child_seconds": 0.1863,
+ "child_stderr": "",
+ "stdout_len": 145,
+ "exit_code": 0,
+ "stdout_write": "ok",
+ "t_end": 1794645732.9434717,
+ "seconds": 0.2188
+}

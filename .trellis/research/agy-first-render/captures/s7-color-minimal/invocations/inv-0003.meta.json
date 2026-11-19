@@ -1,0 +1,61 @@
+{
+ "seq": 3,
+ "mode": "minimal",
+ "t_process_created": 1794646497.983591,
+ "t_start": 1794646498.026132,
+ "pid": 23980,
+ "argv": [
+  "D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s7-color-minimal/invocations",
+  "minimal"
+ ],
+ "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s7-color-minimal\\ws",
+ "ancestors": [
+  {
+   "pid": 23980,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 76524,
+   "exe": "cmd.exe"
+  },
+  {
+   "pid": 29008,
+   "exe": "agy.exe"
+  },
+  {
+   "pid": 65264,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 54028,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 23272,
+   "exe": "pwsh.exe"
+  }
+ ],
+ "parent_command_line": "cmd /c \"python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s7-color-minimal/invocations minimal\"",
+ "stdin_isatty": false,
+ "stdout_isatty": false,
+ "env_names_agy": [
+  "AGY_CLI_DISABLE_AUTO_UPDATE",
+  "GEMINI_API_KEY"
+ ],
+ "env_term": {
+  "TERM": "xterm-256color",
+  "COLORTERM": "truecolor",
+  "COLUMNS": null,
+  "LINES": null,
+  "COLORFGBG": null,
+  "NO_COLOR": null
+ },
+ "t_stdin_eof": 1794646498.0493944,
+ "stdin_len": 945,
+ "stdout_len": 32,
+ "exit_code": 0,
+ "stdout_write": "ok",
+ "t_end": 1794646498.050937,
+ "seconds": 0.0248
+}

@@ -1,0 +1,2 @@
+  [0m[0;96m Gemini 4 Carbon[0;37m · [0;96mHigh[0;37m | [0;93m󰉋[0;92m agyline[0;37m | [0;94m󰊢 dev ●[0;37m | [0;95m[0;95m 1.4%[0;37m · [0;95m15k tokens[0;37m | [0;34m[0;34m 4:18[0;37m · [0;34m0% hit[0;37m | [0;92m 33.1 tok/s[0;37m | [0;92m󰁾 49% quota[0m
+  [0m[0;91m▸▸ auto mode on[0;90m (shift+tab to cycle)[0;37m | [0;90m 1 agents[0m

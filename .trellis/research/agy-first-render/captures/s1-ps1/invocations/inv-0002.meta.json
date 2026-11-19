@@ -1,0 +1,84 @@
+{
+ "seq": 2,
+ "mode": "wrap",
+ "t_process_created": 1794645769.5376587,
+ "t_start": 1794645769.5910232,
+ "pid": 48600,
+ "argv": [
+  "D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py",
+  "C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1/invocations",
+  "wrap",
+  "--",
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.ps1"
+ ],
+ "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-ps1\\ws",
+ "ancestors": [
+  {
+   "pid": 48600,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 17096,
+   "exe": "cmd.exe"
+  },
+  {
+   "pid": 7996,
+   "exe": "agy.exe"
+  },
+  {
+   "pid": 47924,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 48236,
+   "exe": "python.exe"
+  },
+  {
+   "pid": 65392,
+   "exe": "pwsh.exe"
+  }
+ ],
+ "parent_command_line": "cmd /c \"python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1/invocations wrap -- pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.ps1\"",
+ "stdin_isatty": false,
+ "stdout_isatty": false,
+ "env_names_agy": [
+  "AGY_CLI_DISABLE_AUTO_UPDATE",
+  "GEMINI_API_KEY"
+ ],
+ "env_term": {
+  "TERM": "xterm-256color",
+  "COLORTERM": "truecolor",
+  "COLUMNS": null,
+  "LINES": null,
+  "COLORFGBG": null,
+  "NO_COLOR": "1"
+ },
+ "t_stdin_eof": 1794645769.6165888,
+ "stdin_len": 905,
+ "wrapped": [
+  "pwsh",
+  "-NoLogo",
+  "-NoProfile",
+  "-NonInteractive",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "D:/Documents/Code/Web/Exp/agyline/ref/agy-patch/statusline.ps1"
+ ],
+ "t_child_start": 1794645769.6176724,
+ "t_child_end": 1794645770.154527,
+ "child_seconds": 0.5369,
+ "child_stderr": "",
+ "stdout_len": 0,
+ "exit_code": 0,
+ "stdout_write": "ok",
+ "t_end": 1794645770.1559286,
+ "seconds": 0.5649
+}

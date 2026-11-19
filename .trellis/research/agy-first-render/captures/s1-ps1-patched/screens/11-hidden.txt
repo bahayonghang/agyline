@@ -1,0 +1,40 @@
+
+Resume with -c (or command below):
+agy --conversation=338fd773-902d-444d-a583-8946f190ced9
+
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1-patched/ws
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> 1u
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

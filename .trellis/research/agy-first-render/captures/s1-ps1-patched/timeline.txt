@@ -1,0 +1,74 @@
+    0.053  STEP boot
+    0.515              proc_start cmd.exe pid=74652 parent=30792
+    0.527      inv #1: sid='' state=authenticating width=80 stdin=839B stdout=145B exit=0 ran=1.3356s
+    0.571              proc_start python.exe pid=71428 parent=74652
+    0.619              proc_start pwsh.exe pid=73528 parent=71428
+    0.825      inv #2: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=1.2506s
+    0.852              proc_start cmd.exe pid=77196 parent=30792
+    0.852              proc_start python.exe pid=17316 parent=77196
+    0.852              proc_end cmd.exe pid=74652
+    0.941              proc_start pwsh.exe pid=52688 parent=17316
+    1.954              proc_end python.exe pid=71428
+    1.954              proc_end pwsh.exe pid=73528
+    2.139              proc_end pwsh.exe pid=52688
+    2.144          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  5:00
+    2.188              proc_end cmd.exe pid=77196
+    2.188              proc_end python.exe pid=17316
+   15.096  STEP slash '/'
+   15.118      inv #3: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=0.6054s
+   15.119              proc_start cmd.exe pid=58696 parent=30792
+   15.162              proc_start python.exe pid=60496 parent=58696
+   15.213              proc_start pwsh.exe pid=58312 parent=60496
+   15.418      inv #4: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=0.5124s
+   15.424              proc_start cmd.exe pid=20232 parent=30792
+   15.424              proc_start python.exe pid=71768 parent=20232
+   15.424              proc_end cmd.exe pid=58696
+   15.518              proc_start pwsh.exe pid=41624 parent=71768
+   15.828              proc_end python.exe pid=60496
+   15.829              proc_end pwsh.exe pid=58312
+   15.991          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:46
+   15.997              proc_end cmd.exe pid=20232
+   15.997              proc_end python.exe pid=71768
+   15.997              proc_end pwsh.exe pid=41624
+   18.139  STEP model 'model'
+   20.195  STEP enter '\r'
+   20.218              proc_start cmd.exe pid=42036 parent=30792
+   20.242      inv #5: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=0.6328s
+   20.261              proc_start python.exe pid=35432 parent=42036
+   20.358              proc_start pwsh.exe pid=53084 parent=35432
+   20.518      inv #6: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=0.4961s
+   20.546              proc_start cmd.exe pid=66612 parent=30792
+   20.547              proc_start python.exe pid=17300 parent=66612
+   20.547              proc_end cmd.exe pid=42036
+   20.608              proc_start pwsh.exe pid=19964 parent=17300
+   20.932              proc_end python.exe pid=35432
+   20.932              proc_end pwsh.exe pid=53084
+   21.073          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  4:41
+   21.100              proc_end cmd.exe pid=66612
+   21.100              proc_end python.exe pid=17300
+   21.100              proc_end pwsh.exe pid=19964
+   24.216  STEP esc '\x1b'
+   24.333      inv #7: sid='' state=idle width=120 stdin=937B stdout=175B exit=0 ran=0.5652s
+   24.358              proc_start cmd.exe pid=71020 parent=30792
+   24.358              proc_start python.exe pid=75752 parent=71020
+   24.407              proc_start pwsh.exe pid=70636 parent=75752
+   24.623              proc_end cmd.exe pid=71020
+   24.631      inv #8: sid=338fd773 state=idle width=120 stdin=1047B stdout=175B exit=0 ran=0.5797s
+   24.669              proc_start cmd.exe pid=49496 parent=30792
+   24.669              proc_start python.exe pid=55224 parent=49496
+   24.714              proc_start pwsh.exe pid=65208 parent=55224
+   24.986              proc_end python.exe pid=75752
+   24.986              proc_end pwsh.exe pid=70636
+   25.125              proc_start git.exe pid=51236 parent=65208
+   25.125              proc_start conhost.exe pid=57260 parent=51236
+   25.176              proc_start git.exe pid=26780 parent=51236
+   25.236              proc_end git.exe pid=51236
+   25.236              proc_end conhost.exe pid=57260
+   25.236              proc_end git.exe pid=26780
+   25.266          screen: 󰉋 ws | 󰊢 master ✓ |  0% |  cold
+   25.284              proc_end cmd.exe pid=49496
+   25.284              proc_end python.exe pid=55224
+   25.284              proc_end pwsh.exe pid=65208
+   28.221  STEP idle
+   35.133          screen: (status line absent)
+   35.345  STEP pty_eof

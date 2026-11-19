@@ -1,0 +1,13 @@
+{
+ "t0": 1794646518.758539,
+ "kind": "ps1-direct",
+ "steps": [
+  "boot||15",
+  "slash|/|3",
+  "model|model|2",
+  "enter|\\r|4",
+  "esc|\\x1b|4",
+  "idle||6"
+ ],
+ "timeline": []
+}

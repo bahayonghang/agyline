@@ -1,0 +1,162 @@
+{"t": 1794646169.2306, "rel": 0.049, "event": "spawn", "pid": 75028, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s3-exit1\\ws", "size": "40x120", "kind": "minimal", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s3-exit1/invocations minimal --exit 1"}
+{"t": 1794646169.2324, "rel": 0.051, "event": "wait", "label": "boot"}
+{"t": 1794646169.2369, "rel": 0.055, "event": "first_output"}
+{"t": 1794646169.2388, "rel": 0.057, "event": "query", "what": "DA1"}
+{"t": 1794646169.6888, "rel": 0.507, "event": "query", "what": "OSC11"}
+{"t": 1794646169.7331, "rel": 0.551, "event": "proc_start", "pid": 20140, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646169.7332, "rel": 0.551, "event": "proc_start", "pid": 15664, "exe": "python.exe", "parent": 20140}
+{"t": 1794646169.8432, "rel": 0.661, "event": "proc_end", "pid": 20140, "exe": "cmd.exe"}
+{"t": 1794646169.8433, "rel": 0.661, "event": "proc_end", "pid": 15664, "exe": "python.exe"}
+{"t": 1794646169.9748, "rel": 0.793, "event": "proc_start", "pid": 68820, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646170.0212, "rel": 0.839, "event": "proc_start", "pid": 9336, "exe": "python.exe", "parent": 68820}
+{"t": 1794646170.127, "rel": 0.945, "event": "proc_end", "pid": 68820, "exe": "cmd.exe"}
+{"t": 1794646170.1271, "rel": 0.945, "event": "proc_end", "pid": 9336, "exe": "python.exe"}
+{"t": 1794646179.2659, "rel": 10.084, "event": "step_done", "label": "boot", "shown": null, "screen": "01-boot.txt", "invocations": 2}
+{"t": 1794646179.266, "rel": 10.084, "event": "keys", "label": "open1", "keys": "/"}
+{"t": 1794646179.3356, "rel": 10.154, "event": "proc_start", "pid": 47432, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646179.3357, "rel": 10.154, "event": "proc_start", "pid": 4256, "exe": "python.exe", "parent": 47432}
+{"t": 1794646179.3931, "rel": 10.211, "event": "proc_end", "pid": 47432, "exe": "cmd.exe"}
+{"t": 1794646179.3932, "rel": 10.211, "event": "proc_end", "pid": 4256, "exe": "python.exe"}
+{"t": 1794646179.5834, "rel": 10.402, "event": "proc_start", "pid": 76428, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646179.63, "rel": 10.448, "event": "proc_start", "pid": 11200, "exe": "python.exe", "parent": 76428}
+{"t": 1794646179.7506, "rel": 10.569, "event": "proc_end", "pid": 76428, "exe": "cmd.exe"}
+{"t": 1794646179.7507, "rel": 10.569, "event": "proc_end", "pid": 11200, "exe": "python.exe"}
+{"t": 1794646180.8005, "rel": 11.619, "event": "step_done", "label": "open1", "shown": null, "screen": "02-open1.txt", "invocations": 4}
+{"t": 1794646180.8006, "rel": 11.619, "event": "keys", "label": "close1", "keys": ""}
+{"t": 1794646180.8206, "rel": 11.639, "event": "proc_start", "pid": 14420, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646180.8701, "rel": 11.688, "event": "proc_start", "pid": 68904, "exe": "python.exe", "parent": 14420}
+{"t": 1794646180.9623, "rel": 11.781, "event": "proc_end", "pid": 14420, "exe": "cmd.exe"}
+{"t": 1794646180.9624, "rel": 11.781, "event": "proc_end", "pid": 68904, "exe": "python.exe"}
+{"t": 1794646181.1563, "rel": 11.975, "event": "proc_start", "pid": 7284, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646181.1564, "rel": 11.975, "event": "proc_start", "pid": 19152, "exe": "python.exe", "parent": 7284}
+{"t": 1794646181.2538, "rel": 12.072, "event": "proc_end", "pid": 7284, "exe": "cmd.exe"}
+{"t": 1794646181.2539, "rel": 12.072, "event": "proc_end", "pid": 19152, "exe": "python.exe"}
+{"t": 1794646182.347, "rel": 13.165, "event": "step_done", "label": "close1", "shown": null, "screen": "03-close1.txt", "invocations": 6}
+{"t": 1794646182.3471, "rel": 13.165, "event": "keys", "label": "open2", "keys": "/"}
+{"t": 1794646182.3853, "rel": 13.204, "event": "proc_start", "pid": 23252, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646182.3854, "rel": 13.204, "event": "proc_start", "pid": 49136, "exe": "python.exe", "parent": 23252}
+{"t": 1794646182.4927, "rel": 13.311, "event": "proc_end", "pid": 23252, "exe": "cmd.exe"}
+{"t": 1794646182.4928, "rel": 13.311, "event": "proc_end", "pid": 49136, "exe": "python.exe"}
+{"t": 1794646182.6926, "rel": 13.511, "event": "proc_start", "pid": 42036, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646182.6926, "rel": 13.511, "event": "proc_start", "pid": 22532, "exe": "python.exe", "parent": 42036}
+{"t": 1794646182.8146, "rel": 13.633, "event": "proc_end", "pid": 42036, "exe": "cmd.exe"}
+{"t": 1794646182.8147, "rel": 13.633, "event": "proc_end", "pid": 22532, "exe": "python.exe"}
+{"t": 1794646183.9033, "rel": 14.721, "event": "step_done", "label": "open2", "shown": null, "screen": "04-open2.txt", "invocations": 8}
+{"t": 1794646183.9034, "rel": 14.722, "event": "keys", "label": "close2", "keys": ""}
+{"t": 1794646183.9577, "rel": 14.776, "event": "proc_start", "pid": 60440, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646183.9578, "rel": 14.776, "event": "proc_start", "pid": 70640, "exe": "python.exe", "parent": 60440}
+{"t": 1794646184.0637, "rel": 14.882, "event": "proc_end", "pid": 60440, "exe": "cmd.exe"}
+{"t": 1794646184.0638, "rel": 14.882, "event": "proc_end", "pid": 70640, "exe": "python.exe"}
+{"t": 1794646184.2504, "rel": 15.069, "event": "proc_start", "pid": 19964, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646184.2505, "rel": 15.069, "event": "proc_start", "pid": 54164, "exe": "python.exe", "parent": 19964}
+{"t": 1794646184.3451, "rel": 15.163, "event": "proc_end", "pid": 19964, "exe": "cmd.exe"}
+{"t": 1794646184.3452, "rel": 15.163, "event": "proc_end", "pid": 54164, "exe": "python.exe"}
+{"t": 1794646185.4544, "rel": 16.273, "event": "step_done", "label": "close2", "shown": null, "screen": "05-close2.txt", "invocations": 10}
+{"t": 1794646185.4545, "rel": 16.273, "event": "keys", "label": "open3", "keys": "/"}
+{"t": 1794646185.5482, "rel": 16.366, "event": "proc_start", "pid": 51684, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646185.5483, "rel": 16.366, "event": "proc_start", "pid": 52308, "exe": "python.exe", "parent": 51684}
+{"t": 1794646185.5958, "rel": 16.414, "event": "proc_end", "pid": 51684, "exe": "cmd.exe"}
+{"t": 1794646185.5959, "rel": 16.414, "event": "proc_end", "pid": 52308, "exe": "python.exe"}
+{"t": 1794646185.789, "rel": 16.607, "event": "proc_start", "pid": 8532, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646185.7891, "rel": 16.607, "event": "proc_start", "pid": 29504, "exe": "python.exe", "parent": 8532}
+{"t": 1794646185.8853, "rel": 16.703, "event": "proc_end", "pid": 8532, "exe": "cmd.exe"}
+{"t": 1794646185.8853, "rel": 16.704, "event": "proc_end", "pid": 29504, "exe": "python.exe"}
+{"t": 1794646186.998, "rel": 17.816, "event": "step_done", "label": "open3", "shown": null, "screen": "06-open3.txt", "invocations": 12}
+{"t": 1794646186.9981, "rel": 17.816, "event": "keys", "label": "close3", "keys": ""}
+{"t": 1794646187.0817, "rel": 17.9, "event": "proc_start", "pid": 52568, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646187.0818, "rel": 17.9, "event": "proc_start", "pid": 61112, "exe": "python.exe", "parent": 52568}
+{"t": 1794646187.1755, "rel": 17.994, "event": "proc_end", "pid": 52568, "exe": "cmd.exe"}
+{"t": 1794646187.1756, "rel": 17.994, "event": "proc_end", "pid": 61112, "exe": "python.exe"}
+{"t": 1794646187.3571, "rel": 18.175, "event": "proc_start", "pid": 3476, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646187.3572, "rel": 18.175, "event": "proc_start", "pid": 64232, "exe": "python.exe", "parent": 3476}
+{"t": 1794646187.4494, "rel": 18.268, "event": "proc_end", "pid": 3476, "exe": "cmd.exe"}
+{"t": 1794646187.4494, "rel": 18.268, "event": "proc_end", "pid": 64232, "exe": "python.exe"}
+{"t": 1794646188.5316, "rel": 19.35, "event": "step_done", "label": "close3", "shown": null, "screen": "07-close3.txt", "invocations": 14}
+{"t": 1794646188.5317, "rel": 19.35, "event": "keys", "label": "open4", "keys": "/"}
+{"t": 1794646188.5567, "rel": 19.375, "event": "proc_start", "pid": 53492, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646188.6131, "rel": 19.431, "event": "proc_start", "pid": 55732, "exe": "python.exe", "parent": 53492}
+{"t": 1794646188.6565, "rel": 19.475, "event": "proc_end", "pid": 53492, "exe": "cmd.exe"}
+{"t": 1794646188.6566, "rel": 19.475, "event": "proc_end", "pid": 55732, "exe": "python.exe"}
+{"t": 1794646188.8439, "rel": 19.662, "event": "proc_start", "pid": 41624, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646188.8895, "rel": 19.708, "event": "proc_start", "pid": 13028, "exe": "python.exe", "parent": 41624}
+{"t": 1794646188.9828, "rel": 19.801, "event": "proc_end", "pid": 41624, "exe": "cmd.exe"}
+{"t": 1794646188.9828, "rel": 19.801, "event": "proc_end", "pid": 13028, "exe": "python.exe"}
+{"t": 1794646190.0697, "rel": 20.888, "event": "step_done", "label": "open4", "shown": null, "screen": "08-open4.txt", "invocations": 16}
+{"t": 1794646190.0698, "rel": 20.888, "event": "keys", "label": "close4", "keys": ""}
+{"t": 1794646190.1096, "rel": 20.928, "event": "proc_start", "pid": 48624, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646190.1679, "rel": 20.986, "event": "proc_start", "pid": 71088, "exe": "python.exe", "parent": 48624}
+{"t": 1794646190.216, "rel": 21.034, "event": "proc_end", "pid": 48624, "exe": "cmd.exe"}
+{"t": 1794646190.2161, "rel": 21.034, "event": "proc_end", "pid": 71088, "exe": "python.exe"}
+{"t": 1794646190.4145, "rel": 21.233, "event": "proc_start", "pid": 74224, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646190.4146, "rel": 21.233, "event": "proc_start", "pid": 30312, "exe": "python.exe", "parent": 74224}
+{"t": 1794646190.5084, "rel": 21.327, "event": "proc_end", "pid": 74224, "exe": "cmd.exe"}
+{"t": 1794646190.5085, "rel": 21.327, "event": "proc_end", "pid": 30312, "exe": "python.exe"}
+{"t": 1794646191.6074, "rel": 22.426, "event": "step_done", "label": "close4", "shown": null, "screen": "09-close4.txt", "invocations": 18}
+{"t": 1794646191.6074, "rel": 22.426, "event": "keys", "label": "open5", "keys": "/"}
+{"t": 1794646191.6475, "rel": 22.466, "event": "proc_start", "pid": 53908, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646191.6476, "rel": 22.466, "event": "proc_start", "pid": 11708, "exe": "python.exe", "parent": 53908}
+{"t": 1794646191.7523, "rel": 22.57, "event": "proc_end", "pid": 53908, "exe": "cmd.exe"}
+{"t": 1794646191.7525, "rel": 22.571, "event": "proc_end", "pid": 11708, "exe": "python.exe"}
+{"t": 1794646191.9573, "rel": 22.776, "event": "proc_start", "pid": 17888, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646192.0176, "rel": 22.836, "event": "proc_start", "pid": 72028, "exe": "python.exe", "parent": 17888}
+{"t": 1794646192.0789, "rel": 22.897, "event": "proc_end", "pid": 17888, "exe": "cmd.exe"}
+{"t": 1794646192.079, "rel": 22.897, "event": "proc_end", "pid": 72028, "exe": "python.exe"}
+{"t": 1794646193.1469, "rel": 23.965, "event": "step_done", "label": "open5", "shown": null, "screen": "10-open5.txt", "invocations": 20}
+{"t": 1794646193.147, "rel": 23.965, "event": "keys", "label": "close5", "keys": ""}
+{"t": 1794646193.1985, "rel": 24.017, "event": "proc_start", "pid": 21092, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646193.1986, "rel": 24.017, "event": "proc_start", "pid": 68820, "exe": "python.exe", "parent": 21092}
+{"t": 1794646193.3102, "rel": 24.128, "event": "proc_end", "pid": 21092, "exe": "cmd.exe"}
+{"t": 1794646193.3103, "rel": 24.128, "event": "proc_end", "pid": 68820, "exe": "python.exe"}
+{"t": 1794646193.5098, "rel": 24.328, "event": "proc_start", "pid": 70036, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646193.5099, "rel": 24.328, "event": "proc_start", "pid": 56724, "exe": "python.exe", "parent": 70036}
+{"t": 1794646193.6332, "rel": 24.451, "event": "proc_end", "pid": 70036, "exe": "cmd.exe"}
+{"t": 1794646193.6333, "rel": 24.451, "event": "proc_end", "pid": 56724, "exe": "python.exe"}
+{"t": 1794646194.6684, "rel": 25.487, "event": "step_done", "label": "close5", "shown": null, "screen": "11-close5.txt", "invocations": 22}
+{"t": 1794646194.6685, "rel": 25.487, "event": "keys", "label": "open6", "keys": "/"}
+{"t": 1794646194.7393, "rel": 25.557, "event": "proc_start", "pid": 39800, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646194.7394, "rel": 25.558, "event": "proc_start", "pid": 43324, "exe": "python.exe", "parent": 39800}
+{"t": 1794646194.8458, "rel": 25.664, "event": "proc_end", "pid": 39800, "exe": "cmd.exe"}
+{"t": 1794646194.8458, "rel": 25.664, "event": "proc_end", "pid": 43324, "exe": "python.exe"}
+{"t": 1794646195.029, "rel": 25.847, "event": "proc_start", "pid": 19088, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646195.0291, "rel": 25.847, "event": "proc_start", "pid": 24908, "exe": "python.exe", "parent": 19088}
+{"t": 1794646195.1551, "rel": 25.973, "event": "proc_end", "pid": 19088, "exe": "cmd.exe"}
+{"t": 1794646195.1552, "rel": 25.973, "event": "proc_end", "pid": 24908, "exe": "python.exe"}
+{"t": 1794646196.1922, "rel": 27.01, "event": "step_done", "label": "open6", "shown": null, "screen": "12-open6.txt", "invocations": 24}
+{"t": 1794646196.1923, "rel": 27.01, "event": "keys", "label": "close6", "keys": ""}
+{"t": 1794646196.2223, "rel": 27.041, "event": "proc_start", "pid": 77596, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646196.2796, "rel": 27.098, "event": "proc_start", "pid": 77788, "exe": "python.exe", "parent": 77596}
+{"t": 1794646196.3377, "rel": 27.156, "event": "proc_end", "pid": 77596, "exe": "cmd.exe"}
+{"t": 1794646196.3378, "rel": 27.156, "event": "proc_end", "pid": 77788, "exe": "python.exe"}
+{"t": 1794646196.5227, "rel": 27.341, "event": "proc_start", "pid": 73268, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646196.583, "rel": 27.401, "event": "proc_start", "pid": 43104, "exe": "python.exe", "parent": 73268}
+{"t": 1794646196.6432, "rel": 27.461, "event": "proc_end", "pid": 73268, "exe": "cmd.exe"}
+{"t": 1794646196.6433, "rel": 27.461, "event": "proc_end", "pid": 43104, "exe": "python.exe"}
+{"t": 1794646197.7289, "rel": 28.547, "event": "step_done", "label": "close6", "shown": null, "screen": "13-close6.txt", "invocations": 26}
+{"t": 1794646197.729, "rel": 28.547, "event": "keys", "label": "open7", "keys": "/"}
+{"t": 1794646197.7545, "rel": 28.573, "event": "proc_start", "pid": 58708, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646197.8145, "rel": 28.633, "event": "proc_start", "pid": 70344, "exe": "python.exe", "parent": 58708}
+{"t": 1794646197.87, "rel": 28.688, "event": "proc_end", "pid": 58708, "exe": "cmd.exe"}
+{"t": 1794646197.8701, "rel": 28.688, "event": "proc_end", "pid": 70344, "exe": "python.exe"}
+{"t": 1794646198.0427, "rel": 28.861, "event": "proc_start", "pid": 62532, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646198.1022, "rel": 28.92, "event": "proc_start", "pid": 74468, "exe": "python.exe", "parent": 62532}
+{"t": 1794646198.2247, "rel": 29.043, "event": "proc_end", "pid": 62532, "exe": "cmd.exe"}
+{"t": 1794646198.2248, "rel": 29.043, "event": "proc_end", "pid": 74468, "exe": "python.exe"}
+{"t": 1794646199.248, "rel": 30.066, "event": "step_done", "label": "open7", "shown": null, "screen": "14-open7.txt", "invocations": 28}
+{"t": 1794646199.2481, "rel": 30.066, "event": "keys", "label": "close7", "keys": ""}
+{"t": 1794646199.3081, "rel": 30.126, "event": "proc_start", "pid": 65524, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646199.3082, "rel": 30.126, "event": "proc_start", "pid": 24208, "exe": "python.exe", "parent": 65524}
+{"t": 1794646199.4095, "rel": 30.228, "event": "proc_end", "pid": 65524, "exe": "cmd.exe"}
+{"t": 1794646199.4096, "rel": 30.228, "event": "proc_end", "pid": 24208, "exe": "python.exe"}
+{"t": 1794646199.609, "rel": 30.427, "event": "proc_start", "pid": 75856, "exe": "cmd.exe", "parent": 75028}
+{"t": 1794646199.609, "rel": 30.427, "event": "proc_start", "pid": 61848, "exe": "python.exe", "parent": 75856}
+{"t": 1794646199.7281, "rel": 30.546, "event": "proc_end", "pid": 75856, "exe": "cmd.exe"}
+{"t": 1794646199.7282, "rel": 30.546, "event": "proc_end", "pid": 61848, "exe": "python.exe"}
+{"t": 1794646200.7736, "rel": 31.592, "event": "step_done", "label": "close7", "shown": null, "screen": "15-close7.txt", "invocations": 30}
+{"t": 1794646200.7738, "rel": 31.592, "event": "keys", "label": "open8", "keys": "/"}
+{"t": 1794646202.3152, "rel": 33.133, "event": "step_done", "label": "open8", "shown": null, "screen": "16-open8.txt", "invocations": 30}
+{"t": 1794646202.3153, "rel": 33.133, "event": "keys", "label": "close8", "keys": ""}
+{"t": 1794646203.8536, "rel": 34.672, "event": "step_done", "label": "close8", "shown": null, "screen": "17-close8.txt", "invocations": 30}
+{"t": 1794646203.8537, "rel": 34.672, "event": "wait", "label": "idle"}
+{"t": 1794646207.8799, "rel": 38.698, "event": "step_done", "label": "idle", "shown": null, "screen": "18-idle.txt", "invocations": 30}
+{"t": 1794646208.9743, "rel": 39.792, "event": "pty_eof"}
+{"t": 1794646209.0241, "rel": 39.842, "event": "exit", "alive": false, "leftover_children": {}}

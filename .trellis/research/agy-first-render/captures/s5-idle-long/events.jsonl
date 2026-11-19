@@ -1,0 +1,19 @@
+{"t": 1794645648.6658, "rel": 0.042, "event": "spawn", "pid": 41008, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s5-idle-long\\ws", "size": "40x120", "kind": "minimal", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s5-idle-long/invocations minimal"}
+{"t": 1794645648.6673, "rel": 0.043, "event": "wait", "label": "boot"}
+{"t": 1794645648.6707, "rel": 0.047, "event": "first_output"}
+{"t": 1794645648.6724, "rel": 0.049, "event": "query", "what": "DA1"}
+{"t": 1794645649.0537, "rel": 0.43, "event": "proc_start", "pid": 69076, "exe": "cmd.exe", "parent": 41008}
+{"t": 1794645649.0638, "rel": 0.44, "event": "query", "what": "OSC11"}
+{"t": 1794645649.1017, "rel": 0.478, "event": "proc_start", "pid": 70884, "exe": "python.exe", "parent": 69076}
+{"t": 1794645649.1671, "rel": 0.543, "event": "visible_change", "shown": "AGYLINE-MARK #0001 03:40:49.110", "screen": "01-visible.txt"}
+{"t": 1794645649.2006, "rel": 0.577, "event": "proc_end", "pid": 69076, "exe": "cmd.exe"}
+{"t": 1794645649.2007, "rel": 0.577, "event": "proc_end", "pid": 70884, "exe": "python.exe"}
+{"t": 1794645649.3518, "rel": 0.728, "event": "proc_start", "pid": 72008, "exe": "cmd.exe", "parent": 41008}
+{"t": 1794645649.3973, "rel": 0.774, "event": "proc_start", "pid": 18564, "exe": "python.exe", "parent": 72008}
+{"t": 1794645649.468, "rel": 0.844, "event": "visible_change", "shown": "AGYLINE-MARK #0002 03:40:49.413", "screen": "02-visible.txt"}
+{"t": 1794645649.4885, "rel": 0.865, "event": "proc_end", "pid": 72008, "exe": "cmd.exe"}
+{"t": 1794645649.4886, "rel": 0.865, "event": "proc_end", "pid": 18564, "exe": "python.exe"}
+{"t": 1794645978.7289, "rel": 330.105, "event": "step_done", "label": "boot", "shown": "AGYLINE-MARK #0002 03:40:49.413", "screen": "03-boot.txt", "invocations": 2}
+{"t": 1794645979.6057, "rel": 330.982, "event": "visible_change", "shown": null, "screen": "04-hidden.txt"}
+{"t": 1794645979.8043, "rel": 331.181, "event": "pty_eof"}
+{"t": 1794645979.8236, "rel": 331.2, "event": "exit", "alive": false, "leftover_children": {}}

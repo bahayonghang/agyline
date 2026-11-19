@@ -1,0 +1,169 @@
+    0.051  STEP boot
+    0.538      inv #1: sid='' state=authenticating width=80 stdin=815B stdout=32B exit=1 ran=0.0277s
+    0.551              proc_start cmd.exe pid=20140 parent=75028
+    0.551              proc_start python.exe pid=15664 parent=20140
+    0.661              proc_end cmd.exe pid=20140
+    0.661              proc_end python.exe pid=15664
+    0.793              proc_start cmd.exe pid=68820 parent=75028
+    0.803      inv #2: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0305s
+    0.839              proc_start python.exe pid=9336 parent=68820
+    0.945              proc_end cmd.exe pid=68820
+    0.945              proc_end python.exe pid=9336
+   10.084  STEP open1 '/'
+   10.106      inv #3: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.027s
+   10.154              proc_start cmd.exe pid=47432 parent=75028
+   10.154              proc_start python.exe pid=4256 parent=47432
+   10.211              proc_end cmd.exe pid=47432
+   10.211              proc_end python.exe pid=4256
+   10.402              proc_start cmd.exe pid=76428 parent=75028
+   10.407      inv #4: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0378s
+   10.448              proc_start python.exe pid=11200 parent=76428
+   10.569              proc_end cmd.exe pid=76428
+   10.569              proc_end python.exe pid=11200
+   11.619  STEP close1 '\x7f'
+   11.639              proc_start cmd.exe pid=14420 parent=75028
+   11.645      inv #5: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0282s
+   11.688              proc_start python.exe pid=68904 parent=14420
+   11.781              proc_end cmd.exe pid=14420
+   11.781              proc_end python.exe pid=68904
+   11.947      inv #6: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0255s
+   11.975              proc_start cmd.exe pid=7284 parent=75028
+   11.975              proc_start python.exe pid=19152 parent=7284
+   12.072              proc_end cmd.exe pid=7284
+   12.072              proc_end python.exe pid=19152
+   13.165  STEP open2 '/'
+   13.195      inv #7: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0295s
+   13.204              proc_start cmd.exe pid=23252 parent=75028
+   13.204              proc_start python.exe pid=49136 parent=23252
+   13.311              proc_end cmd.exe pid=23252
+   13.311              proc_end python.exe pid=49136
+   13.494      inv #8: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0296s
+   13.511              proc_start cmd.exe pid=42036 parent=75028
+   13.511              proc_start python.exe pid=22532 parent=42036
+   13.633              proc_end cmd.exe pid=42036
+   13.633              proc_end python.exe pid=22532
+   14.722  STEP close2 '\x7f'
+   14.743      inv #9: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.025s
+   14.776              proc_start cmd.exe pid=60440 parent=75028
+   14.776              proc_start python.exe pid=70640 parent=60440
+   14.882              proc_end cmd.exe pid=60440
+   14.882              proc_end python.exe pid=70640
+   15.041      inv #10: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0297s
+   15.069              proc_start cmd.exe pid=19964 parent=75028
+   15.069              proc_start python.exe pid=54164 parent=19964
+   15.163              proc_end cmd.exe pid=19964
+   15.163              proc_end python.exe pid=54164
+   16.273  STEP open3 '/'
+   16.320      inv #11: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0262s
+   16.366              proc_start cmd.exe pid=51684 parent=75028
+   16.366              proc_start python.exe pid=52308 parent=51684
+   16.414              proc_end cmd.exe pid=51684
+   16.414              proc_end python.exe pid=52308
+   16.594      inv #12: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0262s
+   16.607              proc_start cmd.exe pid=8532 parent=75028
+   16.607              proc_start python.exe pid=29504 parent=8532
+   16.703              proc_end cmd.exe pid=8532
+   16.704              proc_end python.exe pid=29504
+   17.816  STEP close3 '\x7f'
+   17.869      inv #13: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0299s
+   17.900              proc_start cmd.exe pid=52568 parent=75028
+   17.900              proc_start python.exe pid=61112 parent=52568
+   17.994              proc_end cmd.exe pid=52568
+   17.994              proc_end python.exe pid=61112
+   18.143      inv #14: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0279s
+   18.175              proc_start cmd.exe pid=3476 parent=75028
+   18.175              proc_start python.exe pid=64232 parent=3476
+   18.268              proc_end cmd.exe pid=3476
+   18.268              proc_end python.exe pid=64232
+   19.350  STEP open4 '/'
+   19.371      inv #15: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0262s
+   19.375              proc_start cmd.exe pid=53492 parent=75028
+   19.431              proc_start python.exe pid=55732 parent=53492
+   19.475              proc_end cmd.exe pid=53492
+   19.475              proc_end python.exe pid=55732
+   19.662              proc_start cmd.exe pid=41624 parent=75028
+   19.671      inv #16: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0259s
+   19.708              proc_start python.exe pid=13028 parent=41624
+   19.801              proc_end cmd.exe pid=41624
+   19.801              proc_end python.exe pid=13028
+   20.888  STEP close4 '\x7f'
+   20.928              proc_start cmd.exe pid=48624 parent=75028
+   20.941      inv #17: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0271s
+   20.986              proc_start python.exe pid=71088 parent=48624
+   21.034              proc_end cmd.exe pid=48624
+   21.034              proc_end python.exe pid=71088
+   21.213      inv #18: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0298s
+   21.233              proc_start cmd.exe pid=74224 parent=75028
+   21.233              proc_start python.exe pid=30312 parent=74224
+   21.327              proc_end cmd.exe pid=74224
+   21.327              proc_end python.exe pid=30312
+   22.426  STEP open5 '/'
+   22.449      inv #19: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0278s
+   22.466              proc_start cmd.exe pid=53908 parent=75028
+   22.466              proc_start python.exe pid=11708 parent=53908
+   22.570              proc_end cmd.exe pid=53908
+   22.571              proc_end python.exe pid=11708
+   22.776              proc_start cmd.exe pid=17888 parent=75028
+   22.776      inv #20: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0342s
+   22.836              proc_start python.exe pid=72028 parent=17888
+   22.897              proc_end cmd.exe pid=17888
+   22.897              proc_end python.exe pid=72028
+   23.965  STEP close5 '\x7f'
+   23.992      inv #21: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0333s
+   24.017              proc_start cmd.exe pid=21092 parent=75028
+   24.017              proc_start python.exe pid=68820 parent=21092
+   24.128              proc_end cmd.exe pid=21092
+   24.128              proc_end python.exe pid=68820
+   24.291      inv #22: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0356s
+   24.328              proc_start cmd.exe pid=70036 parent=75028
+   24.328              proc_start python.exe pid=56724 parent=70036
+   24.451              proc_end cmd.exe pid=70036
+   24.451              proc_end python.exe pid=56724
+   25.487  STEP open6 '/'
+   25.510      inv #23: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0347s
+   25.557              proc_start cmd.exe pid=39800 parent=75028
+   25.558              proc_start python.exe pid=43324 parent=39800
+   25.664              proc_end cmd.exe pid=39800
+   25.664              proc_end python.exe pid=43324
+   25.814      inv #24: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.036s
+   25.847              proc_start cmd.exe pid=19088 parent=75028
+   25.847              proc_start python.exe pid=24908 parent=19088
+   25.973              proc_end cmd.exe pid=19088
+   25.973              proc_end python.exe pid=24908
+   27.010  STEP close6 '\x7f'
+   27.041              proc_start cmd.exe pid=77596 parent=75028
+   27.041      inv #25: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0347s
+   27.098              proc_start python.exe pid=77788 parent=77596
+   27.156              proc_end cmd.exe pid=77596
+   27.156              proc_end python.exe pid=77788
+   27.341              proc_start cmd.exe pid=73268 parent=75028
+   27.342      inv #26: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0314s
+   27.401              proc_start python.exe pid=43104 parent=73268
+   27.461              proc_end cmd.exe pid=73268
+   27.461              proc_end python.exe pid=43104
+   28.547  STEP open7 '/'
+   28.571      inv #27: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0349s
+   28.573              proc_start cmd.exe pid=58708 parent=75028
+   28.633              proc_start python.exe pid=70344 parent=58708
+   28.688              proc_end cmd.exe pid=58708
+   28.688              proc_end python.exe pid=70344
+   28.861              proc_start cmd.exe pid=62532 parent=75028
+   28.871      inv #28: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0419s
+   28.920              proc_start python.exe pid=74468 parent=62532
+   29.043              proc_end cmd.exe pid=62532
+   29.043              proc_end python.exe pid=74468
+   30.066  STEP close7 '\x7f'
+   30.096      inv #29: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0333s
+   30.126              proc_start cmd.exe pid=65524 parent=75028
+   30.126              proc_start python.exe pid=24208 parent=65524
+   30.228              proc_end cmd.exe pid=65524
+   30.228              proc_end python.exe pid=24208
+   30.409      inv #30: sid='' state=idle width=120 stdin=913B stdout=32B exit=1 ran=0.0478s
+   30.427              proc_start cmd.exe pid=75856 parent=75028
+   30.427              proc_start python.exe pid=61848 parent=75856
+   30.546              proc_end cmd.exe pid=75856
+   30.546              proc_end python.exe pid=61848
+   31.592  STEP open8 '/'
+   33.133  STEP close8 '\x7f'
+   34.672  STEP idle
+   39.792  STEP pty_eof

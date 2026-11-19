@@ -1,0 +1,40 @@
+  ctrl+_, ctrl+shift+-            Undo
+  ctrl+c, esc                     Go back / dismiss
+  ctrl+d                          Exit
+  ctrl+end                        Go to bottom
+  ctrl+g                          Open prompt in $EDITOR
+  ctrl+home                       Go to top
+  ctrl+k                          Approve subagent fast
+  ctrl+l                          Clear CLI screen
+  ctrl+o                          Toggle trajectory view
+  ctrl+r                          Review artifact
+  ctrl+shift+z                    Redo
+  ctrl+y                          Yank (paste from kill ring)
+  ctrl+z                          Suspend CLI
+  enter                           Send message or confirm
+  f2                              Rename
+  f4                              Delete
+
+Resume with -c (or command below):
+agy --conversation=853aa849-0bbc-4dae-84ec-857f64d2c8fa
+
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s2-events/ws
+  ▄▀▀      ▀▀▄
+
+> /statusline
+  ⎿  Usage:
+       /statusline                 Toggle statusline on/off.
+       /statusline <command>       Configure a custom shell command to render the statusline.
+       /statusline delete          Delete the custom command and revert to the built-in default.
+       /statusline on | enable     Enable the statusline.
+       /statusline off | disable   Disable the statusline.
+       /statusline help            Show this help message.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> 1u
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+

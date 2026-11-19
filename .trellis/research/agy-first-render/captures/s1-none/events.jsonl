@@ -1,0 +1,18 @@
+{"t": 1794645877.1127, "rel": 0.041, "event": "spawn", "pid": 13128, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s1-none\\ws", "size": "40x120", "kind": "none", "status_command": null}
+{"t": 1794645877.1137, "rel": 0.042, "event": "wait", "label": "boot"}
+{"t": 1794645877.1163, "rel": 0.045, "event": "first_output"}
+{"t": 1794645877.1179, "rel": 0.046, "event": "query", "what": "DA1"}
+{"t": 1794645877.4431, "rel": 0.371, "event": "query", "what": "OSC11"}
+{"t": 1794645892.1599, "rel": 15.088, "event": "step_done", "label": "boot", "shown": null, "screen": "01-boot.txt", "invocations": 0}
+{"t": 1794645892.16, "rel": 15.088, "event": "keys", "label": "slash", "keys": "/"}
+{"t": 1794645895.2041, "rel": 18.132, "event": "step_done", "label": "slash", "shown": null, "screen": "02-slash.txt", "invocations": 0}
+{"t": 1794645895.2041, "rel": 18.132, "event": "keys", "label": "model", "keys": "model"}
+{"t": 1794645897.2636, "rel": 20.192, "event": "step_done", "label": "model", "shown": null, "screen": "03-model.txt", "invocations": 0}
+{"t": 1794645897.2639, "rel": 20.192, "event": "keys", "label": "enter", "keys": "\r"}
+{"t": 1794645901.2885, "rel": 24.217, "event": "step_done", "label": "enter", "shown": null, "screen": "04-enter.txt", "invocations": 0}
+{"t": 1794645901.2886, "rel": 24.217, "event": "keys", "label": "esc", "keys": "\u001b"}
+{"t": 1794645905.3061, "rel": 28.234, "event": "step_done", "label": "esc", "shown": null, "screen": "05-esc.txt", "invocations": 0}
+{"t": 1794645905.3061, "rel": 28.234, "event": "wait", "label": "idle"}
+{"t": 1794645911.3407, "rel": 34.269, "event": "step_done", "label": "idle", "shown": null, "screen": "06-idle.txt", "invocations": 0}
+{"t": 1794645912.399, "rel": 35.327, "event": "pty_eof"}
+{"t": 1794645912.434, "rel": 35.362, "event": "exit", "alive": false, "leftover_children": {}}

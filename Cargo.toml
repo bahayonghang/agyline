@@ -1,0 +1,26 @@
+[package]
+name = "agyline"
+version = "0.1.0"
+edition = "2024"
+# Let-chains shipped in 1.88. Locked deps `instability` and `darling` declare the same floor.
+rust-version = "1.88"
+description = "Fast, configurable status line for the Antigravity CLI (agy)"
+license = "MIT"
+
+[dependencies]
+crossterm = "0.28"
+ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.8"
+unicode-segmentation = "1.12"
+unicode-width = "0.2"
+
+[[bench]]
+name = "render_micro"
+harness = false
+
+[[bench]]
+name = "pipe_e2e"
+harness = false

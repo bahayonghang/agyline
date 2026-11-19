@@ -1,0 +1,12 @@
+{"t": 1794645877.4281, "rel": 0.356, "event": "refused", "line": "CONNECT www.gstatic.com:443 HTTP/1.1"}
+{"t": 1794645877.4283, "rel": 0.357, "event": "refused", "line": "CONNECT www.gstatic.com:443 HTTP/1.1"}
+{"t": 1794645877.4313, "rel": 0.36, "event": "refused", "line": "CONNECT www.gstatic.com:443 HTTP/1.1"}
+{"t": 1794645877.4316, "rel": 0.36, "event": "refused", "line": "CONNECT www.gstatic.com:443 HTTP/1.1"}
+{"t": 1794645882.2581, "rel": 5.186, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645887.26, "rel": 10.188, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645892.2621, "rel": 15.19, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645897.264, "rel": 20.192, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645902.2658, "rel": 25.194, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645907.2677, "rel": 30.196, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645912.1865, "rel": 35.115, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}
+{"t": 1794645912.1875, "rel": 35.116, "event": "refused", "line": "CONNECT play.googleapis.com:443 HTTP/1.1"}

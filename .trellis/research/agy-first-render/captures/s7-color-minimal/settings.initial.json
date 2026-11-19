@@ -1,0 +1,11 @@
+{
+  "trustedWorkspaces": [
+    "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s7-color-minimal\\ws"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s7-color-minimal/invocations minimal",
+    "enabled": true
+  },
+  "colorScheme": "colorblind-friendly dark"
+}

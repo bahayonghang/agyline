@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-11-14
+- **Total Sessions**: 4
+- **Last Active**: 2026-11-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~32 | Active |
+| `journal-1.md` | ~128 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,9 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-11-15 | Keep the empty-mode ask pill: intentional agy 1.5.9 adaptation, not a bug | - | `dev` |
+| 3 | 2026-11-15 | Record the English comment standard and annotate src/ and tests/ | - | `dev` |
+| 2 | 2026-11-15 | 完成 agyline v1 实施与 Windows 验收 | `a757c9f` | `feat/agyline-v1` |
 | 1 | 2026-11-14 | 确定 agyline 的产品边界 | - | `main` |
 <!-- @@@/auto:session-history -->
 

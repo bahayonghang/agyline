@@ -1,0 +1,47 @@
+    0.051  STEP boot
+    0.494      inv #1: sid='' state=authenticating width=80 stdin=815B stdout=0B exit=0 ran=0.0312s
+    0.506              proc_start cmd.exe pid=65828 parent=65976
+    0.507              proc_start python.exe pid=64996 parent=65828
+    0.644              proc_end cmd.exe pid=65828
+    0.644              proc_end python.exe pid=64996
+    0.780              proc_start cmd.exe pid=39060 parent=65976
+    0.788      inv #2: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0305s
+    0.823              proc_start python.exe pid=16852 parent=39060
+    0.916              proc_end cmd.exe pid=39060
+    0.916              proc_end python.exe pid=16852
+   15.078  STEP slash '/'
+   15.101      inv #3: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0268s
+   15.133              proc_start cmd.exe pid=76508 parent=65976
+   15.133              proc_start python.exe pid=9984 parent=76508
+   15.250              proc_end cmd.exe pid=76508
+   15.251              proc_end python.exe pid=9984
+   15.403              proc_start cmd.exe pid=51084 parent=65976
+   15.403      inv #4: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0289s
+   15.454              proc_start python.exe pid=67880 parent=51084
+   15.519              proc_end cmd.exe pid=51084
+   15.519              proc_end python.exe pid=67880
+   18.123  STEP model 'model'
+   20.164  STEP enter '\r'
+   20.196      inv #5: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0386s
+   20.225              proc_start cmd.exe pid=23744 parent=65976
+   20.225              proc_start python.exe pid=25400 parent=23744
+   20.329              proc_end cmd.exe pid=23744
+   20.330              proc_end python.exe pid=25400
+   20.496      inv #6: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0346s
+   20.511              proc_start cmd.exe pid=52924 parent=65976
+   20.511              proc_start python.exe pid=4972 parent=52924
+   20.640              proc_end cmd.exe pid=52924
+   20.640              proc_end python.exe pid=4972
+   24.222  STEP esc '\x1b'
+   24.363      inv #7: sid='' state=idle width=120 stdin=913B stdout=0B exit=0 ran=0.0329s
+   24.372              proc_start cmd.exe pid=22540 parent=65976
+   24.372              proc_start python.exe pid=14464 parent=22540
+   24.506              proc_end cmd.exe pid=22540
+   24.506              proc_end python.exe pid=14464
+   24.662      inv #8: sid=fc3ff65b state=idle width=120 stdin=1023B stdout=0B exit=0 ran=0.03s
+   24.689              proc_start cmd.exe pid=11820 parent=65976
+   24.690              proc_start python.exe pid=11512 parent=11820
+   24.814              proc_end cmd.exe pid=11820
+   24.814              proc_end python.exe pid=11512
+   28.255  STEP idle
+   35.380  STEP pty_eof

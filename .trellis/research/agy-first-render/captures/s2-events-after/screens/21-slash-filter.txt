@@ -1,0 +1,40 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s2-events-after/ws
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> /st
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> /statusline          Toggle the statusline
+  /config              Open settings panel
+  /resume              Browse and resume past conversations
+  /agy-customizations  Comprehensive guide and reference for the Antigravity Customization System. Use to explain ho...
+
+  ↑/↓ Navigate · enter Select · tab Complete
+AGYLINE-MARK #0012 03:47:12.316
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,40 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.9
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s1-ps1/ws
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> /model
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> /model  Set a model, or run a single prompt on another model
+
+  ↑/↓ Navigate · enter Select · tab Complete
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

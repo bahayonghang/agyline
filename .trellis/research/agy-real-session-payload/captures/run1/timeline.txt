@@ -1,0 +1,430 @@
+    0.065  STEP boot
+    0.331              proc_start cmd.exe pid=19812 parent=19036
+    0.338      inv #1: sid='' state=authenticating width=80 stdin=700B stdout=0B exit=0 ran=0.3503s
+    0.375              proc_start python.exe pid=19624 parent=19812
+    0.433              proc_start pwsh.exe pid=39896 parent=19624
+    0.634      inv #2: sid='' state=idle width=120 stdin=746B stdout=0B exit=0 ran=0.334s
+    0.665              proc_start cmd.exe pid=65004 parent=19036
+    0.665              proc_start python.exe pid=74076 parent=65004
+    0.665              proc_end cmd.exe pid=19812
+    0.714              proc_start pwsh.exe pid=2948 parent=74076
+    0.757              proc_end pwsh.exe pid=39896
+    0.802              proc_end python.exe pid=19624
+    1.040              proc_end cmd.exe pid=65004
+    1.040              proc_end python.exe pid=74076
+    1.040              proc_end pwsh.exe pid=2948
+    3.071              proc_start cmd.exe pid=12216 parent=19036
+    3.087      inv #3: sid='' state=idle width=120 stdin=770B stdout=0B exit=0 ran=0.2827s
+    3.111              proc_start python.exe pid=71700 parent=12216
+    3.156              proc_start pwsh.exe pid=55444 parent=71700
+    3.364      inv #4: sid='' state=idle width=120 stdin=1200B stdout=0B exit=0 ran=0.3036s
+    3.395              proc_start cmd.exe pid=52368 parent=19036
+    3.395              proc_start python.exe pid=70764 parent=52368
+    3.395              proc_end cmd.exe pid=12216
+    3.439              proc_end python.exe pid=71700
+    3.439              proc_end pwsh.exe pid=55444
+    3.482              proc_start pwsh.exe pid=71000 parent=70764
+    3.758              proc_end cmd.exe pid=52368
+    3.758              proc_end python.exe pid=70764
+    3.758              proc_end pwsh.exe pid=71000
+    4.117              proc_start cmd.exe pid=39060 parent=19036
+    4.126      inv #5: sid='' state=idle width=120 stdin=1200B stdout=0B exit=0 ran=0.3211s
+    4.166              proc_start python.exe pid=31364 parent=39060
+    4.228              proc_start pwsh.exe pid=63088 parent=31364
+    4.385      inv #6: sid='' state=idle width=120 stdin=1220B stdout=0B exit=0 ran=0.4004s
+    4.410              proc_start cmd.exe pid=66816 parent=19036
+    4.410              proc_start python.exe pid=16568 parent=66816
+    4.410              proc_end cmd.exe pid=39060
+    4.471              proc_start pwsh.exe pid=70692 parent=16568
+    4.537              proc_end python.exe pid=31364
+    4.537              proc_end pwsh.exe pid=63088
+    4.687      inv #7: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3241s
+    4.698              proc_start cmd.exe pid=53592 parent=19036
+    4.698              proc_start python.exe pid=40400 parent=53592
+    4.698              proc_end cmd.exe pid=66816
+    4.808              proc_start pwsh.exe pid=7144 parent=40400
+    4.868              proc_end python.exe pid=16568
+    4.868              proc_end pwsh.exe pid=70692
+    4.976              proc_start cmd.exe pid=67744 parent=19036
+    4.976              proc_end cmd.exe pid=53592
+    4.986      inv #8: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3383s
+    5.039              proc_start python.exe pid=22472 parent=67744
+    5.098              proc_start pwsh.exe pid=46524 parent=22472
+    5.099              proc_end python.exe pid=40400
+    5.099              proc_end pwsh.exe pid=7144
+    5.285      inv #9: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3393s
+    5.308              proc_start cmd.exe pid=57540 parent=19036
+    5.309              proc_start python.exe pid=34424 parent=57540
+    5.309              proc_end cmd.exe pid=67744
+    5.405              proc_start pwsh.exe pid=72184 parent=34424
+    5.405              proc_end python.exe pid=22472
+    5.405              proc_end pwsh.exe pid=46524
+    5.585      inv #10: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3308s
+    5.617              proc_start cmd.exe pid=34620 parent=19036
+    5.617              proc_start python.exe pid=53704 parent=34620
+    5.617              proc_end cmd.exe pid=57540
+    5.675              proc_start pwsh.exe pid=31792 parent=53704
+    5.725              proc_end python.exe pid=34424
+    5.726              proc_end pwsh.exe pid=72184
+    5.970              proc_end pwsh.exe pid=31792
+    6.028              proc_end cmd.exe pid=34620
+    6.028              proc_end python.exe pid=53704
+   15.078  STEP slash '/'
+   15.102              proc_start cmd.exe pid=63148 parent=19036
+   15.112      inv #11: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3275s
+   15.159              proc_start python.exe pid=74980 parent=63148
+   15.209              proc_start pwsh.exe pid=39492 parent=74980
+   15.413      inv #12: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3244s
+   15.452              proc_start cmd.exe pid=20784 parent=19036
+   15.452              proc_start python.exe pid=52260 parent=20784
+   15.452              proc_end cmd.exe pid=63148
+   15.509              proc_start pwsh.exe pid=42460 parent=52260
+   15.509              proc_end python.exe pid=74980
+   15.509              proc_end pwsh.exe pid=39492
+   15.829              proc_end cmd.exe pid=20784
+   15.829              proc_end python.exe pid=52260
+   15.829              proc_end pwsh.exe pid=42460
+   18.087  STEP model 'model'
+   20.138  STEP model_enter '\r'
+   20.174              proc_start cmd.exe pid=11512 parent=19036
+   20.178      inv #13: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3375s
+   20.224              proc_start python.exe pid=24580 parent=11512
+   20.286              proc_start pwsh.exe pid=31136 parent=24580
+   20.468              proc_start cmd.exe pid=40824 parent=19036
+   20.468              proc_end cmd.exe pid=11512
+   20.468      inv #14: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3195s
+   20.529              proc_start python.exe pid=31780 parent=40824
+   20.592              proc_start pwsh.exe pid=44344 parent=31780
+   20.592              proc_end python.exe pid=24580
+   20.592              proc_end pwsh.exe pid=31136
+   20.864              proc_end pwsh.exe pid=44344
+   20.923              proc_end cmd.exe pid=40824
+   20.923              proc_end python.exe pid=31780
+   24.169  STEP model_esc '\x1b'
+   24.279      inv #15: sid='' state=idle width=120 stdin=1250B stdout=0B exit=0 ran=0.3131s
+   24.293              proc_start cmd.exe pid=31228 parent=19036
+   24.293              proc_start python.exe pid=68216 parent=31228
+   24.357              proc_start pwsh.exe pid=63996 parent=68216
+   24.578      inv #16: sid=5a85300c state=idle width=120 stdin=1360B stdout=275B exit=0 ran=0.4904s
+   24.605              proc_start cmd.exe pid=67836 parent=19036
+   24.605              proc_start python.exe pid=64784 parent=67836
+   24.605              proc_end cmd.exe pid=31228
+   24.648              proc_end pwsh.exe pid=63996
+   24.699              proc_start pwsh.exe pid=18484 parent=64784
+   24.699              proc_end python.exe pid=68216
+   24.976              proc_start git.exe pid=71552 parent=18484
+   24.976              proc_start conhost.exe pid=73692 parent=71552
+   25.017              proc_start git.exe pid=69696 parent=71552
+   25.061              proc_end git.exe pid=71552
+   25.061              proc_end conhost.exe pid=73692
+   25.061              proc_end git.exe pid=69696
+   25.116              proc_end pwsh.exe pid=18484
+   25.126          screen: agyline | 󰊢 dev ● |  0% |  cold |
+   25.157              proc_end cmd.exe pid=67836
+   25.157              proc_end python.exe pid=64784
+   28.212  STEP prompt_typed 'Call invoke_subagent once with TypeName research, Role ProbeRoleLabel, Model flash_lite, and Prompt Say PONG only and call no tools. Wait for it to finish, then reply with DONE only and call no other tools.'
+   28.242      inv #17: sid=5a85300c state=idle width=120 stdin=1360B stdout=275B exit=0 ran=0.4735s
+   28.258              proc_start cmd.exe pid=23776 parent=19036
+   28.259              proc_start python.exe pid=6672 parent=23776
+   28.349              proc_start pwsh.exe pid=68772 parent=6672
+   28.649              proc_start git.exe pid=76420 parent=68772
+   28.649              proc_start conhost.exe pid=71120 parent=76420
+   28.649              proc_start git.exe pid=40408 parent=76420
+   28.697              proc_end git.exe pid=76420
+   28.697              proc_end conhost.exe pid=71120
+   28.697              proc_end git.exe pid=40408
+   28.792              proc_end cmd.exe pid=23776
+   28.792              proc_end python.exe pid=6672
+   28.792              proc_end pwsh.exe pid=68772
+   30.254  STEP prompt_submit '\r'
+   30.307      inv #18: sid=5a85300c state=idle width=120 stdin=1360B stdout=275B exit=0 ran=0.5698s
+   30.331              proc_start cmd.exe pid=23120 parent=19036
+   30.331              proc_start git.exe pid=23380 parent=19036
+   30.331              proc_start git.exe pid=55128 parent=23380
+   30.331              proc_start python.exe pid=10492 parent=23120
+   30.383              proc_start cmd.exe pid=51180 parent=19036
+   30.384              proc_start git.exe pid=10824 parent=19036
+   30.384              proc_start Orca.exe pid=45668 parent=51180
+   30.384              proc_start git.exe pid=73820 parent=10824
+   30.384              proc_end git.exe pid=23380
+   30.384              proc_end git.exe pid=55128
+   30.436              proc_start pwsh.exe pid=44244 parent=10492
+   30.436              proc_start git.exe pid=54344 parent=19036
+   30.436              proc_end git.exe pid=10824
+   30.436              proc_end git.exe pid=73820
+   30.487              proc_start git.exe pid=17568 parent=54344
+   30.487              proc_end cmd.exe pid=51180
+   30.487              proc_end Orca.exe pid=45668
+   30.530              proc_start git.exe pid=74544 parent=19036
+   30.530              proc_start git.exe pid=70544 parent=74544
+   30.530              proc_end git.exe pid=54344
+   30.530              proc_end git.exe pid=17568
+   30.581              proc_start cmd.exe pid=41716 parent=19036
+   30.581              proc_end cmd.exe pid=23120
+   30.581              proc_end git.exe pid=74544
+   30.581              proc_end git.exe pid=70544
+   30.582      inv #19: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.4086s
+   30.639              proc_start python.exe pid=19644 parent=41716
+   30.688              proc_start pwsh.exe pid=41788 parent=19644
+   30.960              proc_end python.exe pid=10492
+   30.960              proc_end pwsh.exe pid=44244
+   31.048              proc_end pwsh.exe pid=41788
+   31.066          screen: agyline | 󰊢 dev ● |  0% |  5:00 |
+   31.095              proc_end cmd.exe pid=41716
+   31.095              proc_end python.exe pid=19644
+   47.875      inv #20: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.6458s
+   47.920              proc_start cmd.exe pid=73748 parent=19036
+   47.920              proc_start python.exe pid=14912 parent=73748
+   47.983              proc_start pwsh.exe pid=54280 parent=14912
+   48.164              proc_end cmd.exe pid=73748
+   48.177      inv #21: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.4829s
+   48.225              proc_start cmd.exe pid=23040 parent=19036
+   48.225              proc_start python.exe pid=18804 parent=23040
+   48.287              proc_start pwsh.exe pid=37944 parent=18804
+   48.577              proc_end pwsh.exe pid=54280
+   48.631              proc_end python.exe pid=14912
+   48.743              proc_end cmd.exe pid=23040
+   48.743              proc_end python.exe pid=18804
+   48.743              proc_end pwsh.exe pid=37944
+   50.227              proc_start cmd.exe pid=54980 parent=19036
+   50.228      inv #22: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.5747s
+   50.275              proc_start python.exe pid=8376 parent=54980
+   50.335              proc_start pwsh.exe pid=66232 parent=8376
+   50.548              proc_start cmd.exe pid=23308 parent=19036
+   50.548              proc_end cmd.exe pid=54980
+   50.563      inv #23: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.4306s
+   50.596              proc_start python.exe pid=55272 parent=23308
+   50.657              proc_start pwsh.exe pid=72744 parent=55272
+   50.899              proc_end python.exe pid=8376
+   50.899              proc_end pwsh.exe pid=66232
+   51.085              proc_end cmd.exe pid=23308
+   51.085              proc_end python.exe pid=55272
+   51.085              proc_end pwsh.exe pid=72744
+   53.070      inv #24: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.5787s
+   53.080              proc_start cmd.exe pid=16620 parent=19036
+   53.080              proc_start python.exe pid=17628 parent=16620
+   53.173              proc_start pwsh.exe pid=74056 parent=17628
+   53.370      inv #25: sid=5a85300c state=working width=120 stdin=1363B stdout=275B exit=0 ran=0.4903s
+   53.400              proc_start cmd.exe pid=4452 parent=19036
+   53.400              proc_start python.exe pid=22536 parent=4452
+   53.401              proc_end cmd.exe pid=16620
+   53.458              proc_start pwsh.exe pid=31880 parent=22536
+   53.584              proc_start cmd.exe pid=24128 parent=19036
+   53.584              proc_start Orca.exe pid=72208 parent=24128
+   53.660              proc_end cmd.exe pid=4452
+   53.660              proc_end cmd.exe pid=24128
+   53.660              proc_end Orca.exe pid=72208
+   53.673      inv #26: sid=5a85300c state=working width=120 stdin=1499B stdout=367B exit=0 ran=0.6566s
+   53.721              proc_start cmd.exe pid=65008 parent=19036
+   53.721              proc_start python.exe pid=18672 parent=65008
+   53.721              proc_end python.exe pid=17628
+   53.721              proc_end pwsh.exe pid=74056
+   53.785              proc_start pwsh.exe pid=18960 parent=18672
+   53.932              proc_end python.exe pid=22536
+   53.932              proc_end pwsh.exe pid=31880
+   53.968      inv #27: sid=5a85300c state=working width=120 stdin=1499B stdout=367B exit=0 ran=0.4889s
+   53.982              proc_start cmd.exe pid=44248 parent=19036
+   53.982              proc_start python.exe pid=31872 parent=44248
+   53.982              proc_end cmd.exe pid=65008
+   54.075              proc_start pwsh.exe pid=4932 parent=31872
+   54.413              proc_end python.exe pid=18672
+   54.413              proc_end pwsh.exe pid=18960
+   54.516              proc_end pwsh.exe pid=4932
+   54.533          screen: agyline | 󰊢 dev ● |  1.4% · 15k tokens |  5:00 · 0% hit |  33.1 tok/s |
+   54.568              proc_end cmd.exe pid=44248
+   54.568              proc_end python.exe pid=31872
+   55.042      inv #28: sid=5a85300c state=working width=120 stdin=1499B stdout=367B exit=0 ran=0.5726s
+   55.072              proc_start cmd.exe pid=44004 parent=19036
+   55.072              proc_start python.exe pid=52612 parent=44004
+   55.072              proc_start git.exe pid=47512 parent=19036
+   55.072              proc_start cmd.exe pid=36184 parent=19036
+   55.136              proc_start Orca.exe pid=74604 parent=36184
+   55.136              proc_start cmd.exe pid=41432 parent=19036
+   55.136              proc_end git.exe pid=47512
+   55.195              proc_start pwsh.exe pid=43536 parent=52612
+   55.195              proc_start git.exe pid=51204 parent=19036
+   55.195              proc_start git.exe pid=50104 parent=51204
+   55.195              proc_start Orca.exe pid=65016 parent=41432
+   55.195              proc_end cmd.exe pid=36184
+   55.195              proc_end Orca.exe pid=74604
+   55.259              proc_start cmd.exe pid=25192 parent=19036
+   55.259              proc_start git.exe pid=70444 parent=19036
+   55.259              proc_start git.exe pid=76900 parent=70444
+   55.259              proc_start Orca.exe pid=64236 parent=25192
+   55.259              proc_end cmd.exe pid=41432
+   55.259              proc_end git.exe pid=51204
+   55.259              proc_end git.exe pid=50104
+   55.259              proc_end Orca.exe pid=65016
+   55.316              proc_start git.exe pid=26780 parent=19036
+   55.316              proc_start git.exe pid=48648 parent=26780
+   55.316              proc_end cmd.exe pid=25192
+   55.316              proc_end git.exe pid=70444
+   55.317              proc_end git.exe pid=76900
+   55.317              proc_end Orca.exe pid=64236
+   55.362      inv #29: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.5379s
+   55.377              proc_start cmd.exe pid=71604 parent=19036
+   55.377              proc_start cmd.exe pid=21328 parent=19036
+   55.377              proc_start python.exe pid=72628 parent=21328
+   55.377              proc_end cmd.exe pid=44004
+   55.377              proc_end git.exe pid=26780
+   55.377              proc_end git.exe pid=48648
+   55.439              proc_start Orca.exe pid=75380 parent=71604
+   55.501              proc_start pwsh.exe pid=8252 parent=72628
+   55.501              proc_end cmd.exe pid=71604
+   55.501              proc_end Orca.exe pid=75380
+   55.723              proc_end python.exe pid=52612
+   55.723              proc_end pwsh.exe pid=43536
+   55.986              proc_end cmd.exe pid=21328
+   55.986              proc_end python.exe pid=72628
+   55.986              proc_end pwsh.exe pid=8252
+   56.252      inv #30: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.6333s
+   56.274              proc_start cmd.exe pid=39992 parent=19036
+   56.274              proc_start python.exe pid=70636 parent=39992
+   56.381              proc_start pwsh.exe pid=73668 parent=70636
+   56.545              proc_start cmd.exe pid=69044 parent=19036
+   56.545              proc_end cmd.exe pid=39992
+   56.548      inv #31: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.4893s
+   56.595              proc_start python.exe pid=43760 parent=69044
+   56.641              proc_start pwsh.exe pid=54432 parent=43760
+   56.847      inv #32: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.4234s
+   56.886              proc_start cmd.exe pid=36776 parent=19036
+   56.886              proc_start python.exe pid=76956 parent=36776
+   56.886              proc_end cmd.exe pid=69044
+   56.960              proc_start pwsh.exe pid=45032 parent=76956
+   56.960              proc_end python.exe pid=70636
+   56.960              proc_end pwsh.exe pid=73668
+   57.081              proc_start cmd.exe pid=17932 parent=19036
+   57.130              proc_start Orca.exe pid=49736 parent=17932
+   57.130              proc_end python.exe pid=43760
+   57.130              proc_end pwsh.exe pid=54432
+   57.147      inv #33: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.3987s
+   57.189              proc_start cmd.exe pid=31304 parent=19036
+   57.189              proc_start python.exe pid=48060 parent=31304
+   57.189              proc_end cmd.exe pid=36776
+   57.189              proc_end cmd.exe pid=17932
+   57.189              proc_end Orca.exe pid=49736
+   57.233              proc_start pwsh.exe pid=23216 parent=48060
+   57.387              proc_end python.exe pid=76956
+   57.387              proc_end pwsh.exe pid=45032
+   57.616              proc_end cmd.exe pid=31304
+   57.616              proc_end python.exe pid=48060
+   57.616              proc_end pwsh.exe pid=23216
+   58.307      inv #34: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.6381s
+   58.344              proc_start cmd.exe pid=52688 parent=19036
+   58.344              proc_start cmd.exe pid=71516 parent=19036
+   58.344              proc_start python.exe pid=75892 parent=52688
+   58.344              proc_start Orca.exe pid=76968 parent=71516
+   58.464              proc_start pwsh.exe pid=35524 parent=75892
+   58.464              proc_start cmd.exe pid=68640 parent=19036
+   58.464              proc_end cmd.exe pid=71516
+   58.464              proc_end Orca.exe pid=76968
+   58.524              proc_start Orca.exe pid=49936 parent=68640
+   58.584              proc_start cmd.exe pid=66440 parent=19036
+   58.584              proc_end cmd.exe pid=68640
+   58.585              proc_end Orca.exe pid=49936
+   58.641              proc_start Orca.exe pid=71628 parent=66440
+   58.641              proc_start cmd.exe pid=45196 parent=19036
+   58.641              proc_end cmd.exe pid=52688
+   58.666      inv #35: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.4674s
+   58.691              proc_start python.exe pid=76884 parent=45196
+   58.691              proc_end cmd.exe pid=66440
+   58.691              proc_end Orca.exe pid=71628
+   58.798              proc_start pwsh.exe pid=58600 parent=76884
+   59.041              proc_end python.exe pid=75892
+   59.041              proc_end pwsh.exe pid=35524
+   59.223              proc_end cmd.exe pid=45196
+   59.223              proc_end python.exe pid=76884
+   59.223              proc_end pwsh.exe pid=58600
+   59.956              proc_start cmd.exe pid=53052 parent=19036
+   59.960      inv #36: sid=5a85300c state=working width=120 stdin=1626B stdout=406B exit=0 ran=0.6058s
+   60.031              proc_start python.exe pid=59488 parent=53052
+   60.076              proc_start pwsh.exe pid=48624 parent=59488
+   60.076              proc_start cmd.exe pid=10324 parent=19036
+   60.127              proc_start Orca.exe pid=58128 parent=10324
+   60.184              proc_end Orca.exe pid=58128
+   60.247              proc_start cmd.exe pid=40740 parent=19036
+   60.247              proc_start Orca.exe pid=47636 parent=40740
+   60.247              proc_end cmd.exe pid=10324
+   60.366              proc_end cmd.exe pid=40740
+   60.366              proc_end Orca.exe pid=47636
+   60.486              proc_start git.exe pid=7388 parent=48624
+   60.486              proc_start conhost.exe pid=2944 parent=7388
+   60.486              proc_start git.exe pid=57272 parent=7388
+   60.534              proc_end git.exe pid=7388
+   60.534              proc_end conhost.exe pid=2944
+   60.534              proc_end git.exe pid=57272
+   60.657              proc_end cmd.exe pid=53052
+   60.657              proc_end python.exe pid=59488
+   60.657              proc_end pwsh.exe pid=48624
+   61.245      inv #37: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.4148s
+   61.281              proc_start cmd.exe pid=4372 parent=19036
+   61.281              proc_start python.exe pid=74136 parent=4372
+   61.375              proc_start pwsh.exe pid=67100 parent=74136
+   61.755              proc_end cmd.exe pid=4372
+   61.755              proc_end python.exe pid=74136
+   61.755              proc_end pwsh.exe pid=67100
+   82.609      inv #38: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.6175s
+   82.631              proc_start cmd.exe pid=60924 parent=19036
+   82.631              proc_start python.exe pid=77044 parent=60924
+   82.739              proc_start pwsh.exe pid=69872 parent=77044
+   82.909      inv #39: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.464s
+   82.939              proc_start cmd.exe pid=48172 parent=19036
+   82.939              proc_start python.exe pid=74648 parent=48172
+   82.939              proc_end cmd.exe pid=60924
+   83.000              proc_start pwsh.exe pid=4476 parent=74648
+   83.286              proc_end pwsh.exe pid=69872
+   83.335              proc_end python.exe pid=77044
+   83.432              proc_end python.exe pid=74648
+   83.432              proc_end pwsh.exe pid=4476
+   83.472              proc_end cmd.exe pid=48172
+   86.185              proc_start cmd.exe pid=58336 parent=19036
+   86.186      inv #40: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.6065s
+   86.230              proc_start python.exe pid=70380 parent=58336
+   86.277              proc_start pwsh.exe pid=51528 parent=70380
+   86.483      inv #41: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.4732s
+   86.516              proc_start cmd.exe pid=40080 parent=19036
+   86.516              proc_start python.exe pid=60928 parent=40080
+   86.516              proc_end cmd.exe pid=58336
+   86.572              proc_start pwsh.exe pid=40320 parent=60928
+   86.867              proc_end python.exe pid=70380
+   86.867              proc_end pwsh.exe pid=51528
+   87.049              proc_end cmd.exe pid=40080
+   87.050              proc_end python.exe pid=60928
+   87.050              proc_end pwsh.exe pid=40320
+   89.202      inv #42: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.5959s
+   89.205              proc_start cmd.exe pid=69144 parent=19036
+   89.265              proc_start python.exe pid=35388 parent=69144
+   89.312              proc_start pwsh.exe pid=32620 parent=35388
+   89.503      inv #43: sid=5a85300c state=working width=120 stdin=1628B stdout=396B exit=0 ran=0.421s
+   89.544              proc_start cmd.exe pid=64132 parent=19036
+   89.544              proc_start python.exe pid=14768 parent=64132
+   89.544              proc_end cmd.exe pid=69144
+   89.645              proc_start pwsh.exe pid=56984 parent=14768
+   89.889              proc_end python.exe pid=35388
+   89.890              proc_end pwsh.exe pid=32620
+   89.985              proc_end pwsh.exe pid=56984
+   90.030              proc_end cmd.exe pid=64132
+   90.031              proc_end python.exe pid=14768
+  130.526      inv #44: sid=5a85300c state=idle width=120 stdin=1625B stdout=396B exit=0 ran=0.6346s
+  130.560              proc_start cmd.exe pid=67336 parent=19036
+  130.560              proc_start python.exe pid=40000 parent=67336
+  130.617              proc_start pwsh.exe pid=72600 parent=40000
+  130.847              proc_start cmd.exe pid=2976 parent=19036
+  130.847              proc_end cmd.exe pid=67336
+  130.847      inv #45: sid=5a85300c state=idle width=120 stdin=1626B stdout=395B exit=0 ran=0.6759s
+  130.904              proc_start python.exe pid=57852 parent=2976
+  130.955              proc_start pwsh.exe pid=49076 parent=57852
+  131.245              proc_end python.exe pid=40000
+  131.245              proc_end pwsh.exe pid=72600
+  131.475              proc_start git.exe pid=67900 parent=49076
+  131.475              proc_start conhost.exe pid=52736 parent=67900
+  131.475              proc_start git.exe pid=55608 parent=67900
+  131.535              proc_end git.exe pid=67900
+  131.535              proc_end conhost.exe pid=52736
+  131.535              proc_end git.exe pid=55608
+  131.591          screen: agyline | 󰊢 dev ● |  1.4% · 15k tokens |  5:00 · 0% hit |  7.9 tok/s |
+  131.597              proc_end cmd.exe pid=2976
+  131.597              proc_end python.exe pid=57852
+  131.597              proc_end pwsh.exe pid=49076
+  132.962  STEP taskkill
+  133.161  STEP pty_eof

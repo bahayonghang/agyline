@@ -1,0 +1,40 @@
+{"t": 1794646236.2207, "rel": 0.05, "event": "spawn", "pid": 13640, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s3-sleep8\\ws", "size": "40x120", "kind": "minimal", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s3-sleep8/invocations minimal --sleep 8"}
+{"t": 1794646236.2218, "rel": 0.051, "event": "wait", "label": "boot"}
+{"t": 1794646236.2315, "rel": 0.061, "event": "first_output"}
+{"t": 1794646236.234, "rel": 0.064, "event": "query", "what": "DA1"}
+{"t": 1794646236.6794, "rel": 0.509, "event": "query", "what": "OSC11"}
+{"t": 1794646236.685, "rel": 0.515, "event": "proc_start", "pid": 73136, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646236.7377, "rel": 0.567, "event": "proc_start", "pid": 18484, "exe": "python.exe", "parent": 73136}
+{"t": 1794646236.9832, "rel": 0.813, "event": "proc_start", "pid": 74628, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646236.9832, "rel": 0.813, "event": "proc_start", "pid": 39756, "exe": "python.exe", "parent": 74628}
+{"t": 1794646236.9833, "rel": 0.813, "event": "proc_end", "pid": 73136, "exe": "cmd.exe"}
+{"t": 1794646241.9824, "rel": 5.812, "event": "proc_end", "pid": 74628, "exe": "cmd.exe"}
+{"t": 1794646244.8104, "rel": 8.64, "event": "proc_end", "pid": 18484, "exe": "python.exe"}
+{"t": 1794646245.1272, "rel": 8.957, "event": "proc_start", "pid": 65920, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646245.1273, "rel": 8.957, "event": "proc_start", "pid": 65956, "exe": "python.exe", "parent": 65920}
+{"t": 1794646245.1273, "rel": 8.957, "event": "proc_end", "pid": 39756, "exe": "python.exe"}
+{"t": 1794646250.1202, "rel": 13.95, "event": "proc_end", "pid": 65920, "exe": "cmd.exe"}
+{"t": 1794646253.2246, "rel": 17.054, "event": "proc_end", "pid": 65956, "exe": "python.exe"}
+{"t": 1794646256.226, "rel": 20.056, "event": "step_done", "label": "boot", "shown": null, "screen": "01-boot.txt", "invocations": 3}
+{"t": 1794646256.2261, "rel": 20.056, "event": "keys", "label": "slash", "keys": "/"}
+{"t": 1794646256.2766, "rel": 20.106, "event": "proc_start", "pid": 1604, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646256.2766, "rel": 20.106, "event": "proc_start", "pid": 63164, "exe": "python.exe", "parent": 1604}
+{"t": 1794646256.5535, "rel": 20.383, "event": "proc_start", "pid": 5884, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646256.5535, "rel": 20.383, "event": "proc_end", "pid": 1604, "exe": "cmd.exe"}
+{"t": 1794646256.6059, "rel": 20.436, "event": "proc_start", "pid": 75604, "exe": "python.exe", "parent": 5884}
+{"t": 1794646261.5677, "rel": 25.397, "event": "proc_end", "pid": 5884, "exe": "cmd.exe"}
+{"t": 1794646264.3643, "rel": 28.194, "event": "proc_end", "pid": 63164, "exe": "python.exe"}
+{"t": 1794646264.6453, "rel": 28.475, "event": "proc_end", "pid": 75604, "exe": "python.exe"}
+{"t": 1794646270.2519, "rel": 34.081, "event": "step_done", "label": "slash", "shown": null, "screen": "02-slash.txt", "invocations": 5}
+{"t": 1794646270.2519, "rel": 34.082, "event": "keys", "label": "close", "keys": ""}
+{"t": 1794646270.3051, "rel": 34.135, "event": "proc_start", "pid": 45092, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646270.3052, "rel": 34.135, "event": "proc_start", "pid": 54644, "exe": "python.exe", "parent": 45092}
+{"t": 1794646270.5853, "rel": 34.415, "event": "proc_start", "pid": 71140, "exe": "cmd.exe", "parent": 13640}
+{"t": 1794646270.5853, "rel": 34.415, "event": "proc_start", "pid": 72948, "exe": "python.exe", "parent": 71140}
+{"t": 1794646270.5854, "rel": 34.415, "event": "proc_end", "pid": 45092, "exe": "cmd.exe"}
+{"t": 1794646275.587, "rel": 39.417, "event": "proc_end", "pid": 71140, "exe": "cmd.exe"}
+{"t": 1794646278.3708, "rel": 42.2, "event": "proc_end", "pid": 54644, "exe": "python.exe"}
+{"t": 1794646278.696, "rel": 42.526, "event": "proc_end", "pid": 72948, "exe": "python.exe"}
+{"t": 1794646284.2808, "rel": 48.11, "event": "step_done", "label": "close", "shown": null, "screen": "03-close.txt", "invocations": 7}
+{"t": 1794646285.3569, "rel": 49.187, "event": "pty_eof"}
+{"t": 1794646285.3833, "rel": 49.213, "event": "exit", "alive": false, "leftover_children": {}}

@@ -30,13 +30,13 @@ The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-C
 
 ## Status
 
-There is no Rust crate yet. Describe agyline as a planned program, and describe `ref/agy-patch` as the line that runs today.
+`agyline` is implemented as the single Rust crate in this repository. `ref/agy-patch` is the local gitignored baseline for the `cometix` preset.
 
-`ref/` is gitignored local reference. Read it. Implement the application in the crate, and leave the files under `ref/` unchanged.
+`ref/` is gitignored local reference. Read it when checking parity. Implement changes in the crate, and leave the files under `ref/` unchanged.
 
 ## Default line
 
-Match `ref/agy-patch/statusline.ps1` for default segments, labels, colors, JSON fields, and thresholds. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
+The default layout shows the selected model group's 5-hour and weekly quotas with reset countdowns on the second row. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
 
 Stdin fields the scripts already read:
 
@@ -54,7 +54,7 @@ The status line may read the cache relay's existing state file. Rewriting `cache
 
 `AGY_THEME`, `AGY_STATUSLINE_LINES`, `AGY_STATUSLINE_INDENT`, `AGY_SHOW_DEFAULT_MODE`, and `AGY_CACHE_RELAY` are behavior to preserve. New settings go in `~/.gemini/agyline/config.toml`. `AGYLINE_HOME` moves that directory. Once a TOML key is chosen, the loader and both READMEs use that key.
 
-A terminal stdin opens the configurator. Any other stdin is a render. The preview and the live line share one renderer. The default config reproduces the reference line. Segment order and colors come from the config.
+A terminal stdin opens the configurator. Any other stdin is a render. The preview and the live line share one renderer. Segment order and colors come from the config.
 
 ## Performance
 
@@ -67,5 +67,11 @@ Measure a change that claims to be faster. A cache that can change the printed t
 - One Cargo package until a split has a reason.
 - Imports stay at the top of the file.
 - A `match` on a union or enum ends with a `never` check.
-- Comments and commit messages are in English.
+- Comments and commit messages are in English. Comment the reason, not the statement; what earns a comment is in [.trellis/spec/code-comments.md](.trellis/spec/code-comments.md).
 - Commit only when asked. No Cursor trailer and no `Co-authored-by` for Cursor. Commit with local `git commit -F`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues, specs, and wayfinder maps are GitHub issues in `bahayonghang/agyline`, a public repo. See `docs/agents/issue-tracker.md`.

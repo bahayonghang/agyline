@@ -1,0 +1,13 @@
+{
+ "t0": 1794645877.0716858,
+ "kind": "none",
+ "steps": [
+  "boot||15",
+  "slash|/|3",
+  "model|model|2",
+  "enter|\\r|4",
+  "esc|\\x1b|4",
+  "idle||6"
+ ],
+ "timeline": []
+}

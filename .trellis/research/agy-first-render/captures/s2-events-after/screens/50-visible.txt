@@ -1,0 +1,40 @@
+     ▀▀▀▀▀▀       Gemini API key
+    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (Low)
+   ▄▀▀    ▀▀▄     C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s2-events-after/ws
+  ▄▀▀      ▀▀▄
+
+> /model
+  ⎿  Exited /model command
+
+> /statusline
+  ⎿  Usage:
+       /statusline                 Toggle statusline on/off.
+       /statusline <command>       Configure a custom shell command to render the statusline.
+       /statusline delete          Delete the custom command and revert to the built-in default.
+       /statusline on | enable     Enable the statusline.
+       /statusline off | disable   Disable the statusline.
+       /statusline help            Show this help message.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Switch Model
+
+  Search:
+          ────────────────────
+
+  Gemini 4 Carbon
+  Gemini 4 Hydrogen
+  Gemini 4 Argon
+  Gemini 3.8 Flash
+  Gemini 3.7 Flash
+  Gemini 3.6 Flash
+> Gemini 3.1 Pro    (current)
+
+  Effort  ◂            ◉──────────────────────○            ▸
+                      low                   high
+            Faster responses, lighter reasoning — great for simpler tasks
+
+Keyboard: ↑/↓ Navigate  ←/→ Effort  enter Select  esc Go Back
+
+AGYLINE-MARK #0028 03:47:44.394

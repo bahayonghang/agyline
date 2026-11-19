@@ -1,0 +1,59 @@
+{"t": 1794646482.9285, "rel": 0.042, "event": "spawn", "pid": 29008, "argv": ["C:\\Users\\<user>\\AppData\\Local\\agy\\bin\\agy.exe", "--settings", "{\"modelProvider\": \"gemini\"}"], "cwd": "C:\\Users\\<user>\\AppData\\Local\\Temp\\agyline-research-fr\\runs\\s7-color-minimal\\ws", "size": "40x120", "kind": "minimal", "status_command": "python -I D:/Documents/Code/Web/Exp/agyline/.trellis/research/agy-first-render/harness/sl_logger.py C:/Users/<user>/AppData/Local/Temp/agyline-research-fr/runs/s7-color-minimal/invocations minimal"}
+{"t": 1794646482.9304, "rel": 0.044, "event": "wait", "label": "boot"}
+{"t": 1794646482.9383, "rel": 0.052, "event": "first_output"}
+{"t": 1794646482.9397, "rel": 0.053, "event": "query", "what": "DA1"}
+{"t": 1794646483.3399, "rel": 0.453, "event": "proc_start", "pid": 17940, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646483.3425, "rel": 0.456, "event": "query", "what": "OSC11"}
+{"t": 1794646483.3941, "rel": 0.508, "event": "proc_start", "pid": 15216, "exe": "python.exe", "parent": 17940}
+{"t": 1794646483.4401, "rel": 0.554, "event": "proc_end", "pid": 17940, "exe": "cmd.exe"}
+{"t": 1794646483.4402, "rel": 0.554, "event": "proc_end", "pid": 15216, "exe": "python.exe"}
+{"t": 1794646483.4462, "rel": 0.56, "event": "visible_change", "shown": "AGYLINE-MARK #0001 03:54:43.391", "screen": "01-visible.txt"}
+{"t": 1794646483.7357, "rel": 0.849, "event": "proc_start", "pid": 65768, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646483.7358, "rel": 0.849, "event": "proc_start", "pid": 63828, "exe": "python.exe", "parent": 65768}
+{"t": 1794646483.7794, "rel": 0.893, "event": "proc_end", "pid": 63828, "exe": "python.exe"}
+{"t": 1794646483.7959, "rel": 0.909, "event": "visible_change", "shown": "AGYLINE-MARK #0002 03:54:43.737", "screen": "02-visible.txt"}
+{"t": 1794646483.8259, "rel": 0.939, "event": "proc_end", "pid": 65768, "exe": "cmd.exe"}
+{"t": 1794646497.9566, "rel": 15.07, "event": "step_done", "label": "boot", "shown": "AGYLINE-MARK #0002 03:54:43.737", "screen": "03-boot.txt", "invocations": 2}
+{"t": 1794646497.9567, "rel": 15.07, "event": "keys", "label": "slash", "keys": "/"}
+{"t": 1794646498.0086, "rel": 15.122, "event": "proc_start", "pid": 76524, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646498.0087, "rel": 15.122, "event": "proc_start", "pid": 23980, "exe": "python.exe", "parent": 76524}
+{"t": 1794646498.0712, "rel": 15.185, "event": "visible_change", "shown": "AGYLINE-MARK #0003 03:54:58.026", "screen": "04-visible.txt"}
+{"t": 1794646498.1044, "rel": 15.218, "event": "proc_end", "pid": 76524, "exe": "cmd.exe"}
+{"t": 1794646498.1045, "rel": 15.218, "event": "proc_end", "pid": 23980, "exe": "python.exe"}
+{"t": 1794646498.2875, "rel": 15.401, "event": "proc_start", "pid": 53340, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646498.3347, "rel": 15.448, "event": "proc_start", "pid": 77120, "exe": "python.exe", "parent": 53340}
+{"t": 1794646498.371, "rel": 15.485, "event": "visible_change", "shown": "AGYLINE-MARK #0004 03:54:58.324", "screen": "05-visible.txt"}
+{"t": 1794646498.3793, "rel": 15.493, "event": "proc_end", "pid": 53340, "exe": "cmd.exe"}
+{"t": 1794646498.3794, "rel": 15.493, "event": "proc_end", "pid": 77120, "exe": "python.exe"}
+{"t": 1794646500.9686, "rel": 18.082, "event": "step_done", "label": "slash", "shown": "AGYLINE-MARK #0004 03:54:58.324", "screen": "06-slash.txt", "invocations": 4}
+{"t": 1794646500.9686, "rel": 18.082, "event": "keys", "label": "model", "keys": "model"}
+{"t": 1794646503.03, "rel": 20.144, "event": "step_done", "label": "model", "shown": "AGYLINE-MARK #0004 03:54:58.324", "screen": "07-model.txt", "invocations": 4}
+{"t": 1794646503.0301, "rel": 20.144, "event": "keys", "label": "enter", "keys": "\r"}
+{"t": 1794646503.0663, "rel": 20.18, "event": "proc_start", "pid": 57628, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646503.1073, "rel": 20.221, "event": "proc_start", "pid": 72188, "exe": "python.exe", "parent": 57628}
+{"t": 1794646503.1739, "rel": 20.287, "event": "visible_change", "shown": "AGYLINE-MARK #0005 03:55:03.120", "screen": "08-visible.txt"}
+{"t": 1794646503.2186, "rel": 20.332, "event": "proc_end", "pid": 57628, "exe": "cmd.exe"}
+{"t": 1794646503.2187, "rel": 20.332, "event": "proc_end", "pid": 72188, "exe": "python.exe"}
+{"t": 1794646503.4035, "rel": 20.517, "event": "proc_start", "pid": 43340, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646503.447, "rel": 20.561, "event": "proc_start", "pid": 25436, "exe": "python.exe", "parent": 43340}
+{"t": 1794646503.4906, "rel": 20.604, "event": "visible_change", "shown": "AGYLINE-MARK #0006 03:55:03.443", "screen": "09-visible.txt"}
+{"t": 1794646503.497, "rel": 20.611, "event": "proc_end", "pid": 43340, "exe": "cmd.exe"}
+{"t": 1794646503.497, "rel": 20.611, "event": "proc_end", "pid": 25436, "exe": "python.exe"}
+{"t": 1794646507.0597, "rel": 24.173, "event": "step_done", "label": "enter", "shown": "AGYLINE-MARK #0006 03:55:03.443", "screen": "10-enter.txt", "invocations": 6}
+{"t": 1794646507.0598, "rel": 24.173, "event": "keys", "label": "esc", "keys": "\u001b"}
+{"t": 1794646507.2035, "rel": 24.317, "event": "proc_start", "pid": 14152, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646507.2036, "rel": 24.317, "event": "proc_start", "pid": 62632, "exe": "python.exe", "parent": 14152}
+{"t": 1794646507.2542, "rel": 24.368, "event": "visible_change", "shown": "AGYLINE-MARK #0007 03:55:07.215", "screen": "11-visible.txt"}
+{"t": 1794646507.3108, "rel": 24.424, "event": "proc_end", "pid": 14152, "exe": "cmd.exe"}
+{"t": 1794646507.3109, "rel": 24.424, "event": "proc_end", "pid": 62632, "exe": "python.exe"}
+{"t": 1794646507.4982, "rel": 24.612, "event": "proc_start", "pid": 75740, "exe": "cmd.exe", "parent": 29008}
+{"t": 1794646507.4983, "rel": 24.612, "event": "proc_start", "pid": 46228, "exe": "python.exe", "parent": 75740}
+{"t": 1794646507.5545, "rel": 24.668, "event": "visible_change", "shown": "AGYLINE-MARK #0008 03:55:07.513", "screen": "12-visible.txt"}
+{"t": 1794646507.5887, "rel": 24.702, "event": "proc_end", "pid": 75740, "exe": "cmd.exe"}
+{"t": 1794646507.5888, "rel": 24.702, "event": "proc_end", "pid": 46228, "exe": "python.exe"}
+{"t": 1794646511.0676, "rel": 28.181, "event": "step_done", "label": "esc", "shown": "AGYLINE-MARK #0008 03:55:07.513", "screen": "13-esc.txt", "invocations": 8}
+{"t": 1794646511.0676, "rel": 28.181, "event": "wait", "label": "idle"}
+{"t": 1794646517.107, "rel": 34.221, "event": "step_done", "label": "idle", "shown": "AGYLINE-MARK #0008 03:55:07.513", "screen": "14-idle.txt", "invocations": 8}
+{"t": 1794646517.9896, "rel": 35.103, "event": "visible_change", "shown": null, "screen": "15-hidden.txt"}
+{"t": 1794646518.1999, "rel": 35.313, "event": "pty_eof"}
+{"t": 1794646518.2203, "rel": 35.334, "event": "exit", "alive": false, "leftover_children": {}}
