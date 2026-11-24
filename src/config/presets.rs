@@ -333,10 +333,12 @@ pub fn apply_preset(
         PresetScope::All => {
             doc.lines = built.lines;
             doc.single_line = built.single_line;
+            doc.compact_at = built.compact_at;
             doc.palette = built.palette;
             doc.theme = built.theme;
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
+            doc.item_style = built.item_style;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;
@@ -344,12 +346,14 @@ pub fn apply_preset(
         PresetScope::Layout => {
             doc.lines = built.lines;
             doc.single_line = built.single_line;
+            doc.compact_at = built.compact_at;
         }
         PresetScope::Style => {
             doc.palette = built.palette;
             doc.theme = built.theme;
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
+            doc.item_style = built.item_style;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;

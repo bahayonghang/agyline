@@ -6,7 +6,7 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::config::EffectiveConfig;
+use crate::config::{EffectiveConfig, ItemStyle};
 use crate::render::{
     Ansi16Color, ColorToken, EffectiveColorDepth, RenderedFrame, ResolvedColor, TextStyle,
 };
@@ -91,7 +91,9 @@ pub fn rendered_frame_to_ratatui_lines(
         | EffectiveColorDepth::Ansi16 => false,
     };
 
-    let sep_style = if plain_mode {
+    let row_sep = config.effective_row_separator();
+    let framed_mode = config.effective_item_style() != ItemStyle::Minimal;
+    let sep_style = if plain_mode || framed_mode {
         Style::default()
     } else {
         style_for_resolved(config.resolve_span_color(ColorToken::Separator))
@@ -116,8 +118,8 @@ pub fn rendered_frame_to_ratatui_lines(
         }
 
         for (idx, item) in line.items.iter().enumerate() {
-            if idx > 0 && !config.separator.is_empty() {
-                spans.push(Span::styled(config.separator.clone(), sep_style));
+            if idx > 0 && !row_sep.is_empty() {
+                spans.push(Span::styled(row_sep.to_string(), sep_style));
             }
             for sp in &item.spans {
                 if sp.text.is_empty() {

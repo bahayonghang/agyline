@@ -151,6 +151,55 @@ impl OverflowMode {
     }
 }
 
+/// Row-level `Container Style` framing around rendered items: separator-divided `minimal`,
+/// padded surface `badge`, or Powerline-capped `pill`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ItemStyle {
+    #[default]
+    Minimal,
+    Badge,
+    Pill,
+}
+
+impl ItemStyle {
+    pub const ALL: [Self; 3] = [Self::Minimal, Self::Badge, Self::Pill];
+
+    pub const fn as_key(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Badge => "badge",
+            Self::Pill => "pill",
+        }
+    }
+
+    pub fn from_key(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "minimal" => Some(Self::Minimal),
+            "badge" => Some(Self::Badge),
+            "pill" => Some(Self::Pill),
+            _ => None,
+        }
+    }
+}
+
+/// Default `Compact Threshold` in terminal columns; `0` disables automatic single-row collapse.
+pub const DEFAULT_COMPACT_AT: usize = 88;
+const MAX_COMPACT_AT: usize = 500;
+
+/// Resolves semantic separator presets (`pipe`, `dashed`, `dot`, `square`, `none`) and strips
+/// control characters from arbitrary raw strings while preserving surrounding spacing.
+pub fn resolve_separator(raw: &str) -> String {
+    let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
+    match clean.trim().to_ascii_lowercase().as_str() {
+        "pipe" => " \u{2502} ".to_string(),
+        "dashed" => " \u{250a} ".to_string(),
+        "dot" => " \u{2022} ".to_string(),
+        "square" => " \u{25aa} ".to_string(),
+        "none" => "  ".to_string(),
+        _ => clean,
+    }
+}
+
 /// What `presets::apply_preset` replaces: rows only, style only, or both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresetScope {
@@ -537,9 +586,12 @@ pub struct ConfigDoc {
     pub theme: ThemeSetting,
     pub glyphs: GlyphSet,
     pub color_depth: ColorDepth,
+    pub item_style: ItemStyle,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
+    /// `Compact Threshold` in columns (`0` disables automatic single-row collapse).
+    pub compact_at: usize,
     pub overflow: OverflowMode,
     /// Freshness window for the cached git state, in ms. The render reads that cache and never
     /// waits on git; a detached `__refresh-git` worker refills it.
@@ -567,11 +619,13 @@ impl ConfigDoc {
             theme: ThemeSetting::Auto,
             glyphs: GlyphSet::Nerd,
             color_depth: ColorDepth::Auto,
+            item_style: ItemStyle::Minimal,
             // statusline.ps1 joins items with $SEP_PIPE = " | ".
             separator: " | ".to_string(),
             // Both reference scripts default the indent to two spaces.
             indent: "  ".to_string(),
             single_line: false,
+            compact_at: 0,
             overflow: OverflowMode::Fit,
             // statusline.py reuses its vcs cache while it is under 2 s old.
             git_cache_ms: 2000,
@@ -765,9 +819,15 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
         "color_depth = {}",
         quote_toml_str(doc.color_depth.as_key())
     );
+    let _ = writeln!(
+        out,
+        "item_style = {}",
+        quote_toml_str(doc.item_style.as_key())
+    );
     let _ = writeln!(out, "separator = {}", quote_toml_str(&doc.separator));
     let _ = writeln!(out, "indent = {}", quote_toml_str(&doc.indent));
     let _ = writeln!(out, "single_line = {}", doc.single_line);
+    let _ = writeln!(out, "compact_at = {}", doc.compact_at);
     let _ = writeln!(out, "overflow = {}", quote_toml_str(doc.overflow.as_key()));
 
     out.push_str("\n[thresholds]\n");
@@ -841,9 +901,11 @@ pub struct EffectiveConfig {
     pub color_depth: ColorDepth,
     /// What `color_depth` resolved to; the renderer quantizes every color with this.
     pub effective_color_depth: EffectiveColorDepth,
+    pub item_style: ItemStyle,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
+    pub compact_at: usize,
     pub overflow: OverflowMode,
     /// True when any mode slot asks for the default pill; the env force below still wins.
     pub show_default_mode: bool,
@@ -963,10 +1025,16 @@ impl EffectiveConfig {
             .any(|slot| slot.id == ItemId::Mode && slot.show_default == Some(true));
         let show_default_mode = force_show_default_mode.unwrap_or(any_slot_shows_default);
 
-        let separator = if doc.glyphs == GlyphSet::Ascii && doc.separator == " \u{2502} " {
-            " | ".to_string()
+        let resolved_sep = resolve_separator(&doc.separator);
+        let separator = if doc.glyphs == GlyphSet::Ascii {
+            match resolved_sep.as_str() {
+                " \u{2502} " | " \u{250a} " => " | ".to_string(),
+                " \u{2022} " => " . ".to_string(),
+                " \u{25aa} " => " - ".to_string(),
+                _ => resolved_sep,
+            }
         } else {
-            doc.separator.clone()
+            resolved_sep
         };
 
         Self {
@@ -977,9 +1045,11 @@ impl EffectiveConfig {
             glyphs: doc.glyphs,
             color_depth: doc.color_depth,
             effective_color_depth,
+            item_style: doc.item_style,
             separator,
             indent,
             single_line,
+            compact_at: doc.compact_at,
             overflow: doc.overflow,
             show_default_mode,
             force_show_default_mode,
@@ -997,6 +1067,31 @@ impl EffectiveConfig {
     pub fn resolve_span_color(&self, spec: impl Into<ColorSpec>) -> Option<ResolvedColor> {
         let resolved = self.resolved_palette.resolve_spec(spec.into());
         resolved.quantize(self.effective_color_depth)
+    }
+
+    /// Resolves `Container Style` against terminal capabilities: `pill` degrades to `badge`
+    /// without Nerd Font glyphs, and both degrade to `minimal` below 256 colors.
+    pub fn effective_item_style(&self) -> ItemStyle {
+        match self.effective_color_depth {
+            EffectiveColorDepth::Ansi16 | EffectiveColorDepth::None => ItemStyle::Minimal,
+            EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256 => {
+                match self.item_style {
+                    ItemStyle::Pill if self.glyphs != GlyphSet::Nerd => ItemStyle::Badge,
+                    ItemStyle::Minimal => ItemStyle::Minimal,
+                    ItemStyle::Badge => ItemStyle::Badge,
+                    ItemStyle::Pill => ItemStyle::Pill,
+                }
+            }
+        }
+    }
+
+    /// Row separator placed between adjacent items: single space in framed container modes,
+    /// otherwise the resolved `separator` string.
+    pub fn effective_row_separator(&self) -> &str {
+        match self.effective_item_style() {
+            ItemStyle::Minimal => &self.separator,
+            ItemStyle::Badge | ItemStyle::Pill => " ",
+        }
     }
 }
 
@@ -1081,6 +1176,11 @@ fn parse_config_overlay_with_home(
                     "invalid 'color_depth': expected auto, truecolor, 256, 16, or none".to_string(),
                 ),
             },
+            "item_style" => match val.as_str().and_then(ItemStyle::from_key) {
+                Some(style) => doc.item_style = style,
+                None => warnings
+                    .push("invalid 'item_style': expected minimal, badge, or pill".to_string()),
+            },
             "separator" => match val.as_str() {
                 Some(s) => doc.separator = s.to_string(),
                 None => warnings.push("invalid 'separator': expected string".to_string()),
@@ -1092,6 +1192,14 @@ fn parse_config_overlay_with_home(
             "single_line" => match val.as_bool() {
                 Some(b) => doc.single_line = b,
                 None => warnings.push("invalid 'single_line': expected boolean".to_string()),
+            },
+            "compact_at" => match val.as_integer() {
+                Some(v) if (0..=MAX_COMPACT_AT as i64).contains(&v) => {
+                    doc.compact_at = v as usize;
+                }
+                _ => warnings.push(format!(
+                    "invalid 'compact_at': expected integer in 0..={MAX_COMPACT_AT}"
+                )),
             },
             "overflow" => match val.as_str().and_then(OverflowMode::from_key) {
                 Some(om) => doc.overflow = om,

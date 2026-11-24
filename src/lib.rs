@@ -10,12 +10,12 @@ pub use collect::{
     read_transcript_start_sec_bounded, refresh_git_at, resolve_git_frame,
 };
 pub use config::{
-    ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigLoadResult, ConfigSyntaxError, EffectiveConfig,
-    GlyphSet, ItemId, ItemSlot, OverflowMode, PaletteOverrides, PresetScope, ThemePolarity,
-    ThemeSetting, ThresholdsConfig, inspect_env_overrides, load_config_doc, parse_config_doc,
-    parse_config_doc_with_home,
+    ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigLoadResult, ConfigSyntaxError,
+    DEFAULT_COMPACT_AT, EffectiveConfig, GlyphSet, ItemId, ItemSlot, ItemStyle, OverflowMode,
+    PaletteOverrides, PresetScope, ThemePolarity, ThemeSetting, ThresholdsConfig,
+    inspect_env_overrides, load_config_doc, parse_config_doc, parse_config_doc_with_home,
     presets::{PresetInfo, apply_preset, build_preset_doc, builtin_presets, discover_presets},
-    serialize_config_doc,
+    resolve_separator, serialize_config_doc,
 };
 pub use input::{MAX_STDIN_BYTES, Payload, QuotaBucketData, SubagentSummary, parse_stdin_payload};
 pub use install::{

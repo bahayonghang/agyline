@@ -9,11 +9,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agyline::{
-    ColorDepth, ColorToken, ConfigDoc, EffectiveConfig, GlyphSet, ItemId, ItemSlot, NoopSpawner,
-    OverflowMode, PresetScope, RenderEnv, SlotOutcome, ThemePolarity, ThemeSetting, apply_preset,
-    builtin_palettes, builtin_presets, discover_palettes, discover_presets, inspect_env_overrides,
-    items, load_config_doc, parse_config_doc, render_lines_with_width, run_live_frame,
-    serialize_config_doc, str_display_width,
+    ColorDepth, ColorSpec, ColorToken, ConfigDoc, DEFAULT_COMPACT_AT, EffectiveConfig, GlyphSet,
+    ItemId, ItemSlot, ItemStyle, NoopSpawner, OverflowMode, PresetScope, RenderEnv, SlotOutcome,
+    ThemePolarity, ThemeSetting, apply_preset, builtin_palettes, builtin_presets,
+    discover_palettes, discover_presets, emit_ansi, emit_plain, inspect_env_overrides, items,
+    load_config_doc, parse_config_doc, render_lines_with_width, rendered_frame_to_ratatui_lines,
+    resolve_separator, run_live_frame, serialize_config_doc, str_display_width,
 };
 
 static SANDBOX_SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -1275,4 +1276,556 @@ fn auto_color_depth_detects_apple_terminal_and_modern_truecolor_hints() {
         resolve_effective_color_depth(ColorDepth::Auto, &map(&[("TERM", "xterm")])),
         EffectiveColorDepth::Ansi16
     );
+}
+
+// Container Style (`item_style`), semantic separator aliases, and `compact_at` parse, validate,
+// preserve existing preset compatibility, respect PresetScope, and round-trip cleanly.
+#[test]
+fn container_style_separator_aliases_and_compact_at_parse_validate_and_roundtrip() {
+    assert_eq!(DEFAULT_COMPACT_AT, 88);
+    assert_eq!(ItemStyle::default(), ItemStyle::Minimal);
+    assert_eq!(
+        ItemStyle::ALL,
+        [ItemStyle::Minimal, ItemStyle::Badge, ItemStyle::Pill]
+    );
+    assert_eq!(ItemStyle::Minimal.as_key(), "minimal");
+    assert_eq!(ItemStyle::Badge.as_key(), "badge");
+    assert_eq!(ItemStyle::Pill.as_key(), "pill");
+    assert_eq!(ItemStyle::from_key("  PILL "), Some(ItemStyle::Pill));
+    assert_eq!(ItemStyle::from_key("Badge"), Some(ItemStyle::Badge));
+    assert_eq!(ItemStyle::from_key("minimal"), Some(ItemStyle::Minimal));
+    assert_eq!(ItemStyle::from_key("glass"), None);
+
+    // Existing presets stay backward-compatible (minimal containers, compact_at disabled).
+    for preset in ["default", "hud", "classic", "cometix"] {
+        let doc = agyline::build_preset_doc(preset, None).expect("builtin preset");
+        assert_eq!(doc.item_style, ItemStyle::Minimal, "preset={preset}");
+        assert_eq!(doc.compact_at, 0, "preset={preset}");
+    }
+
+    // Semantic separator aliases resolve case-insensitively; raw strings survive with control chars stripped.
+    assert_eq!(resolve_separator("pipe"), " \u{2502} ");
+    assert_eq!(resolve_separator("  PIPE  "), " \u{2502} ");
+    assert_eq!(resolve_separator("dashed"), " \u{250a} ");
+    assert_eq!(resolve_separator("dot"), " \u{2022} ");
+    assert_eq!(resolve_separator("square"), " \u{25aa} ");
+    assert_eq!(resolve_separator("none"), "  ");
+    assert_eq!(resolve_separator(" | "), " | ");
+    assert_eq!(resolve_separator(" │ "), " │ ");
+    assert_eq!(resolve_separator(" / "), " / ");
+    assert_eq!(resolve_separator(""), "");
+    assert_eq!(resolve_separator(" \x07|\n\t\r "), " | ");
+    assert_eq!(resolve_separator(" \x1b/\x7f "), " / ");
+
+    // TOML round-trip keeps the user's semantic alias while EffectiveConfig resolves it (and degrades for ASCII).
+    let raw = r#"
+item_style = "pill"
+separator = "dashed"
+compact_at = 88
+"#;
+    let (doc, warnings) = parse_config_doc(raw).expect("parse valid config");
+    assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    assert_eq!(doc.item_style, ItemStyle::Pill);
+    assert_eq!(doc.separator, "dashed");
+    assert_eq!(doc.compact_at, 88);
+
+    let serialized = serialize_config_doc(&doc);
+    assert!(serialized.contains("item_style = \"pill\""));
+    assert!(serialized.contains("separator = \"dashed\""));
+    assert!(serialized.contains("compact_at = 88"));
+    let (reparsed, rewarnings) = parse_config_doc(&serialized).expect("reparse");
+    assert!(
+        rewarnings.is_empty(),
+        "unexpected rewarnings: {rewarnings:?}"
+    );
+    assert_eq!(reparsed, doc);
+
+    let eff_nerd = EffectiveConfig::from_doc(&doc, None, &BTreeMap::new(), false);
+    assert_eq!(eff_nerd.separator, " \u{250a} ");
+    assert_eq!(eff_nerd.item_style, ItemStyle::Pill);
+    assert_eq!(eff_nerd.compact_at, 88);
+
+    let mut ascii_doc = doc.clone();
+    ascii_doc.glyphs = GlyphSet::Ascii;
+    let eff_ascii = EffectiveConfig::from_doc(&ascii_doc, None, &BTreeMap::new(), false);
+    assert_eq!(eff_ascii.separator, " | ");
+
+    for (alias, expected_ascii) in [
+        ("pipe", " | "),
+        ("dashed", " | "),
+        ("dot", " . "),
+        ("square", " - "),
+        ("none", "  "),
+    ] {
+        ascii_doc.separator = alias.to_string();
+        let eff = EffectiveConfig::from_doc(&ascii_doc, None, &BTreeMap::new(), false);
+        assert_eq!(eff.separator, expected_ascii, "ascii alias={alias}");
+    }
+
+    // Invalid item_style / compact_at degrade with warnings instead of failing load.
+    let bad_raw = r#"
+item_style = "bubble"
+compact_at = 501
+"#;
+    let (bad_doc, bad_warnings) = parse_config_doc(bad_raw).expect("tolerant parse");
+    assert_eq!(bad_doc.item_style, ItemStyle::Minimal);
+    assert_eq!(bad_doc.compact_at, 0);
+    assert!(bad_warnings.iter().any(|w| w.contains("item_style")));
+    assert!(bad_warnings.iter().any(|w| w.contains("compact_at")));
+
+    let neg_raw = "compact_at = -10\n";
+    let (neg_doc, neg_warnings) = parse_config_doc(neg_raw).expect("tolerant negative parse");
+    assert_eq!(neg_doc.compact_at, 0);
+    assert!(neg_warnings.iter().any(|w| w.contains("compact_at")));
+
+    // PresetScope::Style copies item_style only; Layout copies compact_at only; All copies both.
+    let sb = Sandbox::new("preset_container_scope");
+    let presets_dir = sb.root.join("presets");
+    fs::create_dir_all(&presets_dir).expect("create presets dir");
+    fs::write(
+        presets_dir.join("pill-compact.toml"),
+        r#"
+item_style = "pill"
+compact_at = 96
+separator = "dot"
+
+[[line]]
+items = ["model", "git"]
+"#,
+    )
+    .expect("write custom preset");
+
+    let mut target = ConfigDoc::default();
+    assert!(apply_preset(
+        &mut target,
+        "pill-compact",
+        PresetScope::Style,
+        Some(&sb.root)
+    ));
+    assert_eq!(target.item_style, ItemStyle::Pill);
+    assert_eq!(target.separator, "dot");
+    assert_eq!(
+        target.compact_at, 0,
+        "Style scope must not touch compact_at"
+    );
+
+    let mut target_layout = ConfigDoc::default();
+    assert!(apply_preset(
+        &mut target_layout,
+        "pill-compact",
+        PresetScope::Layout,
+        Some(&sb.root)
+    ));
+    assert_eq!(target_layout.compact_at, 96);
+    assert_eq!(
+        target_layout.item_style,
+        ItemStyle::Minimal,
+        "Layout scope must not touch item_style"
+    );
+
+    let mut target_all = ConfigDoc::default();
+    assert!(apply_preset(
+        &mut target_all,
+        "pill-compact",
+        PresetScope::All,
+        Some(&sb.root)
+    ));
+    assert_eq!(target_all.item_style, ItemStyle::Pill);
+    assert_eq!(target_all.compact_at, 96);
+}
+
+// Container Style frames eligible items in `badge` (Surface/SurfaceHi) and `pill` (Powerline caps),
+// leaves graphic/lightweight items un-boxed, degrades cleanly by glyph/depth, and never overflows.
+#[test]
+fn container_style_wraps_eligible_items_and_degrades_across_capabilities() {
+    let mut base_doc = ConfigDoc::cometix_base();
+    base_doc.palette = "catppuccin".to_string();
+    base_doc.theme = ThemeSetting::Dark;
+    base_doc.separator = "pipe".to_string();
+
+    let mut ctx_bar = ItemSlot::new(ItemId::Context);
+    ctx_bar.style = Some("bar".to_string());
+    let ctx_plain = ItemSlot::new(ItemId::Context);
+    let mut q_group = ItemSlot::new(ItemId::QuotaGroup);
+    q_group.family = Some("gemini".to_string());
+
+    base_doc.lines = vec![vec![
+        ItemSlot::new(ItemId::Status),
+        ItemSlot::new(ItemId::Model),
+        ctx_bar,
+        ctx_plain,
+        ItemSlot::new(ItemId::Git),
+        ItemSlot::new(ItemId::Dir),
+        q_group,
+        ItemSlot::new(ItemId::Tokens),
+    ]];
+
+    let payload_bytes = serde_json::to_vec(&serde_json::json!({
+        "session_id": "container_test",
+        "agent_state": "working",
+        "model": { "display_name": "Claude Opus 4.6", "effort": "high" },
+        "cwd": "/workspace/agyline",
+        "vcs": { "branch": "feat/containers", "dirty": true },
+        "context_window": {
+            "current_usage": {
+                "input_tokens": 12000,
+                "output_tokens": 2400,
+                "cache_read_input_tokens": 88000
+            },
+            "total_input_tokens": 100000,
+            "total_output_tokens": 2400,
+            "context_window_size": 1000000
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.72, "reset_in_seconds": 7200 }
+        }
+    }))
+    .expect("serialize");
+    let frame = agyline::FrameData {
+        payload: agyline::parse_stdin_payload(&payload_bytes).expect("parse"),
+        now_sec: 1_700_000_000,
+        git: Some(agyline::GitFrameState {
+            branch: "feat/containers".to_string(),
+            dirty: true,
+            ..agyline::GitFrameState::default()
+        }),
+        ..agyline::FrameData::default()
+    };
+
+    // Capability degradation matrix for effective_item_style & effective_row_separator.
+    let check_cap = |style: ItemStyle,
+                     depth: ColorDepth,
+                     glyphs: GlyphSet,
+                     exp_style: ItemStyle,
+                     exp_sep: &str| {
+        let mut d = base_doc.clone();
+        d.item_style = style;
+        d.color_depth = depth;
+        d.glyphs = glyphs;
+        let cfg = EffectiveConfig::from_doc(&d, None, &BTreeMap::new(), false);
+        assert_eq!(cfg.effective_item_style(), exp_style);
+        assert_eq!(cfg.effective_row_separator(), exp_sep);
+    };
+    check_cap(
+        ItemStyle::Pill,
+        ColorDepth::TrueColor,
+        GlyphSet::Nerd,
+        ItemStyle::Pill,
+        " ",
+    );
+    check_cap(
+        ItemStyle::Pill,
+        ColorDepth::Ansi256,
+        GlyphSet::Unicode,
+        ItemStyle::Badge,
+        " ",
+    );
+    check_cap(
+        ItemStyle::Pill,
+        ColorDepth::TrueColor,
+        GlyphSet::Ascii,
+        ItemStyle::Badge,
+        " ",
+    );
+    check_cap(
+        ItemStyle::Pill,
+        ColorDepth::Ansi16,
+        GlyphSet::Nerd,
+        ItemStyle::Minimal,
+        " \u{2502} ",
+    );
+    check_cap(
+        ItemStyle::Badge,
+        ColorDepth::None,
+        GlyphSet::Nerd,
+        ItemStyle::Minimal,
+        " \u{2502} ",
+    );
+    check_cap(
+        ItemStyle::Badge,
+        ColorDepth::Ansi256,
+        GlyphSet::Ascii,
+        ItemStyle::Badge,
+        " ",
+    );
+
+    // Badge mode on TrueColor: Model gets SurfaceHi, Git/Tokens/non-bar Context get Surface,
+    // while Status, Context(bar), Dir, and QuotaGroup stay un-boxed.
+    let mut badge_doc = base_doc.clone();
+    badge_doc.item_style = ItemStyle::Badge;
+    badge_doc.color_depth = ColorDepth::TrueColor;
+    badge_doc.glyphs = GlyphSet::Nerd;
+    let badge_cfg = EffectiveConfig::from_doc(&badge_doc, None, &BTreeMap::new(), false);
+    let badge_frame = render_lines_with_width(&frame, &badge_cfg, None);
+    let badge_items = &badge_frame.lines[0].items;
+    assert_eq!(badge_items.len(), 8);
+
+    // 0: Status (un-boxed)
+    assert!(badge_items[0].spans.iter().all(|s| s.style.bg.is_none()));
+    // 1: Model (boxed with SurfaceHi)
+    assert_eq!(
+        badge_items[1].spans.first().map(|s| s.text.as_str()),
+        Some(" ")
+    );
+    assert_eq!(
+        badge_items[1].spans.last().map(|s| s.text.as_str()),
+        Some(" ")
+    );
+    assert!(
+        badge_items[1]
+            .spans
+            .iter()
+            .all(|s| s.style.bg == Some(ColorSpec::Token(ColorToken::SurfaceHi)))
+    );
+    // 2: Context bar (un-boxed)
+    assert!(badge_items[2].spans.iter().all(|s| s.style.bg
+        != Some(ColorSpec::Token(ColorToken::Surface))
+        && s.style.bg != Some(ColorSpec::Token(ColorToken::SurfaceHi))));
+    // 3: Context plain (boxed with Surface)
+    assert!(
+        badge_items[3]
+            .spans
+            .iter()
+            .all(|s| s.style.bg == Some(ColorSpec::Token(ColorToken::Surface)))
+    );
+    // 4: Git (boxed with Surface)
+    assert!(
+        badge_items[4]
+            .spans
+            .iter()
+            .all(|s| s.style.bg == Some(ColorSpec::Token(ColorToken::Surface)))
+    );
+    // 5: Dir (un-boxed)
+    assert!(badge_items[5].spans.iter().all(|s| s.style.bg.is_none()));
+    // 6: QuotaGroup (un-boxed)
+    assert!(badge_items[6].spans.iter().all(|s| s.style.bg
+        != Some(ColorSpec::Token(ColorToken::Surface))
+        && s.style.bg != Some(ColorSpec::Token(ColorToken::SurfaceHi))));
+    // 7: Tokens (boxed with Surface)
+    assert!(
+        badge_items[7]
+            .spans
+            .iter()
+            .all(|s| s.style.bg == Some(ColorSpec::Token(ColorToken::Surface)))
+    );
+
+    let badge_ansi = emit_ansi(&badge_frame, &badge_cfg);
+    // Mocha Surface1 (SurfaceHi) = 0x45,0x47,0x5a (69;71;90), Surface0 (Surface) = 0x31,0x32,0x44 (49;50;68).
+    assert!(badge_ansi.contains("48;2;69;71;90"), "ansi={badge_ansi:?}");
+    assert!(badge_ansi.contains("48;2;49;50;68"), "ansi={badge_ansi:?}");
+    assert!(!badge_ansi.contains('\u{e0b6}'));
+    assert!(!badge_ansi.contains('\u{2502}'));
+
+    // Ratatui preview parity matches emit_plain verbatim with zero ANSI re-parse.
+    let badge_plain = emit_plain(&badge_frame, &badge_cfg);
+    let ratatui_lines = rendered_frame_to_ratatui_lines(&badge_frame, &badge_cfg);
+    let ratatui_text: String = ratatui_lines
+        .iter()
+        .map(|l| {
+            let mut s: String = l.spans.iter().map(|sp| sp.content.as_ref()).collect();
+            s.push('\n');
+            s
+        })
+        .collect();
+    assert_eq!(ratatui_text, badge_plain);
+
+    // Pill mode on TrueColor + Nerd adds rounded Powerline endcaps matching capsule bg.
+    let mut pill_doc = base_doc.clone();
+    pill_doc.item_style = ItemStyle::Pill;
+    pill_doc.color_depth = ColorDepth::TrueColor;
+    pill_doc.glyphs = GlyphSet::Nerd;
+    let pill_cfg = EffectiveConfig::from_doc(&pill_doc, None, &BTreeMap::new(), false);
+    let pill_frame = render_lines_with_width(&frame, &pill_cfg, None);
+    let pill_model = &pill_frame.lines[0].items[1];
+    assert_eq!(
+        pill_model.spans.first().map(|s| s.text.as_str()),
+        Some("\u{e0b6}")
+    );
+    assert_eq!(
+        pill_model.spans.first().map(|s| s.color),
+        Some(ColorSpec::Token(ColorToken::SurfaceHi))
+    );
+    assert_eq!(pill_model.spans.first().and_then(|s| s.style.bg), None);
+    assert_eq!(
+        pill_model.spans.last().map(|s| s.text.as_str()),
+        Some("\u{e0b4}")
+    );
+    assert_eq!(
+        pill_model.spans.last().map(|s| s.color),
+        Some(ColorSpec::Token(ColorToken::SurfaceHi))
+    );
+    assert_eq!(pill_model.spans.last().and_then(|s| s.style.bg), None);
+    // Un-boxed Dir has no Powerline caps.
+    assert!(
+        !pill_frame.lines[0].items[5]
+            .spans
+            .iter()
+            .any(|s| s.text.contains('\u{e0b6}'))
+    );
+
+    // Pill degrades to Badge on Unicode glyphs (no Powerline PUA chars, keeps SurfaceHi bg).
+    let mut pill_uni = pill_doc.clone();
+    pill_uni.glyphs = GlyphSet::Unicode;
+    let pill_uni_cfg = EffectiveConfig::from_doc(&pill_uni, None, &BTreeMap::new(), false);
+    let pill_uni_frame = render_lines_with_width(&frame, &pill_uni_cfg, None);
+    let pill_uni_ansi = emit_ansi(&pill_uni_frame, &pill_uni_cfg);
+    assert!(!pill_uni_ansi.contains('\u{e0b6}'));
+    assert!(!pill_uni_ansi.contains('\u{e0b4}'));
+    assert!(pill_uni_ansi.contains("48;2;69;71;90"));
+
+    // Pill degrades to Minimal on Ansi16 (restores resolved " │ " separator, no surface bg).
+    let mut pill_16 = pill_doc.clone();
+    pill_16.color_depth = ColorDepth::Ansi16;
+    let pill_16_cfg = EffectiveConfig::from_doc(&pill_16, None, &BTreeMap::new(), false);
+    let pill_16_frame = render_lines_with_width(&frame, &pill_16_cfg, None);
+    let pill_16_plain = emit_plain(&pill_16_frame, &pill_16_cfg);
+    assert!(pill_16_plain.contains(" \u{2502} "));
+    assert!(!pill_16_plain.contains('\u{e0b6}'));
+
+    // Pill/Badge narrowing never exceeds tight budgets across all 3 narrowing stages.
+    for budget in [90usize, 50, 24, 10, 4] {
+        for cfg in [&badge_cfg, &pill_cfg] {
+            let narrowed = render_lines_with_width(&frame, cfg, Some(budget));
+            let plain = emit_plain(&narrowed, cfg);
+            let ansi = emit_ansi(&narrowed, cfg);
+            let w = str_display_width(plain.trim_end_matches('\n'));
+            assert!(w <= budget, "width {w} > {budget}: plain={plain:?}");
+            assert!(ansi.ends_with("\x1b[0m\n"));
+        }
+    }
+}
+
+// Compact Threshold (`compact_at`) collapses multi-row layouts strictly below cutoff into one
+// compact row before priority narrowing, while explicit `single_line` / `AGY_STATUSLINE_LINES=1`
+// keeps its original precedence.
+#[test]
+fn compact_threshold_collapses_multi_row_below_cutoff_and_respects_single_line_precedence() {
+    let doc = ConfigDoc {
+        compact_at: DEFAULT_COMPACT_AT, // 88
+        palette: "catppuccin".to_string(),
+        theme: ThemeSetting::Dark,
+        color_depth: ColorDepth::TrueColor,
+        ..ConfigDoc::default()
+    }; // 3-row HUD layout
+
+    let payload_bytes = serde_json::to_vec(&serde_json::json!({
+        "session_id": "compact_at_test",
+        "agent_state": "working",
+        "execution_mode": "accept-edits",
+        "model": { "display_name": "Claude Opus 4.6", "effort": "xHigh" },
+        "cwd": "/home/dev/projects/agyline",
+        "sandbox": { "enabled": false },
+        "context_window": {
+            "current_usage": {
+                "input_tokens": 12000,
+                "output_tokens": 3400,
+                "cache_read_input_tokens": 180000
+            },
+            "total_input_tokens": 192000,
+            "total_output_tokens": 3400,
+            "context_window_size": 1000000
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.68, "reset_in_seconds": 7200 },
+            "3p-5h": { "remaining_fraction": 0.42, "reset_in_seconds": 5400 }
+        },
+        "cost": { "total_usd": 1.25 }
+    }))
+    .expect("serialize");
+    let frame = agyline::FrameData {
+        payload: agyline::parse_stdin_payload(&payload_bytes).expect("parse"),
+        now_sec: 1_700_000_000,
+        git: Some(agyline::GitFrameState {
+            branch: "main".to_string(),
+            dirty: true,
+            modified: 2,
+            ..agyline::GitFrameState::default()
+        }),
+        session_start_sec: Some(1_700_000_000 - 300),
+        ..agyline::FrameData::default()
+    };
+
+    let cfg = EffectiveConfig::from_doc(&doc, None, &BTreeMap::new(), false);
+
+    // Wide (None and 120) and exact threshold boundary (88) must NOT collapse: stays 3 rows.
+    for width in [None, Some(120), Some(88)] {
+        let rendered = render_lines_with_width(&frame, &cfg, width);
+        assert_eq!(
+            rendered.lines.len(),
+            3,
+            "width={width:?} should remain 3 rows"
+        );
+        if let Some(budget) = width {
+            for line in emit_plain(&rendered, &cfg).lines() {
+                assert!(
+                    str_display_width(line) <= budget,
+                    "row exceeded {budget}: {line:?}"
+                );
+            }
+        }
+    }
+
+    // Strictly below 88 collapses to a single compact row and fits every budget without wrapping.
+    for budget in [87usize, 68, 40, 18, 8] {
+        let rendered = render_lines_with_width(&frame, &cfg, Some(budget));
+        assert_eq!(
+            rendered.lines.len(),
+            1,
+            "budget={budget} < 88 must collapse to 1 row"
+        );
+        let plain = emit_plain(&rendered, &cfg);
+        let row_w = str_display_width(plain.trim_end_matches('\n'));
+        assert!(row_w <= budget, "row_w={row_w} > {budget}: {plain:?}");
+    }
+
+    // At 87 cols, compact forms are applied on the collapsed row (context bar drops bar -> Compact)
+    // and row 1/2 high-priority items (like Gemini quota_group at P2) can survive alongside row 0.
+    let collapsed_87 = render_lines_with_width(&frame, &cfg, Some(87));
+    assert_eq!(collapsed_87.slot_outcome(0, 3), Some(SlotOutcome::Compact)); // context bar compacted
+    assert_eq!(collapsed_87.slot_outcome(1, 0), Some(SlotOutcome::Compact)); // Gemini quota_group compacted & kept
+
+    // compact_at = 0 disables automatic collapse even below 88.
+    let mut disabled_doc = doc.clone();
+    disabled_doc.compact_at = 0;
+    let disabled_cfg = EffectiveConfig::from_doc(&disabled_doc, None, &BTreeMap::new(), false);
+    let rendered_74 = render_lines_with_width(&frame, &disabled_cfg, Some(74));
+    assert_eq!(rendered_74.lines.len(), 3);
+
+    // Explicit AGY_STATUSLINE_LINES=1 takes precedence over compact_at: preserves single_line drop
+    // semantics for non-@model secondary rows.
+    let mut env_single = BTreeMap::new();
+    env_single.insert("AGY_STATUSLINE_LINES".to_string(), "1".to_string());
+    let single_cfg = EffectiveConfig::from_doc(&doc, None, &env_single, true);
+    assert!(single_cfg.single_line);
+    let single_rendered = render_lines_with_width(&frame, &single_cfg, Some(80));
+    assert_eq!(single_rendered.lines.len(), 1);
+    // In explicit single_line mode, non-@model row-1/row-2 items are immediately Dropped.
+    assert_eq!(
+        single_rendered.slot_outcome(1, 0),
+        Some(SlotOutcome::Dropped)
+    );
+    assert_eq!(
+        single_rendered.slot_outcome(2, 0),
+        Some(SlotOutcome::Dropped)
+    );
+
+    // Pill container style + compact_at collapse stays wrap-free across wide, boundary, and narrow widths.
+    let mut pill_doc = doc.clone();
+    pill_doc.item_style = ItemStyle::Pill;
+    let pill_cfg = EffectiveConfig::from_doc(&pill_doc, None, &BTreeMap::new(), false);
+    assert_eq!(
+        render_lines_with_width(&frame, &pill_cfg, Some(88))
+            .lines
+            .len(),
+        3
+    );
+    for budget in [87usize, 50, 16] {
+        let rendered = render_lines_with_width(&frame, &pill_cfg, Some(budget));
+        assert_eq!(rendered.lines.len(), 1);
+        let plain = emit_plain(&rendered, &pill_cfg);
+        assert!(
+            str_display_width(plain.trim_end_matches('\n')) <= budget,
+            "pill collapsed exceeded {budget}: {plain:?}"
+        );
+    }
 }
