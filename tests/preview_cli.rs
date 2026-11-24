@@ -49,6 +49,7 @@ impl PreviewSandbox {
             .env_remove("AGY_STATUSLINE_INDENT")
             .env_remove("AGY_SHOW_DEFAULT_MODE")
             .env_remove("AGY_CACHE_RELAY")
+            .env_remove("AGYLINE_DEBUG")
             .env_remove("COLORFGBG")
             .env_remove("NO_COLOR")
             .env_remove("COLORTERM")
@@ -370,6 +371,10 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
         &["preview", "--list", "--all"],
         &["preview", "-i", "-", "-s", "normal"],
         &["preview", "-i", "-", "--list"],
+        &["preview", "--showcase", "-s", "normal"],
+        &["preview", "--showcase", "--all"],
+        &["preview", "--showcase", "--list"],
+        &["preview", "--showcase", "-i", "-"],
         &["preview", "-w", "not_a_number"],
         &["preview", "-w", "-5"],
         &["preview", "-w"],
@@ -394,7 +399,150 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
     let help_out = sb.run(&["preview", "--help"], b"", &[]);
     assert_eq!(help_out.status.code(), Some(0));
     assert!(help_out.stderr.is_empty());
-    assert!(String::from_utf8_lossy(&help_out.stdout).contains("Usage: agyline preview"));
+    let help_txt = String::from_utf8_lossy(&help_out.stdout);
+    assert!(help_txt.contains("Usage: agyline preview"));
+    assert!(
+        help_txt.contains("--showcase"),
+        "preview --help must document --showcase: {help_txt}"
+    );
+}
+
+// `preview --showcase` statelessly renders built-in palette comparisons, high-usage >90%
+// `→ /compact` alert, narrow <88 compact collapse, badge/pill Container Styles, and all semantic
+// separator presets with zero writes under AGYLINE_HOME or AGYLINE_HOME/state.
+#[test]
+fn preview_showcase_renders_gallery_statelessly_and_honors_plain_and_width() {
+    let sb = PreviewSandbox::new("showcase");
+
+    // 1. ANSI showcase gallery without touching AGYLINE_HOME.
+    let ansi_out = sb.run(&["preview", "--showcase"], b"", &[]);
+    assert_eq!(
+        ansi_out.status.code(),
+        Some(0),
+        "stderr: {:?}",
+        String::from_utf8_lossy(&ansi_out.stderr)
+    );
+    assert!(ansi_out.stderr.is_empty());
+    assert!(
+        !sb.home.exists(),
+        "preview --showcase must not create AGYLINE_HOME or state/: {:?}",
+        sb.home
+    );
+    let ansi_txt = String::from_utf8(ansi_out.stdout).expect("utf8");
+    for label in [
+        "catppuccin",
+        "tokyo-night",
+        "nord",
+        "mono",
+        "badge",
+        "pill",
+        "pipe",
+        "dashed",
+        "dot",
+        "square",
+        "none",
+    ] {
+        assert!(
+            ansi_txt.contains(label),
+            "showcase missing '{label}' section:\n{ansi_txt}"
+        );
+    }
+    // Distinct RGB anchors for Catppuccin Mocha (Mauve), Tokyo Night (Cyan), Nord (Frost).
+    assert!(
+        ansi_txt.contains("38;2;203;166;247"),
+        "showcase missing Catppuccin RGB"
+    );
+    assert!(
+        ansi_txt.contains("38;2;125;207;255"),
+        "showcase missing Tokyo Night RGB"
+    );
+    assert!(
+        ansi_txt.contains("38;2;136;192;208"),
+        "showcase missing Nord RGB"
+    );
+    // High-usage >90% alert, badge/pill surface backgrounds, Powerline pill caps, and separators.
+    assert!(
+        ansi_txt.contains("→ /compact"),
+        "showcase missing >90% → /compact alert"
+    );
+    assert!(
+        ansi_txt.contains(";48;2;"),
+        "showcase missing surface background SGR for badge/pill"
+    );
+    assert!(
+        ansi_txt.contains('\u{e0b6}') && ansi_txt.contains('\u{e0b4}'),
+        "showcase missing Powerline pill endcaps"
+    );
+    for sep_ch in ['\u{2502}', '\u{250a}', '\u{2022}', '\u{25aa}'] {
+        assert!(
+            ansi_txt.contains(sep_ch),
+            "showcase missing separator glyph {sep_ch:?}"
+        );
+    }
+
+    // 2. Plain showcase omits ANSI escapes and still shows compact single-row collapse (<88).
+    let plain_out = sb.run(&["preview", "--showcase", "--plain"], b"", &[]);
+    assert_eq!(plain_out.status.code(), Some(0));
+    assert!(plain_out.stderr.is_empty());
+    let plain_txt = String::from_utf8(plain_out.stdout).expect("utf8");
+    assert!(!plain_txt.contains("\x1b["));
+    assert!(plain_txt.contains("→ /compact"));
+
+    // Locate the narrow <88 section and verify it collapsed to a single row <= 78 cols.
+    let mut in_narrow = false;
+    let mut narrow_rows = Vec::new();
+    for line in plain_txt.lines() {
+        if line.starts_with("=== ") {
+            in_narrow = line.contains("<88");
+            continue;
+        }
+        if in_narrow && !line.trim().is_empty() {
+            narrow_rows.push(line);
+        }
+    }
+    assert_eq!(
+        narrow_rows.len(),
+        1,
+        "narrow <88 showcase section must collapse to 1 row, got: {narrow_rows:?}"
+    );
+    assert!(
+        str_display_width(narrow_rows[0]) <= 78,
+        "narrow <88 row width {} > 78: {:?}",
+        str_display_width(narrow_rows[0]),
+        narrow_rows[0]
+    );
+
+    // 3. Explicit `--width` caps every rendered row in the showcase.
+    let capped_out = sb.run(
+        &["preview", "--showcase", "--plain", "--width", "70"],
+        b"",
+        &[],
+    );
+    assert_eq!(capped_out.status.code(), Some(0));
+    let capped_txt = String::from_utf8(capped_out.stdout).expect("utf8");
+    for line in capped_txt.lines() {
+        if line.starts_with("=== ") || line.trim().is_empty() {
+            continue;
+        }
+        let w = str_display_width(line);
+        assert!(
+            w <= 70,
+            "showcase row exceeded --width 70 (got {w}): {line:?}"
+        );
+    }
+
+    // 4. Showcase still works cleanly even if user config.toml selects another preset, with zero
+    // state/ writes.
+    fs::create_dir_all(&sb.home).expect("create home");
+    fs::write(sb.home.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
+    let custom_cfg_out = sb.run(&["preview", "--showcase", "--plain"], b"", &[]);
+    assert_eq!(custom_cfg_out.status.code(), Some(0));
+    let custom_txt = String::from_utf8(custom_cfg_out.stdout).expect("utf8");
+    assert!(custom_txt.contains("→ /compact"));
+    assert!(
+        !sb.home.join("state").exists(),
+        "preview --showcase must never write AGYLINE_HOME/state"
+    );
 }
 
 #[test]

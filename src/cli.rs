@@ -1,23 +1,45 @@
 //! Process entry: the mode comes from argv plus stdin/stdout TTY-ness. No args over a pipe is the
-//! live render `agy` invokes; a TTY opens the configurator; `preview`/`install`/`uninstall` are
-//! user subcommands. `__refresh-git` and `__touch` are hidden re-entries for detached workers, the
-//! mechanism keeping git and relay HTTP off the printing path. Exit: 0 ok, 1 failure, 2 bad args.
+//! live render `agy` invokes (with opt-in `AGYLINE_DEBUG=1` payload capture); a TTY opens the
+//! configurator; `config`/`set`/`version`/`preview`/`install`/`uninstall` are user subcommands.
+//! `__refresh-git`, `__touch`, and `__refresh-transcript` are hidden re-entries for detached
+//! workers, the mechanism keeping git, relay HTTP, and transcript reads off the printing path.
+//! Exit: 0 ok, 1 failure, 2 bad args.
 
-use std::ffi::OsString;
-use std::fs;
+use std::ffi::{OsStr, OsString};
+use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::collect::{FrameData, NoopSpawner, SystemSpawner};
-use crate::config::EffectiveConfig;
+use crate::config::{
+    ConfigDoc, DEFAULT_COMPACT_AT, EffectiveConfig, ItemStyle, PresetScope, ThemePolarity,
+    ThemeSetting, load_config_doc,
+    presets::{apply_preset, build_preset_doc, builtin_presets, discover_presets},
+    serialize_config_doc,
+};
 use crate::input::{MAX_STDIN_BYTES, parse_stdin_payload};
 use crate::install::{
     InstallEnv, InstallOptions, UninstallOptions, run_install_cli, run_uninstall_cli,
 };
 use crate::platform;
-use crate::render::{emit_ansi, emit_plain};
+use crate::render::{BarStyle, discover_palettes, emit_ansi, emit_plain};
 use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_payload};
+use crate::state::{atomic_write_bytes, ensure_state_dir};
 use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame_ansi};
+
+const MAX_COMPACT_AT: usize = 500;
+const SET_KEYS_LIST: &str = "preset, palette, theme, style, bar, bar-gradient, sep, compact-at";
+const SEMANTIC_SEPARATORS: [(&str, &str); 5] = [
+    ("pipe", " │ "),
+    ("dashed", " ┊ "),
+    ("dot", " • "),
+    ("square", " ▪ "),
+    ("none", "  "),
+];
+
+static CLI_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// The three streams and their TTY flags, injected so tests can drive every mode without a real
 /// terminal. Mode selection reads the flags, never the stream contents.
@@ -32,6 +54,8 @@ pub struct CliStreams<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HelpTopic {
     Root,
+    Config,
+    Set,
     Preview,
     Install,
     Uninstall,
@@ -43,6 +67,7 @@ enum PreviewSource {
     NamedScenario(String),
     AllScenarios,
     ListScenarios,
+    Showcase,
     InputPath(OsString),
 }
 
@@ -51,6 +76,53 @@ struct PreviewOptions {
     source: PreviewSource,
     width: Option<usize>,
     plain: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SetKey {
+    Preset,
+    Palette,
+    Theme,
+    Style,
+    Bar,
+    BarGradient,
+    Sep,
+    CompactAt,
+}
+
+impl SetKey {
+    const fn as_key(self) -> &'static str {
+        match self {
+            Self::Preset => "preset",
+            Self::Palette => "palette",
+            Self::Theme => "theme",
+            Self::Style => "style",
+            Self::Bar => "bar",
+            Self::BarGradient => "bar-gradient",
+            Self::Sep => "sep",
+            Self::CompactAt => "compact-at",
+        }
+    }
+
+    fn from_key(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "preset" => Some(Self::Preset),
+            "palette" => Some(Self::Palette),
+            "theme" => Some(Self::Theme),
+            "style" => Some(Self::Style),
+            "bar" => Some(Self::Bar),
+            "bar-gradient" => Some(Self::BarGradient),
+            "sep" => Some(Self::Sep),
+            "compact-at" => Some(Self::CompactAt),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SetOptions {
+    key: SetKey,
+    value: Option<String>,
 }
 
 /// Parsed intent. The `Hidden*` variants are worker re-entry and stay out of help; `UsageError`
@@ -64,6 +136,8 @@ enum CliAction {
     Help(HelpTopic),
     Version,
     Configurator,
+    ShowConfig,
+    Set(SetOptions),
     Preview(PreviewOptions),
     Install(InstallOptions),
     Uninstall(UninstallOptions),
@@ -143,6 +217,8 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
                 }
             }
         }
+        CliAction::ShowConfig => execute_show_config(streams),
+        CliAction::Set(opts) => execute_set(opts, streams),
         CliAction::Preview(opts) => execute_preview(opts, streams),
         CliAction::Install(opts) => match InstallEnv::from_process() {
             Ok(env) => run_install_cli(&env, opts, streams),
@@ -178,12 +254,388 @@ fn execute_live_render(streams: &mut CliStreams<'_>) -> u8 {
     }
     let spawner = SystemSpawner;
     let env = RenderEnv::from_process(&spawner);
+    if std::env::var_os("AGYLINE_DEBUG").as_deref() == Some(OsStr::new("1")) {
+        capture_debug_payload(&env.home_dir, &buf);
+    }
     let ansi = run_live_frame_ansi(&buf, &env);
     if !ansi.is_empty() {
         let _ = streams.stdout.write_all(ansi.as_bytes());
         let _ = streams.stdout.flush();
     }
     0
+}
+
+/// Best-effort capture of raw stdin bytes under `<home>/state/last_payload.json`.
+/// All I/O errors are ignored so opt-in debug capture never alters stdout or exit code 0.
+fn capture_debug_payload(home_dir: &Path, raw_stdin: &[u8]) {
+    if let Ok(state_dir) = ensure_state_dir(home_dir) {
+        let _ = atomic_write_bytes(&state_dir, "last_payload.json", raw_stdin);
+    }
+}
+
+fn execute_show_config(streams: &mut CliStreams<'_>) -> u8 {
+    let spawner = NoopSpawner;
+    let env = RenderEnv::from_process(&spawner);
+    let (config, loaded) = EffectiveConfig::resolve_with_diagnostics(&env.home_dir, &env.env_vars);
+    let cfg_path = env.home_dir.join("config.toml");
+
+    if let Some(ref err) = loaded.syntax_error {
+        let _ = writeln!(
+            streams.stderr,
+            "warning: failed to parse {} ({err}); showing fallback default configuration",
+            cfg_path.display()
+        );
+    }
+
+    let file_status = if loaded.syntax_error.is_some() {
+        "exists, syntax error"
+    } else if loaded.config_exists {
+        "exists"
+    } else {
+        "not found; using defaults"
+    };
+    let polarity = match config.polarity {
+        ThemePolarity::Dark => "dark",
+        ThemePolarity::Light => "light",
+    };
+    let sep_display = if loaded.doc.separator == config.separator {
+        format!("{:?}", config.separator)
+    } else {
+        format!("{} ({:?})", loaded.doc.separator, config.separator)
+    };
+
+    let _ = writeln!(
+        streams.stdout,
+        "config: {} ({file_status})",
+        cfg_path.display()
+    );
+    let _ = writeln!(streams.stdout, "preset: {}", config.preset);
+    let _ = writeln!(streams.stdout, "palette: {}", config.palette);
+    let _ = writeln!(
+        streams.stdout,
+        "theme: {} ({polarity})",
+        config.theme_setting.as_key()
+    );
+    let _ = writeln!(streams.stdout, "item_style: {}", config.item_style.as_key());
+    let _ = writeln!(streams.stdout, "bar_style: {}", config.bar_style.as_key());
+    let _ = writeln!(streams.stdout, "bar_gradient: {}", config.bar_gradient);
+    let _ = writeln!(streams.stdout, "separator: {sep_display}");
+    let _ = writeln!(streams.stdout, "compact_at: {}", config.compact_at);
+    let _ = writeln!(streams.stdout, "single_line: {}", config.single_line);
+    let _ = writeln!(streams.stdout, "overflow: {}", config.overflow.as_key());
+    let _ = streams.stdout.flush();
+    0
+}
+
+enum ValidatedSetValue {
+    Preset(Box<ConfigDoc>),
+    Palette(String),
+    Theme(ThemeSetting),
+    Style(ItemStyle),
+    Bar(BarStyle),
+    BarGradient(bool),
+    Sep(String),
+    CompactAt(usize),
+}
+
+fn execute_set(opts: SetOptions, streams: &mut CliStreams<'_>) -> u8 {
+    let spawner = NoopSpawner;
+    let env = RenderEnv::from_process(&spawner);
+    let home_dir = &env.home_dir;
+
+    let Some(raw_val) = opts.value else {
+        print_set_key_options(opts.key, home_dir, streams.stdout);
+        let _ = streams.stdout.flush();
+        return 0;
+    };
+
+    let validated = match validate_set_value(opts.key, &raw_val, home_dir) {
+        Ok(v) => v,
+        Err(msg) => {
+            let _ = writeln!(streams.stderr, "error: {msg}");
+            return 2;
+        }
+    };
+
+    let cfg_path = home_dir.join("config.toml");
+    let loaded = load_config_doc(home_dir);
+    if let Some(err) = loaded.syntax_error {
+        let _ = writeln!(
+            streams.stderr,
+            "error: refusing to overwrite broken {} ({err})",
+            cfg_path.display()
+        );
+        return 1;
+    }
+
+    let mut doc = loaded.doc;
+    let canonical_display = match validated {
+        ValidatedSetValue::Preset(built) => {
+            let name = built.preset.clone();
+            doc.thresholds = built.thresholds;
+            let _ = apply_preset(&mut doc, &name, PresetScope::All, Some(home_dir));
+            name
+        }
+        ValidatedSetValue::Palette(name) => {
+            doc.palette = name.clone();
+            name
+        }
+        ValidatedSetValue::Theme(theme) => {
+            doc.theme = theme;
+            theme.as_key().to_string()
+        }
+        ValidatedSetValue::Style(style) => {
+            doc.item_style = style;
+            style.as_key().to_string()
+        }
+        ValidatedSetValue::Bar(bar) => {
+            doc.bar_style = bar;
+            bar.as_key().to_string()
+        }
+        ValidatedSetValue::BarGradient(enabled) => {
+            doc.bar_gradient = enabled;
+            enabled.to_string()
+        }
+        ValidatedSetValue::Sep(sep) => {
+            doc.separator = sep.clone();
+            sep
+        }
+        ValidatedSetValue::CompactAt(cols) => {
+            doc.compact_at = cols;
+            cols.to_string()
+        }
+    };
+
+    let serialized = serialize_config_doc(&doc);
+    let written_path = match atomic_write_config(home_dir, &serialized) {
+        Ok(p) => p,
+        Err(err) => {
+            let _ = writeln!(
+                streams.stderr,
+                "error: failed to write {}: {err}",
+                cfg_path.display()
+            );
+            return 1;
+        }
+    };
+
+    let _ = writeln!(
+        streams.stdout,
+        "Set {} = {} ({})",
+        opts.key.as_key(),
+        canonical_display,
+        written_path.display()
+    );
+    let _ = streams.stdout.flush();
+    0
+}
+
+fn print_set_key_options(key: SetKey, home_dir: &Path, stdout: &mut dyn Write) {
+    match key {
+        SetKey::Preset => {
+            let _ = writeln!(stdout, "Valid presets (agyline set preset <name>):");
+            let builtins = builtin_presets();
+            for name in discover_presets(home_dir) {
+                if let Some(info) = builtins.iter().find(|p| p.name == name) {
+                    let _ = writeln!(stdout, "  {:<14} {}", info.name, info.summary);
+                } else {
+                    let _ = writeln!(stdout, "  {:<14} custom preset", name);
+                }
+            }
+        }
+        SetKey::Palette => {
+            let _ = writeln!(stdout, "Valid palettes (agyline set palette <name>):");
+            for name in discover_palettes(home_dir) {
+                let _ = writeln!(stdout, "  {name}");
+            }
+        }
+        SetKey::Theme => {
+            let _ = writeln!(stdout, "Valid themes (agyline set theme <value>):");
+            let _ = writeln!(stdout, "  auto           follow terminal COLORFGBG");
+            let _ = writeln!(stdout, "  dark           pin dark polarity");
+            let _ = writeln!(stdout, "  light          pin light polarity");
+        }
+        SetKey::Style => {
+            let _ = writeln!(
+                stdout,
+                "Valid container styles (agyline set style <value>):"
+            );
+            let _ = writeln!(stdout, "  minimal        separator-divided items");
+            let _ = writeln!(stdout, "  badge          colored surface badges");
+            let _ = writeln!(stdout, "  pill           Powerline rounded capsules");
+        }
+        SetKey::Bar => {
+            let _ = writeln!(stdout, "Valid Usage Bar styles (agyline set bar <value>):");
+            let _ = writeln!(stdout, "  line           ━╸─ half-cell line");
+            let _ = writeln!(stdout, "  parallelogram  ▰▱ slanted blocks (alias: blocks)");
+            let _ = writeln!(stdout, "  braille        ⣿⣤⣀ half-cell braille");
+            let _ = writeln!(stdout, "  solid          █ full block on track background");
+            let _ = writeln!(stdout, "  block          █░ shaded blocks");
+            let _ = writeln!(stdout, "  ascii          #- plain ASCII");
+        }
+        SetKey::BarGradient => {
+            let _ = writeln!(
+                stdout,
+                "Valid bar-gradient values (agyline set bar-gradient <bool>):"
+            );
+            let _ = writeln!(
+                stdout,
+                "  true           enable per-cell gradient (aliases: on, 1)"
+            );
+            let _ = writeln!(
+                stdout,
+                "  false          disable gradient (aliases: off, 0)"
+            );
+        }
+        SetKey::Sep => {
+            let _ = writeln!(
+                stdout,
+                "Valid separators (agyline set sep <preset|string>):"
+            );
+            for (alias, resolved) in SEMANTIC_SEPARATORS {
+                let _ = writeln!(stdout, "  {:<14} {:?}", alias, resolved);
+            }
+            let _ = writeln!(
+                stdout,
+                "  <custom>       any non-empty string without control characters"
+            );
+        }
+        SetKey::CompactAt => {
+            let _ = writeln!(
+                stdout,
+                "Valid compact-at values (agyline set compact-at <cols>):"
+            );
+            let _ = writeln!(
+                stdout,
+                "  0..={MAX_COMPACT_AT}        columns below which multi-row collapses to 1 row (0 disables, default: {DEFAULT_COMPACT_AT})"
+            );
+        }
+    }
+}
+
+fn validate_set_value(
+    key: SetKey,
+    raw_val: &str,
+    home_dir: &Path,
+) -> Result<ValidatedSetValue, String> {
+    match key {
+        SetKey::Preset => {
+            let trimmed = raw_val.trim();
+            let presets = discover_presets(home_dir);
+            let lookup_name = presets
+                .iter()
+                .find(|p| p.eq_ignore_ascii_case(trimmed))
+                .map(String::as_str)
+                .unwrap_or(trimmed);
+            let Some(built) = build_preset_doc(lookup_name, Some(home_dir)) else {
+                return Err(format!(
+                    "unknown preset '{raw_val}'; valid presets: {}",
+                    presets.join(", ")
+                ));
+            };
+            Ok(ValidatedSetValue::Preset(Box::new(built)))
+        }
+        SetKey::Palette => {
+            let trimmed = raw_val.trim();
+            let palettes = discover_palettes(home_dir);
+            let Some(matched) = palettes.iter().find(|p| p.eq_ignore_ascii_case(trimmed)) else {
+                return Err(format!(
+                    "unknown palette '{raw_val}'; valid palettes: {}",
+                    palettes.join(", ")
+                ));
+            };
+            Ok(ValidatedSetValue::Palette(matched.clone()))
+        }
+        SetKey::Theme => ThemeSetting::from_key(raw_val)
+            .map(ValidatedSetValue::Theme)
+            .ok_or_else(|| format!("invalid theme '{raw_val}'; expected one of: auto, dark, light")),
+        SetKey::Style => ItemStyle::from_key(raw_val)
+            .map(ValidatedSetValue::Style)
+            .ok_or_else(|| {
+                format!("invalid style '{raw_val}'; expected one of: minimal, badge, pill")
+            }),
+        SetKey::Bar => BarStyle::from_key(raw_val)
+            .map(ValidatedSetValue::Bar)
+            .ok_or_else(|| {
+                format!(
+                    "invalid bar '{raw_val}'; expected one of: line, parallelogram (blocks), braille, solid, block, ascii"
+                )
+            }),
+        SetKey::BarGradient => parse_cli_bool(raw_val)
+            .map(ValidatedSetValue::BarGradient)
+            .ok_or_else(|| {
+                format!(
+                    "invalid bar-gradient '{raw_val}'; expected boolean: true, false, on, off, 1, or 0"
+                )
+            }),
+        SetKey::Sep => {
+            if raw_val.is_empty() || raw_val.chars().any(char::is_control) {
+                return Err(format!(
+                    "invalid separator '{raw_val}'; expected pipe, dashed, dot, square, none, or a non-empty string without control characters"
+                ));
+            }
+            let normalized = raw_val.trim().to_ascii_lowercase();
+            let stored = SEMANTIC_SEPARATORS
+                .iter()
+                .find(|(alias, _)| *alias == normalized)
+                .map(|(alias, _)| (*alias).to_string())
+                .unwrap_or_else(|| raw_val.to_string());
+            Ok(ValidatedSetValue::Sep(stored))
+        }
+        SetKey::CompactAt => match raw_val.trim().parse::<usize>() {
+            Ok(cols) if cols <= MAX_COMPACT_AT => Ok(ValidatedSetValue::CompactAt(cols)),
+            _ => Err(format!(
+                "invalid compact-at '{raw_val}'; expected integer in 0..={MAX_COMPACT_AT} (0 disables auto-collapse)"
+            )),
+        },
+    }
+}
+
+fn parse_cli_bool(raw: &str) -> Option<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "on" | "1" => Some(true),
+        "false" | "off" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+/// Atomically writes `<home_dir>/config.toml` via a private temp file and retryable replace so
+/// readers never see a truncated file and failures leave no stray `.tmp` files behind.
+fn atomic_write_config(home_dir: &Path, content: &str) -> io::Result<PathBuf> {
+    platform::ensure_private_dir(home_dir)?;
+    let dst_path = home_dir.join("config.toml");
+    let seq = CLI_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    // Matches `install::is_config_tmp` (`.config.toml.<pid>.<nanos>.<seq>.tmp`).
+    let tmp_path = home_dir.join(format!(
+        ".config.toml.{}.{nanos}.{seq}.tmp",
+        std::process::id()
+    ));
+
+    let write_res = (|| -> io::Result<()> {
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)?;
+        f.write_all(content.as_bytes())?;
+        f.flush()?;
+        let _ = f.sync_all();
+        Ok(())
+    })();
+
+    if let Err(err) = write_res {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(err);
+    }
+
+    if let Err(err) = platform::replace_file_with_retry(&tmp_path, &dst_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(err);
+    }
+    Ok(dst_path)
 }
 
 fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
@@ -198,6 +650,13 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
     // Preview spawns no workers and writes no state: AGYLINE_HOME must stay untouched.
     let spawner = NoopSpawner;
     let env = RenderEnv::from_process(&spawner);
+
+    if let PreviewSource::Showcase = opts.source {
+        execute_showcase(&opts, &env, streams);
+        let _ = streams.stdout.flush();
+        return 0;
+    }
+
     let (config, loaded) = EffectiveConfig::resolve_with_diagnostics(&env.home_dir, &env.env_vars);
 
     // Unlike the silent live path, preview may report a broken config.toml and use defaults.
@@ -213,7 +672,7 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
     };
 
     match opts.source {
-        PreviewSource::ListScenarios => 0,
+        PreviewSource::ListScenarios | PreviewSource::Showcase => 0,
         PreviewSource::DefaultScenario => {
             emit_broken_warning(streams.stderr);
             if let Some(sc) = find_scenario("normal") {
@@ -295,6 +754,95 @@ fn execute_preview(opts: PreviewOptions, streams: &mut CliStreams<'_>) -> u8 {
             let _ = streams.stdout.flush();
             0
         }
+    }
+}
+
+/// Stateless gallery comparing built-in palettes, high-usage `>90%` `/compact` alert, narrow
+/// `<88` single-row collapse, `badge`/`pill` containers, and semantic separator presets.
+fn execute_showcase(opts: &PreviewOptions, env: &RenderEnv<'_>, streams: &mut CliStreams<'_>) {
+    let Some(sc_wide) = find_scenario("showcase_wide") else {
+        return;
+    };
+    let Some(sc_crit) = find_scenario("showcase_critical") else {
+        return;
+    };
+    let Some(sc_compact) = find_scenario("showcase_compact") else {
+        return;
+    };
+
+    let frame_wide = sc_wide.frame_for_env(&env.env_vars);
+    let frame_crit = sc_crit.frame_for_env(&env.env_vars);
+    let frame_compact = sc_compact.frame_for_env(&env.env_vars);
+    let base_doc = ConfigDoc::default();
+    let mut first_section = true;
+
+    let mut emit_section = |title: &str, doc: &ConfigDoc, frame: &FrameData, default_w: usize| {
+        if !first_section {
+            let _ = writeln!(streams.stdout);
+        }
+        first_section = false;
+        let _ = writeln!(streams.stdout, "=== {title} ===");
+        // Skip AGY_* layout/theme overrides so the gallery consistently demonstrates every
+        // built-in showcase variant while still honoring terminal color-depth and polarity hints.
+        let cfg = EffectiveConfig::from_doc(doc, Some(&env.home_dir), &env.env_vars, false);
+        write_preview_frame(
+            frame,
+            &cfg,
+            opts.width.or(Some(default_w)),
+            opts.plain,
+            streams.stdout_is_terminal,
+            streams.stdout,
+        );
+    };
+
+    for palette in ["catppuccin", "tokyo-night", "nord", "mono"] {
+        let mut doc = base_doc.clone();
+        doc.palette = palette.to_string();
+        emit_section(
+            &format!("Palette: {palette}"),
+            &doc,
+            &frame_wide,
+            sc_wide.default_width,
+        );
+    }
+
+    emit_section(
+        "High Usage (>90% /compact alert)",
+        &base_doc,
+        &frame_crit,
+        sc_crit.default_width,
+    );
+
+    emit_section(
+        &format!(
+            "Narrow (<88 cols auto-compact, {} cols)",
+            sc_compact.default_width
+        ),
+        &base_doc,
+        &frame_compact,
+        sc_compact.default_width,
+    );
+
+    for style in [ItemStyle::Badge, ItemStyle::Pill] {
+        let mut doc = base_doc.clone();
+        doc.item_style = style;
+        emit_section(
+            &format!("Container Style: {}", style.as_key()),
+            &doc,
+            &frame_wide,
+            sc_wide.default_width,
+        );
+    }
+
+    for (alias, _) in SEMANTIC_SEPARATORS {
+        let mut doc = base_doc.clone();
+        doc.separator = alias.to_string();
+        emit_section(
+            &format!("Separator: {alias}"),
+            &doc,
+            &frame_wide,
+            sc_wide.default_width,
+        );
     }
 }
 
@@ -386,7 +934,7 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
                 ))
             }
         }
-        "-V" | "--version" => {
+        "-V" | "--version" | "version" => {
             if args.len() == 2 {
                 CliAction::Version
             } else {
@@ -413,6 +961,8 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
                     .to_string(),
             )
         }
+        "config" => parse_config_args(&args[2..]),
+        "set" => parse_set_args(&args[2..]),
         "preview" => parse_preview_args(&args[2..]),
         "install" => parse_install_args(&args[2..]),
         "uninstall" => parse_uninstall_args(&args[2..]),
@@ -421,6 +971,99 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
         }
         other => CliAction::UsageError(format!("unknown subcommand '{other}'")),
     }
+}
+
+fn parse_config_args(tail: &[OsString]) -> CliAction {
+    for arg in tail {
+        let s = arg.to_string_lossy();
+        if s == "--" {
+            break;
+        }
+        if s == "-h" || s == "--help" {
+            return CliAction::Help(HelpTopic::Config);
+        }
+    }
+
+    if let Some((first, rest)) = tail.split_first() {
+        let s = first.to_string_lossy();
+        match s.as_ref() {
+            "--" => {
+                if let Some(extra) = rest.first() {
+                    return CliAction::UsageError(format!(
+                        "unexpected argument '{}' for 'config'",
+                        extra.to_string_lossy()
+                    ));
+                }
+            }
+            flag if flag.starts_with('-') => {
+                return CliAction::UsageError(format!("unknown flag '{flag}' for 'config'"));
+            }
+            arg => {
+                return CliAction::UsageError(format!("unexpected argument '{arg}' for 'config'"));
+            }
+        }
+    }
+
+    CliAction::ShowConfig
+}
+
+fn parse_set_args(tail: &[OsString]) -> CliAction {
+    if tail.is_empty() {
+        return CliAction::UsageError(format!(
+            "missing setting key for 'set'; valid keys: {SET_KEYS_LIST}"
+        ));
+    }
+
+    let first = tail[0].to_string_lossy();
+    if first == "-h" || first == "--help" {
+        return CliAction::Help(HelpTopic::Set);
+    }
+
+    let (raw_key, value_slice): (&OsString, &[OsString]) = if first == "--" {
+        let Some((k, r)) = tail[1..].split_first() else {
+            return CliAction::UsageError(format!(
+                "missing setting key for 'set'; valid keys: {SET_KEYS_LIST}"
+            ));
+        };
+        (k, r)
+    } else if first.starts_with('-') {
+        return CliAction::UsageError(format!("unknown flag '{first}' for 'set'"));
+    } else {
+        let rest = &tail[1..];
+        // Allow `agyline set <key> --help` without blocking values like `-` or `-1` via `--`.
+        let values = if let Some((v0, after_v0)) = rest.split_first() {
+            let v0_str = v0.to_string_lossy();
+            if v0_str == "-h" || v0_str == "--help" {
+                return CliAction::Help(HelpTopic::Set);
+            } else if v0_str == "--" {
+                after_v0
+            } else {
+                rest
+            }
+        } else {
+            rest
+        };
+        (&tail[0], values)
+    };
+
+    if value_slice.len() > 1 {
+        return CliAction::UsageError(format!(
+            "unexpected argument '{}' for 'set'",
+            value_slice[1].to_string_lossy()
+        ));
+    }
+
+    let key_str = raw_key.to_string_lossy();
+    let Some(key) = SetKey::from_key(&key_str) else {
+        return CliAction::UsageError(format!(
+            "unknown setting '{key_str}'; valid keys: {SET_KEYS_LIST}"
+        ));
+    };
+
+    let value = value_slice
+        .first()
+        .map(|v| v.to_string_lossy().into_owned());
+    CliAction::Set(SetOptions { key, value })
 }
 
 fn parse_preview_args(tail: &[OsString]) -> CliAction {
@@ -446,6 +1089,7 @@ fn parse_preview_args(tail: &[OsString]) -> CliAction {
         match s.as_ref() {
             "--all" => chosen_sources.push(PreviewSource::AllScenarios),
             "--list" => chosen_sources.push(PreviewSource::ListScenarios),
+            "--showcase" => chosen_sources.push(PreviewSource::Showcase),
             "--plain" => plain = true,
             "-s" | "--scenario" => {
                 let Some(next) = tail.get(idx + 1) else {
@@ -522,7 +1166,7 @@ fn parse_preview_args(tail: &[OsString]) -> CliAction {
 
     if chosen_sources.len() > 1 {
         return CliAction::UsageError(
-            "conflicting flags for 'preview': pass at most one of '--scenario', '--all', '--list', or '--input'"
+            "conflicting flags for 'preview': pass at most one of '--scenario', '--all', '--list', '--showcase', or '--input'"
                 .to_string(),
         );
     }
@@ -629,9 +1273,45 @@ Options:
   -V, --version           Print version
 
 Subcommands:
-  preview                 Statelessly preview built-in scenarios or a captured payload
+  config                  Show active effective settings and config.toml path
+  set <key> [value]       List choices or update a setting in config.toml
+  preview                 Statelessly preview scenarios, showcase gallery, or a payload
+  version                 Print version
   install                 Configure agy settings.json to run agyline
   uninstall               Restore previous agy statusLine configuration
+"
+        }
+        HelpTopic::Config => {
+            "\
+Usage: agyline config
+
+Prints the resolved config.toml path, whether it exists on disk, and the active
+effective settings (preset, palette, theme, item_style, bar_style, bar_gradient,
+separator, compact_at, single_line, overflow).
+
+Options:
+  -h, --help              Print help
+"
+        }
+        HelpTopic::Set => {
+            "\
+Usage: agyline set <key> [value]
+
+Omit <value> to list valid choices for <key>. Pass <value> to validate and
+atomically update <AGYLINE_HOME>/config.toml while preserving unrelated settings.
+
+Keys:
+  preset                  Built-in or custom preset (updates layout, style, and thresholds)
+  palette                 Built-in or custom palette name
+  theme                   auto, dark, or light
+  style                   Container Style: minimal, badge, or pill
+  bar                     Usage Bar style: line, parallelogram (blocks), braille, solid, block, ascii
+  bar-gradient            Per-cell Usage Bar gradient: true/false (on/off, 1/0)
+  sep                     Separator preset (pipe, dashed, dot, square, none) or custom string
+  compact-at              Compact Threshold in columns (0..=500; 0 disables auto-collapse)
+
+Options:
+  -h, --help              Print help
 "
         }
         HelpTopic::Preview => {
@@ -642,6 +1322,7 @@ Options:
   -s, --scenario <name>   Render a built-in preview scenario (default: normal)
       --all               Render all built-in scenarios
       --list              List built-in scenarios
+      --showcase          Render multi-palette, critical, compact, container, and separator gallery
   -i, --input <path|->    Render from a JSON payload file or '-' for stdin
   -w, --width <cols>      Override terminal width budget (0 disables narrowing)
       --plain             Emit plain text without ANSI escape sequences
