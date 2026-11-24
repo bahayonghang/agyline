@@ -164,8 +164,9 @@ items = ["model", "git"]
 
 #[test]
 fn palettes_color_depths_polarity_fallback_and_custom_palettes_emit_expected_sgr() {
-    // Palette catalog: 8 built-ins plus custom `palettes/*.toml` from AGYLINE_HOME.
-    assert_eq!(builtin_palettes().len(), 8);
+    // Palette catalog: 10 built-ins (terminal, catppuccin, mono, plus 7 fixed-polarity RGB sets)
+    // plus custom `palettes/*.toml` from AGYLINE_HOME.
+    assert_eq!(builtin_palettes().len(), 10);
 
     let sb = Sandbox::new("palettes");
     let palettes_dir = sb.root.join("palettes");
@@ -867,5 +868,411 @@ items = [{ id = "dir", max_levels = 99 }, { id = "context", style = "bar", bar_s
     assert!(
         sbx_ansi.contains("\x1b[0;92m\u{f132} \x1b[0;90msandbox \x1b[0;1;92mON"),
         "enabled sandbox icon must be Ok green: {sbx_ansi:?}"
+    );
+}
+
+// Ticket #39: 4-tier semantic tokens (`high`, `surface`, `surface_hi`), dual-polarity
+// `catppuccin` (Mocha dark / Latte light) and `mono` palettes, plus legacy custom palette loading.
+#[test]
+fn four_tier_color_tokens_and_dual_polarity_catppuccin_and_mono_palettes() {
+    use agyline::{
+        ColorToken, PaletteOverrides, PalettePolarity, ResolvedColor, ThemePolarity,
+        resolve_palette,
+    };
+
+    assert_eq!(ColorToken::ALL.len(), 15);
+    for (key, expected) in [
+        ("high", ColorToken::High),
+        ("surface", ColorToken::Surface),
+        ("surface_hi", ColorToken::SurfaceHi),
+    ] {
+        assert_eq!(ColorToken::from_key(key), Some(expected));
+        assert_eq!(expected.as_key(), key);
+    }
+
+    let builtins = builtin_palettes();
+    let cat = builtins
+        .iter()
+        .find(|p| p.name == "catppuccin")
+        .expect("catppuccin built-in");
+    assert_eq!(cat.polarity, PalettePolarity::Dual);
+    let mono = builtins
+        .iter()
+        .find(|p| p.name == "mono")
+        .expect("mono built-in");
+    assert_eq!(mono.polarity, PalettePolarity::Dual);
+
+    let empty_ov = PaletteOverrides::default();
+
+    // Dual-polarity `catppuccin`: Mocha on Dark, Latte on Light, no polarity fallback.
+    let mocha = resolve_palette("catppuccin", ThemePolarity::Dark, &empty_ov, None);
+    assert!(!mocha.polarity_fell_back);
+    assert_eq!(
+        mocha.get(ColorToken::Model),
+        ResolvedColor::Rgb(0xcb, 0xa6, 0xf7)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Git),
+        ResolvedColor::Rgb(0x89, 0xb4, 0xfa)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Cache),
+        ResolvedColor::Rgb(0x94, 0xe2, 0xd5)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Ok),
+        ResolvedColor::Rgb(0xa6, 0xe3, 0xa1)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Warn),
+        ResolvedColor::Rgb(0xf9, 0xe2, 0xaf)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::High),
+        ResolvedColor::Rgb(0xfa, 0xb3, 0x87)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Crit),
+        ResolvedColor::Rgb(0xf3, 0x8b, 0xa8)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::Surface),
+        ResolvedColor::Rgb(0x31, 0x32, 0x44)
+    );
+    assert_eq!(
+        mocha.get(ColorToken::SurfaceHi),
+        ResolvedColor::Rgb(0x45, 0x47, 0x5a)
+    );
+
+    let latte = resolve_palette("catppuccin", ThemePolarity::Light, &empty_ov, None);
+    assert!(!latte.polarity_fell_back);
+    assert_eq!(
+        latte.get(ColorToken::Model),
+        ResolvedColor::Rgb(0x88, 0x39, 0xef)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Git),
+        ResolvedColor::Rgb(0x1e, 0x66, 0xf5)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Cache),
+        ResolvedColor::Rgb(0x17, 0x92, 0x99)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Ok),
+        ResolvedColor::Rgb(0x40, 0xa0, 0x2b)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Warn),
+        ResolvedColor::Rgb(0xdf, 0x8e, 0x1d)
+    );
+    assert_eq!(
+        latte.get(ColorToken::High),
+        ResolvedColor::Rgb(0xfe, 0x64, 0x0b)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Crit),
+        ResolvedColor::Rgb(0xd2, 0x0f, 0x39)
+    );
+    assert_eq!(
+        latte.get(ColorToken::Surface),
+        ResolvedColor::Rgb(0xcc, 0xd0, 0xda)
+    );
+    assert_eq!(
+        latte.get(ColorToken::SurfaceHi),
+        ResolvedColor::Rgb(0xbc, 0xc0, 0xcc)
+    );
+
+    // Dual-polarity `mono`: neutral grayscale everyday tokens + distinct urgency contrast.
+    for polarity in [ThemePolarity::Dark, ThemePolarity::Light] {
+        let m = resolve_palette("mono", polarity, &empty_ov, None);
+        assert!(!m.polarity_fell_back);
+        for tok in [
+            ColorToken::Separator,
+            ColorToken::Muted,
+            ColorToken::Model,
+            ColorToken::Dir,
+            ColorToken::Git,
+            ColorToken::Ok,
+            ColorToken::Surface,
+            ColorToken::SurfaceHi,
+        ] {
+            match m.get(tok) {
+                ResolvedColor::Rgb(r, g, b) => {
+                    assert!(
+                        r == g && g == b,
+                        "mono {polarity:?} {tok:?} should be neutral grayscale, got ({r},{g},{b})"
+                    );
+                }
+                other => panic!("mono {tok:?} should resolve to RGB, got {other:?}"),
+            }
+        }
+        assert_ne!(m.get(ColorToken::Warn), m.get(ColorToken::High));
+        assert_ne!(m.get(ColorToken::High), m.get(ColorToken::Crit));
+        assert_ne!(m.get(ColorToken::Ok), m.get(ColorToken::Warn));
+    }
+
+    // Every built-in RGB palette defines distinct RGB `high`, `surface`, `surface_hi`,
+    // and `terminal` supplies ANSI-16 fallbacks.
+    for info in builtins {
+        let pol = match info.polarity {
+            PalettePolarity::Light => ThemePolarity::Light,
+            PalettePolarity::Dark | PalettePolarity::Dual => ThemePolarity::Dark,
+        };
+        let resolved = resolve_palette(info.name, pol, &empty_ov, None);
+        assert!(!resolved.polarity_fell_back);
+        if info.name == "terminal" {
+            assert!(matches!(
+                resolved.get(ColorToken::High),
+                ResolvedColor::Ansi16(_)
+            ));
+            assert!(matches!(
+                resolved.get(ColorToken::Surface),
+                ResolvedColor::Ansi16(_)
+            ));
+            assert!(matches!(
+                resolved.get(ColorToken::SurfaceHi),
+                ResolvedColor::Ansi16(_)
+            ));
+        } else {
+            assert!(matches!(
+                resolved.get(ColorToken::High),
+                ResolvedColor::Rgb(..)
+            ));
+            assert!(matches!(
+                resolved.get(ColorToken::Surface),
+                ResolvedColor::Rgb(..)
+            ));
+            assert!(matches!(
+                resolved.get(ColorToken::SurfaceHi),
+                ResolvedColor::Rgb(..)
+            ));
+            assert_ne!(
+                resolved.get(ColorToken::Surface),
+                resolved.get(ColorToken::SurfaceHi)
+            );
+        }
+    }
+
+    // Legacy custom palette omitting `high`/`surface`/`surface_hi` still loads cleanly,
+    // and `[palette_overrides]` can override the new tokens.
+    let sb = Sandbox::new("legacy_pal");
+    let pal_dir = sb.root.join("palettes");
+    fs::create_dir_all(&pal_dir).expect("mkdir palettes");
+    fs::write(
+        pal_dir.join("legacy12.toml"),
+        "polarity = \"dark\"\nmodel = \"#112233\"\nok = \"#22aa44\"\n",
+    )
+    .expect("write legacy custom palette");
+    let mut ov = PaletteOverrides::default();
+    ov.set(ColorToken::High, "#ff8800");
+    ov.set(ColorToken::Surface, "#101018");
+    let custom = resolve_palette("legacy12", ThemePolarity::Dark, &ov, Some(&sb.root));
+    assert!(!custom.polarity_fell_back);
+    assert_eq!(
+        custom.get(ColorToken::Model),
+        ResolvedColor::Rgb(0x11, 0x22, 0x33)
+    );
+    assert_eq!(
+        custom.get(ColorToken::High),
+        ResolvedColor::Rgb(0xff, 0x88, 0x00)
+    );
+    assert_eq!(
+        custom.get(ColorToken::Surface),
+        ResolvedColor::Rgb(0x10, 0x10, 0x18)
+    );
+    assert!(matches!(
+        custom.get(ColorToken::SurfaceHi),
+        ResolvedColor::Ansi16(_)
+    ));
+}
+
+// Ticket #39: four-tier `[thresholds]` (`context_high`, `quota_high`) parsing, tolerant fallback
+// for legacy configs omitting them, out-of-order guards, and TOML round-trip.
+#[test]
+fn four_tier_thresholds_parse_validate_degrade_and_roundtrip() {
+    let default_doc = ConfigDoc::default();
+    assert_eq!(default_doc.thresholds.context_high, 75.0);
+    assert_eq!(default_doc.thresholds.quota_high, 25);
+
+    let full_toml = r#"
+[thresholds]
+context_warn = 55
+context_high = 76.5
+context_crit = 92
+quota_warn = 50
+quota_high = 28
+quota_crit = 12
+cache_warn_secs = 45
+"#;
+    let (doc, warnings) = parse_config_doc(full_toml).expect("parse 4-tier thresholds");
+    assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    assert_eq!(doc.thresholds.context_warn, 55.0);
+    assert_eq!(doc.thresholds.context_high, 76.5);
+    assert_eq!(doc.thresholds.context_crit, 92.0);
+    assert_eq!(doc.thresholds.quota_warn, 50);
+    assert_eq!(doc.thresholds.quota_high, 28);
+    assert_eq!(doc.thresholds.quota_crit, 12);
+
+    let serialized = serialize_config_doc(&doc);
+    assert!(serialized.contains("context_high = 76.5"));
+    assert!(serialized.contains("quota_high = 28"));
+    let (reparsed, rewarnings) = parse_config_doc(&serialized).expect("reparse");
+    assert!(rewarnings.is_empty(), "rewarnings: {rewarnings:?}");
+    assert_eq!(reparsed.thresholds, doc.thresholds);
+
+    // Legacy config omitting `context_high` and `quota_high` whose range excludes 75 / 25
+    // must still load cleanly with valid derived midpoints instead of rejecting valid warn/crit.
+    let legacy_toml = r#"
+[thresholds]
+context_warn = 40
+context_crit = 70
+quota_warn = 20
+quota_crit = 5
+"#;
+    let (legacy_doc, legacy_warnings) = parse_config_doc(legacy_toml).expect("parse legacy");
+    assert!(
+        legacy_warnings.is_empty(),
+        "legacy warnings: {legacy_warnings:?}"
+    );
+    assert_eq!(legacy_doc.thresholds.context_warn, 40.0);
+    assert_eq!(legacy_doc.thresholds.context_crit, 70.0);
+    assert!(
+        legacy_doc.thresholds.context_warn < legacy_doc.thresholds.context_high
+            && legacy_doc.thresholds.context_high < legacy_doc.thresholds.context_crit
+    );
+    assert_eq!(legacy_doc.thresholds.quota_warn, 20);
+    assert_eq!(legacy_doc.thresholds.quota_crit, 5);
+    assert!(
+        legacy_doc.thresholds.quota_crit < legacy_doc.thresholds.quota_high
+            && legacy_doc.thresholds.quota_high < legacy_doc.thresholds.quota_warn
+    );
+
+    // Out-of-order explicit `context_high` / `quota_high` emit warnings and keep valid order.
+    let bad_high_toml = r#"
+[thresholds]
+context_warn = 50
+context_high = 95
+context_crit = 80
+quota_warn = 45
+quota_high = 10
+quota_crit = 20
+"#;
+    let (bad_doc, bad_warnings) = parse_config_doc(bad_high_toml).expect("tolerant parse");
+    assert!(
+        bad_warnings.len() >= 2,
+        "expected warnings for out-of-order high thresholds, got: {bad_warnings:?}"
+    );
+    assert!(
+        bad_doc.thresholds.context_warn < bad_doc.thresholds.context_high
+            && bad_doc.thresholds.context_high < bad_doc.thresholds.context_crit
+    );
+    assert!(
+        bad_doc.thresholds.quota_crit < bad_doc.thresholds.quota_high
+            && bad_doc.thresholds.quota_high < bad_doc.thresholds.quota_warn
+    );
+}
+
+// Ticket #39: `color_depth = "auto"` preserves NO_COLOR / TERM=dumb, downgrades Apple_Terminal
+// to 256-color, and promotes known modern TrueColor terminals ahead of generic `*256color`.
+#[test]
+fn auto_color_depth_detects_apple_terminal_and_modern_truecolor_hints() {
+    use agyline::{EffectiveColorDepth, resolve_effective_color_depth};
+
+    let map = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
+    };
+
+    // NO_COLOR and TERM=dumb still outrank everything.
+    assert_eq!(
+        resolve_effective_color_depth(
+            ColorDepth::Auto,
+            &map(&[
+                ("NO_COLOR", "1"),
+                ("COLORTERM", "truecolor"),
+                ("WT_SESSION", "1")
+            ])
+        ),
+        EffectiveColorDepth::None
+    );
+    assert_eq!(
+        resolve_effective_color_depth(
+            ColorDepth::Auto,
+            &map(&[("TERM", "dumb"), ("TERM_PROGRAM", "WezTerm")])
+        ),
+        EffectiveColorDepth::None
+    );
+
+    // Apple_Terminal forces 256-color both with and without TERM=xterm-256color.
+    assert_eq!(
+        resolve_effective_color_depth(
+            ColorDepth::Auto,
+            &map(&[("TERM_PROGRAM", "Apple_Terminal")])
+        ),
+        EffectiveColorDepth::Ansi256
+    );
+    assert_eq!(
+        resolve_effective_color_depth(
+            ColorDepth::Auto,
+            &map(&[
+                ("TERM_PROGRAM", "Apple_Terminal"),
+                ("TERM", "xterm-256color")
+            ])
+        ),
+        EffectiveColorDepth::Ansi256
+    );
+
+    // Modern TrueColor TERM_PROGRAM hints beat generic `TERM=xterm-256color`.
+    for prog in [
+        "iTerm.app",
+        "WezTerm",
+        "vscode",
+        "WarpTerminal",
+        "ghostty",
+        "alacritty",
+        "kitty",
+        "Hyper",
+        "Tabby",
+        "rio",
+    ] {
+        assert_eq!(
+            resolve_effective_color_depth(
+                ColorDepth::Auto,
+                &map(&[("TERM", "xterm-256color"), ("TERM_PROGRAM", prog)])
+            ),
+            EffectiveColorDepth::TrueColor,
+            "TERM_PROGRAM={prog} should resolve to TrueColor"
+        );
+    }
+
+    // Dedicated modern terminal env markers beat generic `TERM=xterm-256color`.
+    for env_key in [
+        "WT_SESSION",
+        "ITERM_SESSION_ID",
+        "KITTY_WINDOW_ID",
+        "GHOSTTY_RESOURCES_DIR",
+        "WEZTERM_EXECUTABLE",
+    ] {
+        assert_eq!(
+            resolve_effective_color_depth(
+                ColorDepth::Auto,
+                &map(&[("TERM", "xterm-256color"), (env_key, "active")])
+            ),
+            EffectiveColorDepth::TrueColor,
+            "{env_key} should resolve to TrueColor"
+        );
+    }
+
+    // Generic 256color without modern hints stays Ansi256; plain xterm stays Ansi16.
+    assert_eq!(
+        resolve_effective_color_depth(ColorDepth::Auto, &map(&[("TERM", "xterm-256color")])),
+        EffectiveColorDepth::Ansi256
+    );
+    assert_eq!(
+        resolve_effective_color_depth(ColorDepth::Auto, &map(&[("TERM", "xterm")])),
+        EffectiveColorDepth::Ansi16
     );
 }

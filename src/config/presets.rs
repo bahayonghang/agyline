@@ -111,8 +111,10 @@ pub fn hud_preset_doc(preset_name: &str) -> ConfigDoc {
     doc.separator = " │ ".to_string();
     doc.thresholds = ThresholdsConfig {
         context_warn: 60.0,
+        context_high: 75.0,
         context_crit: 90.0,
         quota_warn: 40,
+        quota_high: 25,
         quota_crit: 10,
         cache_warn_secs: 60,
     };

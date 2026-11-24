@@ -487,16 +487,20 @@ impl PaletteOverrides {
     }
 }
 
-/// Coloring thresholds. The pairs run in opposite directions: context counts used percent up,
-/// quota counts remaining percent down.
+/// Coloring thresholds. The triples run in opposite directions: context counts used percent up
+/// (`warn < high < crit`), quota counts remaining percent down (`warn > high > crit`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThresholdsConfig {
-    /// Used percent, 0..=100, where context turns warn; must stay below `context_crit`.
+    /// Used percent, 0..=100, where context turns warn; must stay below `context_high`.
     pub context_warn: f64,
+    /// Used percent, 0..=100, where context turns high; strictly between `context_warn` and `context_crit`.
+    pub context_high: f64,
     /// Used percent, 0..=100, where context turns crit.
     pub context_crit: f64,
-    /// Remaining percent, 0..=100, where quota turns warn; must stay above `quota_crit`.
+    /// Remaining percent, 0..=100, where quota turns warn; must stay above `quota_high`.
     pub quota_warn: i32,
+    /// Remaining percent, 0..=100, where quota turns high; strictly between `quota_crit` and `quota_warn`.
+    pub quota_high: i32,
     /// Remaining percent, 0..=100, where quota turns crit.
     pub quota_crit: i32,
     /// Cache countdown seconds at or below which the TTL turns warn; capped at one day.
@@ -506,11 +510,13 @@ pub struct ThresholdsConfig {
 impl Default for ThresholdsConfig {
     fn default() -> Self {
         Self {
-            // statusline.ps1: used percent >= 80 is crit, >= 50 is warn.
+            // statusline.ps1: used percent >= 80 is crit, >= 50 is warn; 75 splits the high tier.
             context_warn: 50.0,
+            context_high: 75.0,
             context_crit: 80.0,
-            // statusline.ps1: remaining percent < 20 is crit, < 45 is warn.
+            // statusline.ps1: remaining percent < 20 is crit, < 45 is warn; 25 splits the high tier.
             quota_warn: 45,
+            quota_high: 25,
             quota_crit: 20,
             // statusline.py turns the countdown warn inside the last 60 s of the 300 s window.
             cache_warn_secs: 60,
@@ -772,10 +778,16 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
     );
     let _ = writeln!(
         out,
+        "context_high = {}",
+        format_toml_num(doc.thresholds.context_high)
+    );
+    let _ = writeln!(
+        out,
         "context_crit = {}",
         format_toml_num(doc.thresholds.context_crit)
     );
     let _ = writeln!(out, "quota_warn = {}", doc.thresholds.quota_warn);
+    let _ = writeln!(out, "quota_high = {}", doc.thresholds.quota_high);
     let _ = writeln!(out, "quota_crit = {}", doc.thresholds.quota_crit);
     let _ = writeln!(out, "cache_warn_secs = {}", doc.thresholds.cache_warn_secs);
 
@@ -1157,22 +1169,46 @@ fn parse_config_overlay_with_home(
     }
 }
 
+fn fallback_context_high(default_high: f64, warn: f64, crit: f64) -> f64 {
+    if default_high > warn && default_high < crit {
+        default_high
+    } else {
+        (warn + crit) * 0.5
+    }
+}
+
+fn fallback_quota_high(default_high: i32, crit: i32, warn: i32) -> i32 {
+    if default_high > crit && default_high < warn {
+        default_high
+    } else if warn - crit >= 2 {
+        (crit + warn) / 2
+    } else {
+        crit
+    }
+}
+
 fn parse_thresholds_table(
     tbl: &toml::map::Map<String, toml::Value>,
     thresholds: &mut ThresholdsConfig,
     warnings: &mut Vec<String>,
 ) {
-    // Stage each pair and commit it only if both values are valid and ordered, so a half-valid
-    // edit cannot leave warn and crit inverted.
+    // Stage each group and commit only when ordered, so a half-valid edit cannot invert bounds.
+    // Omitting optional `*_high` keys preserves legacy configs by keeping default or midpoint.
     let mut cand_ctx_warn = thresholds.context_warn;
+    let mut cand_ctx_high = thresholds.context_high;
     let mut cand_ctx_crit = thresholds.context_crit;
     let mut ctx_touched = false;
-    let mut ctx_valid = true;
+    let mut ctx_bounds_valid = true;
+    let mut ctx_high_touched = false;
+    let mut ctx_high_valid = true;
 
     let mut cand_q_warn = thresholds.quota_warn;
+    let mut cand_q_high = thresholds.quota_high;
     let mut cand_q_crit = thresholds.quota_crit;
     let mut q_touched = false;
-    let mut q_valid = true;
+    let mut q_bounds_valid = true;
+    let mut q_high_touched = false;
+    let mut q_high_valid = true;
 
     for (k, v) in tbl {
         match k.as_str() {
@@ -1181,8 +1217,18 @@ fn parse_thresholds_table(
                 if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
                     cand_ctx_warn = num;
                 } else {
-                    ctx_valid = false;
+                    ctx_bounds_valid = false;
                     warnings.push("invalid 'thresholds.context_warn'".to_string());
+                }
+            }
+            "context_high" => {
+                ctx_touched = true;
+                ctx_high_touched = true;
+                if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
+                    cand_ctx_high = num;
+                } else {
+                    ctx_high_valid = false;
+                    warnings.push("invalid 'thresholds.context_high'".to_string());
                 }
             }
             "context_crit" => {
@@ -1190,7 +1236,7 @@ fn parse_thresholds_table(
                 if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
                     cand_ctx_crit = num;
                 } else {
-                    ctx_valid = false;
+                    ctx_bounds_valid = false;
                     warnings.push("invalid 'thresholds.context_crit'".to_string());
                 }
             }
@@ -1203,8 +1249,22 @@ fn parse_thresholds_table(
                 {
                     cand_q_warn = num;
                 } else {
-                    q_valid = false;
+                    q_bounds_valid = false;
                     warnings.push("invalid 'thresholds.quota_warn'".to_string());
+                }
+            }
+            "quota_high" => {
+                q_touched = true;
+                q_high_touched = true;
+                if let Some(num) = v
+                    .as_integer()
+                    .and_then(|i| i32::try_from(i).ok())
+                    .filter(|n| (0..=100).contains(n))
+                {
+                    cand_q_high = num;
+                } else {
+                    q_high_valid = false;
+                    warnings.push("invalid 'thresholds.quota_high'".to_string());
                 }
             }
             "quota_crit" => {
@@ -1216,7 +1276,7 @@ fn parse_thresholds_table(
                 {
                     cand_q_crit = num;
                 } else {
-                    q_valid = false;
+                    q_bounds_valid = false;
                     warnings.push("invalid 'thresholds.quota_crit'".to_string());
                 }
             }
@@ -1236,12 +1296,31 @@ fn parse_thresholds_table(
         }
     }
 
-    // Context counts up: warn must stay below crit, else both keep their defaults.
+    // Context counts up: warn < high < crit; inverted outer bounds fall back to defaults.
     if ctx_touched {
-        if ctx_valid && cand_ctx_warn < cand_ctx_crit {
+        if ctx_bounds_valid && cand_ctx_warn < cand_ctx_crit {
+            let default_high = thresholds.context_high;
             thresholds.context_warn = cand_ctx_warn;
             thresholds.context_crit = cand_ctx_crit;
-        } else if ctx_valid {
+            if ctx_high_touched {
+                if ctx_high_valid && cand_ctx_warn < cand_ctx_high && cand_ctx_high < cand_ctx_crit
+                {
+                    thresholds.context_high = cand_ctx_high;
+                } else {
+                    if ctx_high_valid {
+                        warnings.push(
+                            "out-of-order 'thresholds.context_high' (require context_warn < context_high < context_crit); using fallback"
+                                .to_string(),
+                        );
+                    }
+                    thresholds.context_high =
+                        fallback_context_high(default_high, cand_ctx_warn, cand_ctx_crit);
+                }
+            } else {
+                thresholds.context_high =
+                    fallback_context_high(default_high, cand_ctx_warn, cand_ctx_crit);
+            }
+        } else if ctx_bounds_valid {
             warnings.push(
                 "inverted context thresholds (require context_warn < context_crit); using defaults"
                     .to_string(),
@@ -1249,12 +1328,29 @@ fn parse_thresholds_table(
         }
     }
 
-    // Quota counts down: warn must stay above crit, else both keep their defaults.
+    // Quota counts down: warn > high > crit; inverted outer bounds fall back to defaults.
     if q_touched {
-        if q_valid && cand_q_warn > cand_q_crit {
+        if q_bounds_valid && cand_q_warn > cand_q_crit {
+            let default_high = thresholds.quota_high;
             thresholds.quota_warn = cand_q_warn;
             thresholds.quota_crit = cand_q_crit;
-        } else if q_valid {
+            if q_high_touched {
+                if q_high_valid && cand_q_crit < cand_q_high && cand_q_high < cand_q_warn {
+                    thresholds.quota_high = cand_q_high;
+                } else {
+                    if q_high_valid {
+                        warnings.push(
+                            "out-of-order 'thresholds.quota_high' (require quota_crit < quota_high < quota_warn); using fallback"
+                                .to_string(),
+                        );
+                    }
+                    thresholds.quota_high =
+                        fallback_quota_high(default_high, cand_q_crit, cand_q_warn);
+                }
+            } else {
+                thresholds.quota_high = fallback_quota_high(default_high, cand_q_crit, cand_q_warn);
+            }
+        } else if q_bounds_valid {
             warnings.push(
                 "inverted quota thresholds (require quota_warn > quota_crit); using defaults"
                     .to_string(),

@@ -30,7 +30,7 @@ pub struct RenderEnv<'a> {
     pub spawner: &'a dyn Spawner,
 }
 
-const RENDER_ENV_KEYS: [&str; 15] = [
+const RENDER_ENV_KEYS: [&str; 21] = [
     "AGYLINE_HOME",
     "AGY_THEME",
     "AGY_STATUSLINE_LINES",
@@ -46,6 +46,12 @@ const RENDER_ENV_KEYS: [&str; 15] = [
     "NO_COLOR",
     "COLORTERM",
     "TERM",
+    "TERM_PROGRAM",
+    "ITERM_SESSION_ID",
+    "WT_SESSION",
+    "KITTY_WINDOW_ID",
+    "GHOSTTY_RESOURCES_DIR",
+    "WEZTERM_EXECUTABLE",
 ];
 
 impl<'a> RenderEnv<'a> {
