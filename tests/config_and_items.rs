@@ -1829,3 +1829,282 @@ fn compact_threshold_collapses_multi_row_below_cutoff_and_respects_single_line_p
         );
     }
 }
+
+// Ticket #41: top-level `bar_style` / `bar_gradient` and `context.show_tokens` parsing, validation,
+// tolerant alias normalization, preset scopes, TOML round-trip, and slot override precedence.
+#[test]
+fn top_level_bar_style_bar_gradient_and_context_show_tokens_parse_roundtrip_and_override() {
+    use agyline::BarStyle;
+
+    let def = ConfigDoc::default();
+    assert_eq!(def.bar_style, BarStyle::Line);
+    assert!(!def.bar_gradient);
+    let com = ConfigDoc::cometix_base();
+    assert_eq!(com.bar_style, BarStyle::Line);
+    assert!(!com.bar_gradient);
+
+    let toml_src = r#"
+palette = "catppuccin"
+bar_style = "blocks"
+bar_gradient = true
+
+[[line]]
+items = [
+  { id = "context", style = "bar", show_tokens = true, label = "", icon = "" },
+  { id = "quota_group", family = "gemini" },
+  { id = "quota_group", family = "3p", bar_style = "braille" },
+]
+"#;
+    let (doc, warnings) = parse_config_doc(toml_src).expect("parse top-level bar config");
+    assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    assert_eq!(doc.bar_style, BarStyle::Parallelogram);
+    assert!(doc.bar_gradient);
+    assert_eq!(doc.lines[0][0].show_tokens, Some(true));
+    assert!(!doc.lines[0][0].is_shorthand());
+
+    let serialized = serialize_config_doc(&doc);
+    assert!(serialized.contains("bar_style = \"parallelogram\""));
+    assert!(serialized.contains("bar_gradient = true"));
+    assert!(serialized.contains("show_tokens = true"));
+    let (reparsed, rewarnings) = parse_config_doc(&serialized).expect("reparse bar config");
+    assert!(rewarnings.is_empty(), "rewarnings: {rewarnings:?}");
+    assert_eq!(reparsed, doc);
+
+    // Invalid top-level values warn and retain defaults.
+    let (bad_doc, bad_warnings) = parse_config_doc(
+        r#"
+bar_style = "wavy"
+bar_gradient = "yes"
+[[line]]
+items = [{ id = "context", show_tokens = "nope" }]
+"#,
+    )
+    .expect("tolerant parse");
+    assert_eq!(bad_doc.bar_style, BarStyle::Line);
+    assert!(!bad_doc.bar_gradient);
+    assert_eq!(bad_doc.lines[0][0].show_tokens, None);
+    assert!(bad_warnings.len() >= 3, "warnings: {bad_warnings:?}");
+
+    // Catalog exposes `show_tokens` on `context`.
+    let cat = items::catalog();
+    let ctx_meta = cat
+        .iter()
+        .find(|c| c.id == ItemId::Context)
+        .expect("context");
+    assert!(ctx_meta.options.iter().any(|o| o.key == "show_tokens"));
+
+    // PresetScope::Layout preserves bar_style/bar_gradient; Style and All overwrite them.
+    let mut scoped = doc.clone();
+    assert!(apply_preset(
+        &mut scoped,
+        "minimal",
+        PresetScope::Layout,
+        None
+    ));
+    assert_eq!(scoped.bar_style, BarStyle::Parallelogram);
+    assert!(scoped.bar_gradient);
+    assert!(apply_preset(&mut scoped, "hud", PresetScope::Style, None));
+    assert_eq!(scoped.bar_style, BarStyle::Line);
+    assert!(!scoped.bar_gradient);
+
+    // Top-level `bar_style` applies to slots without an explicit override; slot `bar_style` wins.
+    let mut eff_doc = doc;
+    eff_doc.color_depth = ColorDepth::TrueColor;
+    let eff = EffectiveConfig::from_doc(&eff_doc, None, &BTreeMap::new(), false);
+    assert_eq!(eff.bar_style, BarStyle::Parallelogram);
+    assert!(eff.bar_gradient);
+
+    let payload = agyline::parse_stdin_payload(
+        br#"{
+            "session_id": "bar_override",
+            "context_window": {
+                "current_usage": { "input_tokens": 50000 },
+                "context_window_size": 200000
+            },
+            "quota": {
+                "gemini-5h": { "remaining_fraction": 0.50 },
+                "3p-5h": { "remaining_fraction": 0.50 }
+            }
+        }"#,
+    )
+    .expect("parse payload");
+    let frame = agyline::FrameData {
+        payload,
+        now_sec: 1_700_000_000,
+        ..agyline::FrameData::default()
+    };
+    let plain = agyline::emit_plain(&agyline::render_lines(&frame, &eff), &eff);
+    assert!(
+        plain.contains("▰▰▰▱▱▱▱▱▱▱ 25.0% (50k/200k)"),
+        "context should inherit parallelogram: {plain:?}"
+    );
+    assert!(
+        plain.contains("Gemini 5h ▰▰▰▰▰▱▱▱▱▱ 50.0%"),
+        "gemini quota_group should inherit parallelogram: {plain:?}"
+    );
+    assert!(
+        plain.contains("3P 5h ⣿⣿⣿⣿⣿⣀⣀⣀⣀⣀ 50.0%"),
+        "3p quota_group should use slot braille override: {plain:?}"
+    );
+}
+
+// Ticket #41: `context` (`style = "bar"`) four-tier colors, `(used/window)` counts, bold `→ /compact`
+// crit alert, compact bar shortening, ASCII fallback, TUI span parity, and 4-tier `quota_group`.
+#[test]
+fn context_bar_four_tiers_tokens_ratio_compact_alert_and_quota_group_four_tiers() {
+    use agyline::{BarStyle, emit_ansi, emit_plain, rendered_frame_to_ratatui_lines};
+    use ratatui::style::{Color, Modifier};
+
+    let mut ctx_slot = ItemSlot::new(ItemId::Context);
+    ctx_slot.style = Some("bar".to_string());
+    ctx_slot.show_tokens = Some(true);
+    ctx_slot.label = Some(String::new());
+    ctx_slot.icon = Some(String::new());
+    ctx_slot.bar_width = Some(10);
+
+    let mut qg_slot = ItemSlot::new(ItemId::QuotaGroup);
+    qg_slot.family = Some("gemini".to_string());
+    qg_slot.show_used = Some(false);
+    qg_slot.show_reset = Some(false);
+    qg_slot.icon = Some(String::new());
+
+    let doc = ConfigDoc {
+        palette: "catppuccin".to_string(),
+        theme: ThemeSetting::Dark,
+        color_depth: ColorDepth::TrueColor,
+        bar_style: BarStyle::Parallelogram,
+        bar_gradient: true,
+        lines: vec![vec![ctx_slot, qg_slot]],
+        ..ConfigDoc::default()
+    };
+    let cfg = EffectiveConfig::from_doc(&doc, None, &BTreeMap::new(), false);
+
+    let make_frame = |used_toks: i64, q_rem: f64| -> agyline::FrameData {
+        let json = serde_json::json!({
+            "session_id": "ctx_4tier",
+            "context_window": {
+                "current_usage": { "input_tokens": used_toks },
+                "context_window_size": 200_000
+            },
+            "quota": {
+                "gemini-5h": { "remaining_fraction": q_rem }
+            }
+        });
+        let payload =
+            agyline::parse_stdin_payload(&serde_json::to_vec(&json).unwrap()).expect("payload");
+        agyline::FrameData {
+            payload,
+            now_sec: 1_700_000_000,
+            ..agyline::FrameData::default()
+        }
+    };
+
+    // Ok (20%), Warn (65%), High (80%), Crit (92%) with Catppuccin Mocha RGB endpoints:
+    // Ok=#a6e3a1 (166,227,161), Warn=#f9e2af (249,226,175), High=#fab387 (250,179,135), Crit=#f38ba8 (243,139,168).
+    let tiers = [
+        (
+            40_000_i64,
+            0.80_f64,
+            "20.0% (40k/200k)",
+            "166;227;161",
+            false,
+        ),
+        (130_000, 0.30, "65.0% (130k/200k)", "249;226;175", false),
+        (160_000, 0.20, "80.0% (160k/200k)", "250;179;135", false),
+        (184_000, 0.05, "92.0% (184k/200k)", "243;139;168", true),
+    ];
+    for (used_toks, q_rem, exp_ctx, exp_rgb, exp_crit) in tiers {
+        let frame = make_frame(used_toks, q_rem);
+        let rendered = render_lines_with_width(&frame, &cfg, None);
+        let plain = emit_plain(&rendered, &cfg);
+        let ansi = emit_ansi(&rendered, &cfg);
+        assert!(plain.contains(exp_ctx), "missing {exp_ctx} in {plain:?}");
+        assert!(
+            ansi.contains(&format!(";38;2;{exp_rgb}m")),
+            "expected endpoint RGB {exp_rgb} in {ansi:?}"
+        );
+        if exp_crit {
+            assert!(
+                plain.contains("92.0% (184k/200k) \u{2192} /compact"),
+                "expected compact hint in {plain:?}"
+            );
+            assert!(
+                ansi.contains(";1;38;2;243;139;168m \u{2192} /compact"),
+                "compact hint must be bold Crit in {ansi:?}"
+            );
+            // Shared Ratatui preview matches bold Crit compact hint and RGB gradient.
+            let tui = rendered_frame_to_ratatui_lines(&rendered, &cfg);
+            let alert_span = tui[0]
+                .spans
+                .iter()
+                .find(|s| s.content.as_ref() == " \u{2192} /compact")
+                .expect("tui alert span");
+            assert_eq!(alert_span.style.fg, Some(Color::Rgb(243, 139, 168)));
+            assert!(alert_span.style.add_modifier.contains(Modifier::BOLD));
+        } else {
+            assert!(!plain.contains("/compact"), "unexpected alert in {plain:?}");
+        }
+    }
+
+    // Compact evaluation of crit context drops `(used/window)`, shortens bar to 5 cols, keeps `→ /compact`.
+    let crit_frame = make_frame(184_000, 0.05);
+    let evaluated =
+        items::evaluate_slot_dual(&doc.lines[0][0], &crit_frame, &cfg).expect("ctx eval");
+    let compact_text: String = evaluated
+        .compact_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(compact_text, "▰▰▰▰▰ 92.0% \u{2192} /compact");
+
+    // ASCII glyph mode degrades bar to #- and alert to ` -> /compact`.
+    let mut asc_doc = doc.clone();
+    asc_doc.glyphs = GlyphSet::Ascii;
+    let asc_cfg = EffectiveConfig::from_doc(&asc_doc, None, &BTreeMap::new(), false);
+    let asc_plain = emit_plain(
+        &render_lines_with_width(&crit_frame, &asc_cfg, None),
+        &asc_cfg,
+    );
+    assert!(
+        asc_plain.contains("#########- 92.0% (184k/200k) -> /compact"),
+        "ascii crit plain: {asc_plain:?}"
+    );
+
+    // Unconfounded 4-tier `quota_group`: context stays Ok (10%), quota hits High (20% rem -> Peach #fab387).
+    let q_high_frame = make_frame(20_000, 0.20);
+    let q_high_ansi = emit_ansi(&render_lines_with_width(&q_high_frame, &cfg, None), &cfg);
+    assert!(
+        q_high_ansi.contains(";38;2;250;179;135m 20.0%"),
+        "quota_group High tier must emit Peach #fab387 independently of context: {q_high_ansi:?}"
+    );
+
+    // Custom label (`Some("mem")`), default label (`None` -> "ctx"), and missing window size omit `(used/window)`.
+    let mut custom_lbl = doc.lines[0][0].clone();
+    custom_lbl.label = Some("mem".to_string());
+    let no_win_payload = agyline::parse_stdin_payload(
+        br#"{ "session_id": "no_win", "context_window": { "used_percentage": 40.0 } }"#,
+    )
+    .expect("no_win payload");
+    let no_win_frame = agyline::FrameData {
+        payload: no_win_payload,
+        now_sec: 1_700_000_000,
+        ..agyline::FrameData::default()
+    };
+    let custom_eval = items::evaluate_slot_dual(&custom_lbl, &no_win_frame, &cfg).expect("eval");
+    let custom_txt: String = custom_eval
+        .full_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(custom_txt, "mem ▰▰▰▰▱▱▱▱▱▱ 40.0%");
+
+    let mut default_lbl = custom_lbl;
+    default_lbl.label = None;
+    let def_eval = items::evaluate_slot_dual(&default_lbl, &no_win_frame, &cfg).expect("eval");
+    let def_txt: String = def_eval
+        .full_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(def_txt, "ctx ▰▰▰▰▱▱▱▱▱▱ 40.0%");
+}

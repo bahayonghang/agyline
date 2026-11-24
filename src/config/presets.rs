@@ -339,6 +339,8 @@ pub fn apply_preset(
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
             doc.item_style = built.item_style;
+            doc.bar_style = built.bar_style;
+            doc.bar_gradient = built.bar_gradient;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;
@@ -354,6 +356,8 @@ pub fn apply_preset(
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
             doc.item_style = built.item_style;
+            doc.bar_style = built.bar_style;
+            doc.bar_gradient = built.bar_gradient;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;

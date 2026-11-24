@@ -406,6 +406,16 @@ pub enum ResolvedColor {
 }
 
 impl ResolvedColor {
+    /// Returns an RGB triplet for this color, using standard stand-in values for ANSI-16 and
+    /// ANSI-256 indices so linear RGB interpolation works across all palettes.
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Ansi16(c) => c.to_rgb(),
+            Self::Ansi256(idx) => ansi256_to_rgb(idx),
+            Self::Rgb(r, g, b) => (r, g, b),
+        }
+    }
+
     /// Downgrades to what the terminal can show; `None` at depth `None` means "write no SGR".
     /// Ansi16 passes through at 256 depth so the terminal's own palette stays authoritative.
     pub fn quantize(self, depth: EffectiveColorDepth) -> Option<Self> {
@@ -1121,8 +1131,9 @@ fn nearest_cube_idx(v: u8) -> usize {
     best_i
 }
 
-// Inverse xterm layout (base 16, cube, gray ramp), used to quantize 256 colors down to 16.
-fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
+// Inverse xterm layout (base 16, cube, gray ramp), used to quantize 256 colors down to 16 and
+// to resolve ANSI-256 palette entries to RGB for linear gradient interpolation.
+const fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
     if idx < 16 {
         Ansi16Color::ALL[idx as usize].to_rgb()
     } else if idx < 232 {

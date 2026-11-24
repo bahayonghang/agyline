@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::render::BarStyle;
 use crate::render::palette::{
     ColorSpec, ColorToken, EffectiveColorDepth, ResolvedColor, ResolvedPalette, parse_color_spec,
     resolve_effective_color_depth, resolve_palette, toml_value_to_color_spec,
@@ -399,7 +400,7 @@ pub struct ItemSlot {
     pub show_used: Option<bool>,
     /// Context / Quota / QuotaGroup: display proportional `Usage Bar`.
     pub show_bar: Option<bool>,
-    /// `Usage Bar` style (`line`, `solid`, `block`, `ascii`).
+    /// `Usage Bar` style (`line`, `parallelogram`, `braille`, `solid`, `block`, `ascii`).
     pub bar_style: Option<String>,
     /// `Usage Bar` column width (`4..=20`, default `10`).
     pub bar_width: Option<u8>,
@@ -411,6 +412,8 @@ pub struct ItemSlot {
     pub show_breakdown: Option<bool>,
     /// Status: append `(+N)` pending input count when non-zero.
     pub show_pending: Option<bool>,
+    /// Context (bar): append `(used/window)` token counts after percentage.
+    pub show_tokens: Option<bool>,
 }
 
 impl ItemSlot {
@@ -451,6 +454,7 @@ impl ItemSlot {
             show_ttl: None,
             show_breakdown: None,
             show_pending: None,
+            show_tokens: None,
         }
     }
 
@@ -480,6 +484,7 @@ impl ItemSlot {
             && self.show_ttl.is_none()
             && self.show_breakdown.is_none()
             && self.show_pending.is_none()
+            && self.show_tokens.is_none()
     }
 
     /// The slot's priority when it is inside 1..=5, else the item default; bad values are ignored,
@@ -587,6 +592,10 @@ pub struct ConfigDoc {
     pub glyphs: GlyphSet,
     pub color_depth: ColorDepth,
     pub item_style: ItemStyle,
+    /// Top-level default `Usage Bar` style, overridable per slot via `bar_style`.
+    pub bar_style: BarStyle,
+    /// Enables per-cell RGB linear gradient interpolation across filled `Usage Bar` cells.
+    pub bar_gradient: bool,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
@@ -620,6 +629,8 @@ impl ConfigDoc {
             glyphs: GlyphSet::Nerd,
             color_depth: ColorDepth::Auto,
             item_style: ItemStyle::Minimal,
+            bar_style: BarStyle::Line,
+            bar_gradient: false,
             // statusline.ps1 joins items with $SEP_PIPE = " | ".
             separator: " | ".to_string(),
             // Both reference scripts default the indent to two spaces.
@@ -824,6 +835,12 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
         "item_style = {}",
         quote_toml_str(doc.item_style.as_key())
     );
+    let _ = writeln!(
+        out,
+        "bar_style = {}",
+        quote_toml_str(doc.bar_style.as_key())
+    );
+    let _ = writeln!(out, "bar_gradient = {}", doc.bar_gradient);
     let _ = writeln!(out, "separator = {}", quote_toml_str(&doc.separator));
     let _ = writeln!(out, "indent = {}", quote_toml_str(&doc.indent));
     let _ = writeln!(out, "single_line = {}", doc.single_line);
@@ -902,6 +919,8 @@ pub struct EffectiveConfig {
     /// What `color_depth` resolved to; the renderer quantizes every color with this.
     pub effective_color_depth: EffectiveColorDepth,
     pub item_style: ItemStyle,
+    pub bar_style: BarStyle,
+    pub bar_gradient: bool,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
@@ -1046,6 +1065,8 @@ impl EffectiveConfig {
             color_depth: doc.color_depth,
             effective_color_depth,
             item_style: doc.item_style,
+            bar_style: doc.bar_style,
+            bar_gradient: doc.bar_gradient,
             separator,
             indent,
             single_line,
@@ -1180,6 +1201,17 @@ fn parse_config_overlay_with_home(
                 Some(style) => doc.item_style = style,
                 None => warnings
                     .push("invalid 'item_style': expected minimal, badge, or pill".to_string()),
+            },
+            "bar_style" => match val.as_str().and_then(BarStyle::from_key) {
+                Some(bs) => doc.bar_style = bs,
+                None => warnings.push(
+                    "invalid 'bar_style': expected line, parallelogram, braille, solid, block, or ascii"
+                        .to_string(),
+                ),
+            },
+            "bar_gradient" => match val.as_bool() {
+                Some(b) => doc.bar_gradient = b,
+                None => warnings.push("invalid 'bar_gradient': expected boolean".to_string()),
             },
             "separator" => match val.as_str() {
                 Some(s) => doc.separator = s.to_string(),
@@ -1640,11 +1672,11 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                         None => warnings.push(format!("invalid '{id_str}.show_bar'")),
                     },
                     "bar_style" => {
-                        if let Some(bs) = v.as_str().and_then(crate::render::BarStyle::from_key) {
+                        if let Some(bs) = v.as_str().and_then(BarStyle::from_key) {
                             slot.bar_style = Some(bs.as_key().to_string());
                         } else {
                             warnings.push(format!(
-                                "invalid '{id_str}.bar_style': expected line, solid, block, or ascii"
+                                "invalid '{id_str}.bar_style': expected line, parallelogram, braille, solid, block, or ascii"
                             ));
                         }
                     }
@@ -1678,6 +1710,10 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                     "show_pending" => match v.as_bool() {
                         Some(b) => slot.show_pending = Some(b),
                         None => warnings.push(format!("invalid '{id_str}.show_pending'")),
+                    },
+                    "show_tokens" => match v.as_bool() {
+                        Some(b) => slot.show_tokens = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_tokens'")),
                     },
                     other => warnings.push(format!("unknown option '{id_str}.{other}' ignored")),
                 }
@@ -1835,6 +1871,9 @@ fn format_item_slot_toml(slot: &ItemSlot) -> String {
     }
     if let Some(v) = slot.show_pending {
         fields.push(format!("show_pending = {v}"));
+    }
+    if let Some(v) = slot.show_tokens {
+        fields.push(format!("show_tokens = {v}"));
     }
     if let Some(ref ic) = slot.icon {
         fields.push(format!("icon = {}", quote_toml_str(ic)));

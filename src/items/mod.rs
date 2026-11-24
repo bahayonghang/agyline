@@ -75,7 +75,7 @@ const GIT_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     summary: "Display style: default or counts (main* !1 ?7)",
 }];
 
-const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
+const CONTEXT_OPTS: [ItemOptionSpec; 5] = [
     ItemOptionSpec {
         key: "show_remaining",
         kind: ItemOptionKind::Bool,
@@ -89,12 +89,17 @@ const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
         kind: ItemOptionKind::Text,
         summary: "Usage Bar column width (4..=20)",
+    },
+    ItemOptionSpec {
+        key: "show_tokens",
+        kind: ItemOptionKind::Bool,
+        summary: "Append (used/window) token counts in bar style",
     },
 ];
 
@@ -198,7 +203,7 @@ const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -243,7 +248,7 @@ const QUOTA_GROUP_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
