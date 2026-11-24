@@ -24,11 +24,11 @@
 
 - **双极性 Catppuccin 与 Monochrome 调色板**：内置 `palette = "catppuccin"` 在深色主题下自动切换为 **Catppuccin Mocha**、在浅色主题下自动切换为 **Catppuccin Latte**，覆盖 15 个语义颜色槽（含 `ok` / `warn` / `high` / `crit` 四级紧迫度与 `surface` / `surface_hi` 容器底色）。另提供双极性 `mono`、`terminal`、7 套固定极性 RGB 调色板，以及自定义 `~/.gemini/agyline/palettes/*.toml`。
 - **智能色深自动探测**：`color_depth = "auto"` 优先遵守 `NO_COLOR` 与 `TERM=dumb`，在 macOS `Apple_Terminal` 上自动降级至 256 色，并在回退到泛用 `*256color` 前优先识别现代 TrueColor 终端（`iTerm2`、`WezTerm`、`Ghostty`、`Kitty`、`Alacritty`、`VS Code`、`Windows Terminal`、`Warp`、`Hyper`、`Tabby`、`Rio`）。
-- **逐格渐变 `Usage Bar` 与 `/compact` 告警**：支持斜方块 `parallelogram`（`▰▱`，别名 `blocks`）、盲文 `braille`（`⣿⣤⣀`）、纯前景细轨 `line`（`━╸─`）、`solid`、`block` 与 `ascii` 样式；开启 `bar_gradient = true` 后在已填充格间执行轻量 RGB 线性插值渐变，并在 256 色 / 16 色 / ASCII 下无损降级且严格保持列宽。`context` 进度条支持显示 `(used/window)` token 比值，在达到 `context_crit`（默认 `90%`）时自动追加加粗 **`→ /compact`** 告警。
+- **逐格渐变 `Usage Bar` 与 `/compact` 告警**：支持与数字等高的独立竖块 `cells`（`❚`，别名 `segments`，默认）、斜方块 `parallelogram`（`▰▱`，别名 `blocks`）、盲文 `braille`（`⣿⣤⣀`）、纯前景细轨 `line`（`━╸─`）、`solid`、`block` 与 `ascii` 样式；开启 `bar_gradient = true` 后沿进度条全宽执行 4 停点轻量 RGB 线性渐变（绿→黄→橙→红），并在 256 色 / 16 色 / ASCII 下无损降级且严格保持列宽。`context` 进度条支持显示 `(used/window)` token 比值，在达到 `context_crit`（默认 `90%`）时自动追加加粗 **`→ /compact`** 告警。
 - **行级 `Container Style` 与语义分隔符别名**：支持在无框分隔 `minimal`、通用着色色块 `badge`（无需 Nerd Font）与圆角 Powerline 胶囊 `pill`（`\u{e0b6}` / `\u{e0b4}`）间切换，按终端能力自动降级（非 Nerd 字体时 `pill` → `badge`，低于 256 色时退回 `minimal`）；`separator` 支持语义预设（`pipe`、`dashed`、`dot`、`square`、`none`）及任意自定义文本。
 - **窄屏 `Compact Threshold` 自动折叠**：当终端宽度低于 `compact_at`（默认 `88` 列，`0` 为关闭）时，多行布局先自动折叠为单行紧凑展示，再由 `overflow = "fit"` 执行优先级压缩，确保分屏窄窗口零折行。
 - **精致 2 行新 `Default Line` + 完整历史预设兼容**：
-  - **第一行**：加粗模型名 + 去重 `[effort]`（支持上游 `Response Model` 替换）、逐格渐变 `parallelogram` 上下文条（含 `(used/window)` 与 `→ /compact`）、紧凑 `↑in ↓out` token 计数，以及按模型优先与紧迫度排序的紧凑额度倒计时（`⚡ 7d:64%(3d) · 5h:82%(2h15m)`，配额稀疏或缺失时自动回退显示 `ai_credits` 的 `cr:<n>`）。
+  - **第一行**：加粗模型名 + 去重 `[effort]`（支持上游 `Response Model` 替换）、全高独立方块渐变 `cells` 上下文条（含 `(used/window)` 与 `→ /compact`）、紧凑 `↑in ↓out` token 计数，以及按模型优先与紧迫度排序的紧凑额度倒计时（`⚡ 7d:64%(3d) · 5h:82%(2h15m)`，配额稀疏或缺失时自动回退显示 `ai_credits` 的 `cr:<n>`）。
   - **第二行**：小写 `dot` 智能体状态（`◉ thinking`、`● working`、`⚙ tool_use`、`✖ error`、`○ idle`，紧凑态收起为单点但保留 `CONFIRM` 告警）、零阻塞 `⎇ branch*` Git 提示、主目录中段省略路径（`~/…/parent/leaf`），以及非零时显示的 `subagents`、`tasks`、`artifacts`、`sandbox`。
   - **既有预设零回退**：原 3 行 `hud`、2 行 `@model` 的 `classic` 与字节级对齐参考脚本的 `cometix`（`Reference Line`）预设完整保留。
 - **一行式快捷 CLI 与零反解析交互式 TUI**：可用 `agyline set <key> [value]` 和 `agyline preview --showcase` 秒级调参预览，也可直接在终端运行 `agyline` 打开与实时输出共用同一渲染管线的四标签 TUI 工作台。
@@ -114,7 +114,7 @@ agyline set preset hud            # default | hud | classic | cometix | minimal 
 agyline set palette catppuccin    # catppuccin | mono | terminal | catppuccin-mocha | tokyo-night | nord | ...
 agyline set theme auto            # auto | dark | light
 agyline set style pill            # minimal | badge | pill
-agyline set bar braille           # parallelogram（别名 blocks）| braille | line | solid | block | ascii
+agyline set bar braille           # cells（别名 segments）| parallelogram（blocks）| braille | line | solid | block | ascii
 agyline set bar-gradient true     # true | false（亦支持 on/off/1/0）
 agyline set sep dashed            # pipe | dashed | dot | square | none | "<自定义>"
 agyline set compact-at 88         # 0..=500（0 关闭自动折叠）
@@ -158,7 +158,7 @@ theme = "auto"                # auto | dark | light
 glyphs = "nerd"               # nerd | unicode | ascii
 color_depth = "auto"          # auto | truecolor | 256 | 16 | none
 item_style = "minimal"        # minimal | badge | pill
-bar_style = "parallelogram"   # parallelogram | braille | line | solid | block | ascii
+bar_style = "cells"           # cells | parallelogram | braille | line | solid | block | ascii
 bar_gradient = true           # 启用进度条逐格 RGB 线性渐变
 separator = " │ "             # 或语义别名：pipe | dashed | dot | square | none
 indent = "  "

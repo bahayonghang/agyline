@@ -24,11 +24,11 @@
 
 - **Dual-polarity Catppuccin & Monochrome Palettes**: `palette = "catppuccin"` adapts automatically between **Catppuccin Mocha** (dark `Theme`) and **Catppuccin Latte** (light `Theme`) across 15 semantic tokens (including 4 urgency tiers `ok` / `warn` / `high` / `crit` and `surface` / `surface_hi` backgrounds). Includes dual-polarity `mono`, `terminal`, 7 fixed-polarity RGB palettes, and custom `~/.gemini/agyline/palettes/*.toml`.
 - **Smart Auto Color-Depth Detection**: `color_depth = "auto"` honors `NO_COLOR` and `TERM=dumb` first, downgrades macOS `Apple_Terminal` cleanly to 256-color, and promotes modern TrueColor terminals (`iTerm2`, `WezTerm`, `Ghostty`, `Kitty`, `Alacritty`, `VS Code`, `Windows Terminal`, `Warp`, `Hyper`, `Tabby`, `Rio`) ahead of generic `*256color` fallback.
-- **Per-Cell Gradient `Usage Bar`s & `/compact` Alert**: Supports slanted `parallelogram` (`▰▱`, alias `blocks`), `braille` (`⣿⣤⣀`), `line` (`━╸─`), `solid`, `block`, and `ascii` bars with allocation-light RGB linear interpolation (`bar_gradient = true`) degrading losslessly across 256-color, 16-color, and ASCII terminals. The `context` bar shows `(used/window)` counts and appends a bold **`→ /compact`** alert at or above `context_crit` (default `90%`).
+- **Per-Cell Gradient `Usage Bar`s & `/compact` Alert**: Supports cap-height segmented `cells` (`❚`, alias `segments`, default), slanted `parallelogram` (`▰▱`, alias `blocks`), `braille` (`⣿⣤⣀`), `line` (`━╸─`), `solid`, `block`, and `ascii` bars with allocation-light 4-tier RGB linear gradients (`bar_gradient = true`) degrading losslessly across 256-color, 16-color, and ASCII terminals. The `context` bar shows `(used/window)` counts and appends a bold **`→ /compact`** alert at or above `context_crit` (default `90%`).
 - **`Container Style` & Semantic Separators**: Switch row framing between separator-divided `minimal`, universal colored `badge` (no Nerd Font needed), and Powerline-capped `pill` (`\u{e0b6}` / `\u{e0b4}`), with automatic capability degradation (`pill` → `badge` on non-Nerd glyphs; `badge`/`pill` → `minimal` below 256 colors) and semantic `separator` aliases (`pipe`, `dashed`, `dot`, `square`, `none`, or custom text).
 - **Responsive `Compact Threshold` Collapse**: Multi-row layouts automatically collapse into a single compact row below `compact_at` (default `88` columns; `0` disables) before `overflow = "fit"` priority narrowing runs—keeping narrow split panes wrap-free.
 - **Focused 2-Row `Default Line` + Preserved Presets**:
-  - **Row 1**: Bold model + deduplicated `[effort]` (honoring upstream `Response Model`), gradient `parallelogram` context bar with `(used/window)` and `→ /compact`, compact `↑in ↓out` token counters, and urgency-sorted inline `@model` quota countdowns (`⚡ 7d:64%(3d) · 5h:82%(2h15m)`, falling back to `cr:<n>` from `ai_credits`).
+  - **Row 1**: Bold model + deduplicated `[effort]` (honoring upstream `Response Model`), full-height segmented gradient `cells` context bar with `(used/window)` and `→ /compact`, compact `↑in ↓out` token counters, and urgency-sorted inline `@model` quota countdowns (`⚡ 7d:64%(3d) · 5h:82%(2h15m)`, falling back to `cr:<n>` from `ai_credits`).
   - **Row 2**: Lowercase `dot` agent status (`◉ thinking`, `● working`, `⚙ tool_use`, `✖ error`, `○ idle`, preserving `CONFIRM`), zero-blocking `⎇ branch*` Git indicator, home-tildefied middle-ellipsized path (`~/…/parent/leaf`), plus non-zero `subagents`, `tasks`, `artifacts`, and `sandbox`.
   - **Full Backward Compatibility**: `hud` (3-row `line` bar HUD), `classic` (2-row `@model` layout), and `cometix` (byte-exact `Reference Line`) presets remain preserved unchanged.
 - **One-Line CLI & Zero-ANSI-Reparse TUI**: Configure in one command via `agyline set <key> [value]` and `agyline preview --showcase`, or run `agyline` in a terminal for the 4-tab interactive workbench sharing the exact live renderer.
@@ -114,7 +114,7 @@ agyline set preset hud            # default | hud | classic | cometix | minimal 
 agyline set palette catppuccin    # catppuccin | mono | terminal | catppuccin-mocha | tokyo-night | nord | ...
 agyline set theme auto            # auto | dark | light
 agyline set style pill            # minimal | badge | pill
-agyline set bar braille           # parallelogram (alias: blocks) | braille | line | solid | block | ascii
+agyline set bar braille           # cells (alias: segments) | parallelogram (blocks) | braille | line | solid | block | ascii
 agyline set bar-gradient true     # true | false (also on/off/1/0)
 agyline set sep dashed            # pipe | dashed | dot | square | none | "<custom>"
 agyline set compact-at 88         # 0..=500 (0 disables automatic single-row collapse)
@@ -158,7 +158,7 @@ theme = "auto"                # auto | dark | light
 glyphs = "nerd"               # nerd | unicode | ascii
 color_depth = "auto"          # auto | truecolor | 256 | 16 | none
 item_style = "minimal"        # minimal | badge | pill
-bar_style = "parallelogram"   # parallelogram | braille | line | solid | block | ascii
+bar_style = "cells"           # cells | parallelogram | braille | line | solid | block | ascii
 bar_gradient = true           # per-cell RGB linear gradient across filled cells
 separator = " │ "             # or semantic preset: pipe | dashed | dot | square | none
 indent = "  "
