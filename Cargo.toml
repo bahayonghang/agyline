@@ -1,6 +1,6 @@
 [package]
 name = "agyline"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 # Let-chains shipped in 1.88. Locked deps `instability` and `darling` declare the same floor.
 rust-version = "1.88"
