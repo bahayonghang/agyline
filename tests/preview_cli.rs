@@ -182,10 +182,16 @@ fn builtin_scenarios_expose_all_six_canonical_entries() {
             "busy_subagents",
             "warn_crit",
             "narrow_stress",
+            "showcase_wide",
+            "showcase_critical",
+            "showcase_compact",
         ]
     );
     assert!(find_scenario("normal").is_some());
     assert!(find_scenario("narrow_stress").is_some());
+    assert!(find_scenario("showcase_wide").is_some());
+    assert!(find_scenario("showcase_critical").is_some());
+    assert!(find_scenario("showcase_compact").is_some());
     assert!(find_scenario("nonexistent").is_none());
 }
 
@@ -393,12 +399,33 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
 
 #[test]
 fn hud_default_preset_renders_three_rows_and_collapses_on_single_line() {
-    let sb = PreviewSandbox::new("hud_default");
+    // 1. Default preset renders the new 2-row Catppuccin layout.
+    let sb_def = PreviewSandbox::new("agybar_default");
+    let def_full = sb_def.run(
+        &["preview", "-s", "showcase_wide", "--plain", "-w", "0"],
+        b"",
+        &[],
+    );
+    assert_eq!(def_full.status.code(), Some(0));
+    let def_txt = String::from_utf8(def_full.stdout).expect("utf8");
+    let def_lines: Vec<&str> = def_txt.lines().collect();
+    assert_eq!(
+        def_lines.len(),
+        2,
+        "Default preset must emit 2 rows: {def_txt:?}"
+    );
+    assert!(def_lines[0].contains("✦ Claude Opus 4.6 [high]") && def_lines[0].contains('▰'));
+    assert!(def_lines[1].contains("● working") && def_lines[1].contains("⎇ main*"));
+
+    // 2. Explicit `hud` preset preserves the 3-row HUD layout and single-line collapse.
+    let sb = PreviewSandbox::new("hud_preset");
+    fs::create_dir_all(&sb.home).expect("mkdir");
+    fs::write(sb.home.join("config.toml"), "preset = \"hud\"\n").expect("write hud preset");
     let full = sb.run(&["preview", "-s", "normal", "--plain", "-w", "0"], b"", &[]);
     assert_eq!(full.status.code(), Some(0));
     let full_txt = String::from_utf8(full.stdout).expect("utf8");
     let lines: Vec<&str> = full_txt.lines().collect();
-    assert_eq!(lines.len(), 3, "HUD default must emit 3 rows: {full_txt:?}");
+    assert_eq!(lines.len(), 3, "HUD preset must emit 3 rows: {full_txt:?}");
     assert!(lines[0].contains("WORKING") && lines[0].contains("AUTO"));
     assert!(lines[0].contains("Gemini 2.5 Pro (High)") && lines[0].contains("main*"));
     assert!(lines[1].contains("Gemini 5h") && lines[1].contains("3P 5h"));

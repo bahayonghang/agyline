@@ -65,6 +65,51 @@ pub fn eval_model(
     if slot
         .style
         .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("agybar"))
+    {
+        let agy_icon = slot
+            .icon
+            .as_deref()
+            .unwrap_or_else(|| glyphs::agybar_model_icon(config.glyphs));
+        let short_effort = short_effort_label(&effort_label);
+        let show_effort =
+            !short_effort.is_empty() && !effort_embedded_in_name(&pretty_base, &effort_label);
+        let bold = TextStyle::PLAIN.bold();
+        let build_agybar = |name: String, with_effort: bool| -> Vec<StyledSpan> {
+            let mut spans = Vec::with_capacity(3);
+            if agy_icon.is_empty() {
+                spans.push(StyledSpan::styled(body_col, bold, name));
+            } else if let Some(ic) = custom_ic
+                && ic != body_col
+            {
+                spans.push(StyledSpan::styled(ic, bold, agy_icon));
+                spans.push(StyledSpan::styled(body_col, bold, format!(" {name}")));
+            } else {
+                spans.push(StyledSpan::styled(
+                    body_col,
+                    bold,
+                    format!("{agy_icon} {name}"),
+                ));
+            }
+            if with_effort {
+                spans.push(StyledSpan::new(
+                    ColorToken::Muted,
+                    format!(" [{short_effort}]"),
+                ));
+            }
+            spans
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Model,
+            priority: slot.effective_priority(),
+            full_spans: build_agybar(pretty_base, show_effort),
+            compact_spans: build_agybar(compact_base, false),
+        });
+    }
+
+    if slot
+        .style
+        .as_deref()
         .is_some_and(|s| s.eq_ignore_ascii_case("hud"))
     {
         let hud_effort = if effort_label == "xHigh" {
@@ -229,11 +274,12 @@ fn format_multi_level_dir(
             trimmed_cwd.to_string()
         }
     } else if segs.len() > max_levels {
-        format!(
-            "{}/{}",
-            glyphs::ellipsis(glyphs),
-            segs[segs.len() - max_levels..].join("/")
-        )
+        let tail = segs[segs.len() - max_levels..].join("/");
+        if prefix == "~/" {
+            format!("~/{}/{tail}", glyphs::ellipsis(glyphs))
+        } else {
+            format!("{}/{tail}", glyphs::ellipsis(glyphs))
+        }
     } else {
         format!("{prefix}{}", segs.join("/"))
     }
@@ -290,6 +336,41 @@ pub fn eval_git(
         .unwrap_or_else(|| glyphs::git_icon(config.glyphs));
     let base_col = slot_fg_color(slot, ColorToken::Git);
     let custom_ic = slot_custom_icon_color(slot);
+
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("branch"))
+    {
+        let br_icon = slot
+            .icon
+            .as_deref()
+            .unwrap_or_else(|| glyphs::agybar_git_icon(config.glyphs));
+        let build_branch = |limit: usize| -> Vec<StyledSpan> {
+            let short = truncate_chars_with_ellipsis(&git.branch, limit, config.glyphs);
+            let mut spans = coalesced_icon_body_spans(br_icon, custom_ic, base_col, short);
+            if git.has_conflict {
+                spans.push(StyledSpan::styled(
+                    ColorToken::Crit,
+                    TextStyle::PLAIN.bold(),
+                    " !",
+                ));
+            } else if git.dirty {
+                spans.push(StyledSpan::styled(
+                    ColorToken::Warn,
+                    TextStyle::PLAIN.bold(),
+                    "*",
+                ));
+            }
+            spans
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Git,
+            priority: slot.effective_priority(),
+            full_spans: build_branch(24),
+            compact_spans: build_branch(12),
+        });
+    }
 
     if slot
         .style
@@ -454,6 +535,32 @@ pub fn format_effort_label(raw: &str) -> String {
         "max" => "Max".to_string(),
         _ => s.to_string(),
     }
+}
+
+fn short_effort_label(effort_label: &str) -> String {
+    let low = effort_label.trim().to_ascii_lowercase();
+    match low.as_str() {
+        "" | "none" | "default" => String::new(),
+        "medium" | "med" => "med".to_string(),
+        "minimal" => "min".to_string(),
+        _ => low,
+    }
+}
+
+fn effort_embedded_in_name(model_name: &str, effort_label: &str) -> bool {
+    let short = short_effort_label(effort_label);
+    if short.is_empty() {
+        return false;
+    }
+    let full = effort_label.trim().to_ascii_lowercase();
+    model_name
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|tok| !tok.is_empty())
+        .any(|tok| {
+            tok.eq_ignore_ascii_case(&short)
+                || tok.eq_ignore_ascii_case(&full)
+                || (short == "med" && tok.eq_ignore_ascii_case("medium"))
+        })
 }
 
 /// Reference slug cleanup: drop `models/`, a `-20YYYYMMDD` stamp, `-preview[-MM-DD]`, `-latest`,

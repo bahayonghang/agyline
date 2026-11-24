@@ -314,3 +314,42 @@ pub fn token_out_arrow(glyphs: GlyphSet) -> &'static str {
         GlyphSet::Ascii => "v",
     }
 }
+
+pub fn agybar_model_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2726}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn agybar_git_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2387}",
+        GlyphSet::Ascii => "git:",
+    }
+}
+
+pub fn agybar_quota_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{26a1}",
+        GlyphSet::Ascii => "q:",
+    }
+}
+
+pub fn status_dot_icon(glyphs: GlyphSet, state: &str) -> &'static str {
+    match (glyphs, state) {
+        (GlyphSet::Nerd | GlyphSet::Unicode, "thinking") => "\u{25c9}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "working") => "\u{25cf}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "tool_use") => "\u{2699}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "error") => "\u{2716}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "" | "idle") => "\u{25cb}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "reviewing") => "\u{25c9}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, _) => "\u{25cc}",
+        (GlyphSet::Ascii, "thinking" | "working") => "*",
+        (GlyphSet::Ascii, "tool_use") => "#",
+        (GlyphSet::Ascii, "error") => "x",
+        (GlyphSet::Ascii, "" | "idle") => "o",
+        (GlyphSet::Ascii, "reviewing") => "?",
+        (GlyphSet::Ascii, _) => ".",
+    }
+}

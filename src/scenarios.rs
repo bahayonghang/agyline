@@ -503,5 +503,110 @@ fn build_scenarios() -> Vec<Scenario> {
         },
     };
 
-    vec![sc_normal, sc_pre, sc_touch, sc_busy, sc_warn, sc_narrow]
+    // 7. showcase_wide
+    let mut p_wide = empty_payload();
+    p_wide.session_id = Some("preview_showcase_wide".to_string());
+    p_wide.agent_state = "working".to_string();
+    p_wide.exec_mode = "auto".to_string();
+    p_wide.model_display_name = "Claude Opus 4.6".to_string();
+    p_wide.model_effort = "high".to_string();
+    p_wide.cwd = "/home/dev/work/clients/agyline".to_string();
+    p_wide.input_tokens = 16_000;
+    p_wide.cache_read_input_tokens = 80_000;
+    p_wide.total_input_tokens = 48_000;
+    p_wide.total_output_tokens = 12_000;
+    p_wide.context_window_size = 200_000.0;
+    p_wide.used_percentage = 48.0;
+    p_wide.quota_buckets = vec![
+        bucket("3p-5h", 82.0, 2 * 3600 + 15 * 60),
+        bucket("3p-weekly", 64.0, 3 * 86_400),
+    ];
+
+    let sc_wide = Scenario {
+        name: "showcase_wide",
+        label: "showcase_wide (Catppuccin Wide)",
+        description: "Wide two-row Catppuccin Default Line with gradient parallelogram bar, inline quotas, and middle-ellipsized home path.",
+        default_width: 120,
+        frame: FrameData {
+            payload: p_wide,
+            now_sec,
+            git: Some(GitFrameState {
+                branch: "main".to_string(),
+                dirty: true,
+                modified: 2,
+                ..GitFrameState::default()
+            }),
+            cache: CacheFrameState::default(),
+            last_tps: Some("72.4".to_string()),
+            response_model: None,
+            session_start_sec: Some(now_sec - 24 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
+        },
+    };
+
+    // 8. showcase_critical
+    let mut p_crit = empty_payload();
+    p_crit.session_id = Some("preview_showcase_critical".to_string());
+    p_crit.agent_state = "thinking".to_string();
+    p_crit.exec_mode = "accept-edits".to_string();
+    p_crit.model_display_name = "Claude Opus 4.6".to_string();
+    p_crit.model_effort = "xHigh".to_string();
+    p_crit.cwd = "/home/dev/work/clients/agyline".to_string();
+    p_crit.sandbox_enabled = true;
+    p_crit.input_tokens = 26_000;
+    p_crit.cache_read_input_tokens = 160_000;
+    p_crit.total_input_tokens = 186_000;
+    p_crit.total_output_tokens = 42_000;
+    p_crit.context_window_size = 200_000.0;
+    p_crit.used_percentage = 93.0;
+    p_crit.quota_buckets = vec![bucket("3p-5h", 8.0, 18 * 60)];
+    p_crit.ai_credits = Some(420.0);
+    p_crit.subagents_total = 2;
+    p_crit.subagents_running = 2;
+    p_crit.task_count = 3;
+    p_crit.artifact_count = 2;
+
+    let sc_crit = Scenario {
+        name: "showcase_critical",
+        label: "showcase_critical (>90% /compact)",
+        description: "High-usage context (>90%) triggering bold → /compact alert, critical quota + ai_credits fallback, and active runtime items.",
+        default_width: 120,
+        frame: FrameData {
+            payload: p_crit,
+            now_sec,
+            git: Some(GitFrameState {
+                branch: "feat/v0.3".to_string(),
+                dirty: true,
+                modified: 4,
+                ..GitFrameState::default()
+            }),
+            cache: CacheFrameState::default(),
+            last_tps: Some("54.0".to_string()),
+            response_model: None,
+            session_start_sec: Some(now_sec - 82 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
+        },
+    };
+
+    // 9. showcase_compact
+    let mut p_comp = sc_wide.frame.payload.clone();
+    p_comp.session_id = Some("preview_showcase_compact".to_string());
+    p_comp.terminal_width = Some(78);
+
+    let sc_compact = Scenario {
+        name: "showcase_compact",
+        label: "showcase_compact (<88 Auto-Collapse)",
+        description: "Narrow 78-column terminal below Compact Threshold triggering single-row compact collapse with zero wrapping.",
+        default_width: 78,
+        frame: FrameData {
+            payload: p_comp,
+            ..sc_wide.frame.clone()
+        },
+    };
+
+    vec![
+        sc_normal, sc_pre, sc_touch, sc_busy, sc_warn, sc_narrow, sc_wide, sc_crit, sc_compact,
+    ]
 }

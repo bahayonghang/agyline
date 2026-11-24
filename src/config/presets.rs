@@ -6,9 +6,10 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::{
-    ConfigDoc, ItemId, ItemSlot, ModelQuotaPeriod, PresetScope, ThresholdsConfig,
-    parse_config_overlay,
+    ConfigDoc, DEFAULT_COMPACT_AT, ItemId, ItemSlot, ItemStyle, ModelQuotaPeriod, PresetScope,
+    ThresholdsConfig, parse_config_overlay,
 };
+use crate::render::BarStyle;
 
 /// Picker entry: `name` is the value written to the `preset` key, `summary` is display text only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,11 +21,11 @@ pub struct PresetInfo {
 const BUILTIN_PRESETS: [PresetInfo; 7] = [
     PresetInfo {
         name: "default",
-        summary: "3-row HUD with status, mode badge, usage bars, dual quotas, and session telemetry",
+        summary: "2-row Catppuccin gradient layout with parallelogram bars, inline quotas, and auto-compact",
     },
     PresetInfo {
         name: "hud",
-        summary: "3-row HUD preset (explicit alias of default)",
+        summary: "3-row HUD with status, mode badge, line usage bars, dual quotas, and session telemetry",
     },
     PresetInfo {
         name: "classic",
@@ -102,6 +103,72 @@ pub(super) fn workspace_and_runtime_lines(usage: ItemId) -> Vec<Vec<ItemSlot>> {
             ItemSlot::new(ItemId::Sandbox),
         ],
     ]
+}
+
+/// 2-row Catppuccin gradient `Default Line`: model/context/tokens/inline quota on row 1,
+/// status/git/dir plus non-zero runtime items on row 2, collapsing automatically below 88 columns.
+pub fn default_preset_doc() -> ConfigDoc {
+    let mut doc = ConfigDoc::cometix_base();
+    doc.preset = "default".to_string();
+    doc.palette = "catppuccin".to_string();
+    doc.bar_style = BarStyle::Parallelogram;
+    doc.bar_gradient = true;
+    doc.item_style = ItemStyle::Minimal;
+    doc.separator = " │ ".to_string();
+    doc.compact_at = DEFAULT_COMPACT_AT;
+    doc.thresholds = ThresholdsConfig {
+        context_warn: 60.0,
+        context_high: 75.0,
+        context_crit: 90.0,
+        quota_warn: 40,
+        quota_high: 25,
+        quota_crit: 10,
+        cache_warn_secs: 60,
+    };
+
+    let mut model = ItemSlot::new(ItemId::Model);
+    model.style = Some("agybar".to_string());
+
+    let mut context = ItemSlot::new(ItemId::Context);
+    context.style = Some("bar".to_string());
+    context.label = Some(String::new());
+    context.icon = Some(String::new());
+    context.show_tokens = Some(true);
+    context.bar_width = Some(10);
+
+    let mut tokens = ItemSlot::new(ItemId::Tokens);
+    tokens.style = Some("arrows".to_string());
+
+    let mut quota = ItemSlot::new(ItemId::QuotaGroup);
+    quota.style = Some("inline".to_string());
+    quota.family = Some("@model".to_string());
+    quota.show_reset = Some(true);
+    quota.priority = Some(2);
+
+    let mut status = ItemSlot::new(ItemId::Status);
+    status.style = Some("dot".to_string());
+    status.priority = Some(1);
+
+    let mut git = ItemSlot::new(ItemId::Git);
+    git.style = Some("branch".to_string());
+
+    let mut dir = ItemSlot::new(ItemId::Dir);
+    dir.max_levels = Some(2);
+    dir.icon = Some(String::new());
+
+    doc.lines = vec![
+        vec![model, context, tokens, quota],
+        vec![
+            status,
+            git,
+            dir,
+            ItemSlot::new(ItemId::Subagents),
+            ItemSlot::new(ItemId::Tasks),
+            ItemSlot::new(ItemId::Artifacts),
+            ItemSlot::new(ItemId::Sandbox),
+        ],
+    ];
+    doc
 }
 
 /// 3-row HUD layout: status, mode badge, usage bars, dual Gemini/3P quota groups, and runtime telemetry.

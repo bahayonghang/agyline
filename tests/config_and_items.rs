@@ -51,7 +51,8 @@ impl Drop for Sandbox {
 fn config_doc_serializes_shorthands_and_inline_tables_and_roundtrips() {
     let mut doc = ConfigDoc::default();
     let default_toml = serialize_config_doc(&doc);
-    assert!(default_toml.contains("\"model\""));
+    assert!(default_toml.contains("\"subagents\""));
+    assert!(default_toml.contains("id = \"model\""));
     assert!(!default_toml.contains("[palette_overrides]"));
 
     let mut quota_slot = ItemSlot::new(ItemId::Quota);
@@ -370,13 +371,13 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     assert_eq!(
         out.plain,
         concat!(
-            "  \u{25cf} READY \u{2502} \u{ef23} Model \u{2502} \u{f49b} ctx \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 0.0% ! config\n",
-            "  \u{f132} sandbox off \u{2502} \u{e26b} token 0 (0\u{2191} 0\u{2193}) \u{2502} \u{f43a} 0m\n",
+            "  \u{2726} Model \u{2502} \u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1} 0.0% ! config\n",
+            "  \u{25cb} idle\n",
         )
     );
     let first_ansi_line = out.ansi.lines().next().expect("row 1 ansi");
     assert!(
-        first_ansi_line.ends_with("\x1b[0;31m ! config\x1b[0m"),
+        first_ansi_line.ends_with("\x1b[0;38;2;243;139;168m ! config\x1b[0m"),
         "actual ansi: {:?}",
         out.ansi
     );
@@ -442,7 +443,7 @@ fn items_catalog_exposes_all_twenty_four_items_with_priorities_and_options() {
         .find(|c| c.id == ItemId::QuotaGroup)
         .expect("quota_group");
     assert!(qg_meta.allow_multiple);
-    assert_eq!(qg_meta.options.len(), 8);
+    assert_eq!(qg_meta.options.len(), 9);
 
     let model_meta = cat.iter().find(|c| c.id == ItemId::Model).expect("model");
     assert!(!model_meta.allow_multiple);
@@ -737,6 +738,10 @@ fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() 
 #[test]
 fn hud_items_and_new_slot_options_roundtrip_degrade_and_render_full_and_compact() {
     let toml_src = r#"
+palette = "terminal"
+bar_style = "line"
+bar_gradient = false
+compact_at = 0
 separator = " │ "
 indent = "  "
 
@@ -1296,8 +1301,11 @@ fn container_style_separator_aliases_and_compact_at_parse_validate_and_roundtrip
     assert_eq!(ItemStyle::from_key("minimal"), Some(ItemStyle::Minimal));
     assert_eq!(ItemStyle::from_key("glass"), None);
 
-    // Existing presets stay backward-compatible (minimal containers, compact_at disabled).
-    for preset in ["default", "hud", "classic", "cometix"] {
+    // Preserved presets keep minimal containers and compact_at = 0; new `default` uses 88.
+    let def_doc = agyline::build_preset_doc("default", None).expect("default preset");
+    assert_eq!(def_doc.item_style, ItemStyle::Minimal);
+    assert_eq!(def_doc.compact_at, DEFAULT_COMPACT_AT);
+    for preset in ["hud", "classic", "cometix"] {
         let doc = agyline::build_preset_doc(preset, None).expect("builtin preset");
         assert_eq!(doc.item_style, ItemStyle::Minimal, "preset={preset}");
         assert_eq!(doc.compact_at, 0, "preset={preset}");
@@ -1369,13 +1377,13 @@ compact_at = 501
 "#;
     let (bad_doc, bad_warnings) = parse_config_doc(bad_raw).expect("tolerant parse");
     assert_eq!(bad_doc.item_style, ItemStyle::Minimal);
-    assert_eq!(bad_doc.compact_at, 0);
+    assert_eq!(bad_doc.compact_at, DEFAULT_COMPACT_AT);
     assert!(bad_warnings.iter().any(|w| w.contains("item_style")));
     assert!(bad_warnings.iter().any(|w| w.contains("compact_at")));
 
     let neg_raw = "compact_at = -10\n";
     let (neg_doc, neg_warnings) = parse_config_doc(neg_raw).expect("tolerant negative parse");
-    assert_eq!(neg_doc.compact_at, 0);
+    assert_eq!(neg_doc.compact_at, DEFAULT_COMPACT_AT);
     assert!(neg_warnings.iter().any(|w| w.contains("compact_at")));
 
     // PresetScope::Style copies item_style only; Layout copies compact_at only; All copies both.
@@ -1405,7 +1413,7 @@ items = ["model", "git"]
     assert_eq!(target.item_style, ItemStyle::Pill);
     assert_eq!(target.separator, "dot");
     assert_eq!(
-        target.compact_at, 0,
+        target.compact_at, DEFAULT_COMPACT_AT,
         "Style scope must not touch compact_at"
     );
 
@@ -1705,7 +1713,7 @@ fn compact_threshold_collapses_multi_row_below_cutoff_and_respects_single_line_p
         palette: "catppuccin".to_string(),
         theme: ThemeSetting::Dark,
         color_depth: ColorDepth::TrueColor,
-        ..ConfigDoc::default()
+        ..agyline::build_preset_doc("hud", None).expect("hud preset")
     }; // 3-row HUD layout
 
     let payload_bytes = serde_json::to_vec(&serde_json::json!({
@@ -1837,8 +1845,11 @@ fn top_level_bar_style_bar_gradient_and_context_show_tokens_parse_roundtrip_and_
     use agyline::BarStyle;
 
     let def = ConfigDoc::default();
-    assert_eq!(def.bar_style, BarStyle::Line);
-    assert!(!def.bar_gradient);
+    assert_eq!(def.bar_style, BarStyle::Parallelogram);
+    assert!(def.bar_gradient);
+    let hud = agyline::build_preset_doc("hud", None).expect("hud preset");
+    assert_eq!(hud.bar_style, BarStyle::Line);
+    assert!(!hud.bar_gradient);
     let com = ConfigDoc::cometix_base();
     assert_eq!(com.bar_style, BarStyle::Line);
     assert!(!com.bar_gradient);
@@ -1880,8 +1891,8 @@ items = [{ id = "context", show_tokens = "nope" }]
 "#,
     )
     .expect("tolerant parse");
-    assert_eq!(bad_doc.bar_style, BarStyle::Line);
-    assert!(!bad_doc.bar_gradient);
+    assert_eq!(bad_doc.bar_style, BarStyle::Parallelogram);
+    assert!(bad_doc.bar_gradient);
     assert_eq!(bad_doc.lines[0][0].show_tokens, None);
     assert!(bad_warnings.len() >= 3, "warnings: {bad_warnings:?}");
 
@@ -2107,4 +2118,248 @@ fn context_bar_four_tiers_tokens_ratio_compact_alert_and_quota_group_four_tiers(
         .map(|s| s.text.as_str())
         .collect();
     assert_eq!(def_txt, "ctx ▰▰▰▰▱▱▱▱▱▱ 40.0%");
+}
+
+// Ticket #43: streaming `ai_credits` parsing, all 6 opt-in agybar Item variants + TOML round-trip,
+// and the new 2-row Catppuccin `default` Preset alongside preserved `hud`/`classic`/`cometix`.
+#[test]
+fn payload_parses_ai_credits_leniently_and_new_item_variants_roundtrip_and_render() {
+    use agyline::{
+        BarStyle, FrameData, GitFrameState, QuotaBucketData, evaluate_slot_dual,
+        parse_stdin_payload,
+    };
+
+    // 1. Streaming `ai_credits` tolerates numbers, floats, missing, and invalid types.
+    let p_num = parse_stdin_payload(br#"{"ai_credits": 420}"#).expect("int ai_credits");
+    assert_eq!(p_num.ai_credits, Some(420.0));
+    let p_flt = parse_stdin_payload(br#"{"ai_credits": 12.5}"#).expect("float ai_credits");
+    assert_eq!(p_flt.ai_credits, Some(12.5));
+    let p_miss = parse_stdin_payload(br#"{}"#).expect("missing ai_credits");
+    assert_eq!(p_miss.ai_credits, None);
+    let p_bad =
+        parse_stdin_payload(br#"{"ai_credits": {"nested": true}}"#).expect("bad ai_credits");
+    assert_eq!(p_bad.ai_credits, None);
+
+    // 2. Default Preset is the new 2-row Catppuccin gradient layout; hud/classic/cometix preserved.
+    let def = ConfigDoc::default();
+    assert_eq!(def.preset, "default");
+    assert_eq!(def.palette, "catppuccin");
+    assert_eq!(def.bar_style, BarStyle::Parallelogram);
+    assert!(def.bar_gradient);
+    assert_eq!(def.item_style, ItemStyle::Minimal);
+    assert_eq!(def.separator, " │ ");
+    assert_eq!(def.compact_at, 88);
+    assert_eq!(def.lines.len(), 2);
+    assert_eq!(
+        def.lines[0].iter().map(|s| s.id).collect::<Vec<_>>(),
+        vec![
+            ItemId::Model,
+            ItemId::Context,
+            ItemId::Tokens,
+            ItemId::QuotaGroup
+        ]
+    );
+    assert_eq!(
+        def.lines[1].iter().map(|s| s.id).collect::<Vec<_>>(),
+        vec![
+            ItemId::Status,
+            ItemId::Git,
+            ItemId::Dir,
+            ItemId::Subagents,
+            ItemId::Tasks,
+            ItemId::Artifacts,
+            ItemId::Sandbox,
+        ]
+    );
+
+    let hud = agyline::build_preset_doc("hud", None).expect("hud preset");
+    assert_eq!(hud.palette, "terminal");
+    assert_eq!(hud.bar_style, BarStyle::Line);
+    assert!(!hud.bar_gradient);
+    assert_eq!(hud.compact_at, 0);
+    assert_eq!(hud.lines.len(), 3);
+
+    // Round-trip serialization of the new default preset.
+    let serialized = serialize_config_doc(&def);
+    let (reparsed, warnings) = parse_config_doc(&serialized).expect("roundtrip default");
+    assert!(warnings.is_empty(), "warnings: {warnings:?}");
+    assert_eq!(reparsed, def);
+
+    // 3. Opt-in Item variants: model(agybar), tokens(arrows), quota_group(inline), status(dot),
+    // git(branch), and home-tildefied middle-ellipsized dir.
+    let mut env = BTreeMap::new();
+    env.insert("AGY_THEME".to_string(), "dark".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let cfg = EffectiveConfig::from_doc(&def, None, &env, true);
+
+    // Model deduplication + Response Model substitution.
+    let mut model_slot = ItemSlot::new(ItemId::Model);
+    model_slot.style = Some("agybar".to_string());
+
+    let mut frame = FrameData {
+        payload: parse_stdin_payload(
+            br#"{
+                "session_id": "s43",
+                "agent_state": "thinking",
+                "model": { "display_name": "Claude Opus 4.6", "effort": "high" },
+                "cwd": "/home/dev/work/clients/agyline",
+                "context_window": {
+                    "current_usage": { "input_tokens": 16000, "cache_read_input_tokens": 80000 },
+                    "total_input_tokens": 48000,
+                    "total_output_tokens": 12000,
+                    "context_window_size": 200000
+                },
+                "quota": {
+                    "3p-5h": { "remaining_fraction": 0.82, "reset_in_seconds": 8100 },
+                    "3p-weekly": { "remaining_fraction": 0.64, "reset_in_seconds": 259200 },
+                    "gemini-5h": { "remaining_fraction": 0.12, "reset_in_seconds": 600 }
+                }
+            }"#,
+        )
+        .expect("parse s43"),
+        now_sec: 1_700_000_000,
+        git: Some(GitFrameState {
+            branch: "main".to_string(),
+            dirty: true,
+            ..GitFrameState::default()
+        }),
+        user_home: Some(PathBuf::from("/home/dev")),
+        ..FrameData::default()
+    };
+
+    let m_eval = evaluate_slot_dual(&model_slot, &frame, &cfg).expect("model agybar");
+    let m_full: String = m_eval.full_spans.iter().map(|s| s.text.as_str()).collect();
+    let m_comp: String = m_eval
+        .compact_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(m_full, "✦ Claude Opus 4.6 [high]");
+    assert_eq!(m_comp, "✦ Claude Opus 4.6");
+    assert!(m_eval.full_spans[0].style.bold);
+
+    // Effort embedded in name must not duplicate `[high]`.
+    frame.payload.model_display_name = "Gemini 2.5 Pro High".to_string();
+    let m_dedup = evaluate_slot_dual(&model_slot, &frame, &cfg).expect("model dedup");
+    let m_dedup_txt: String = m_dedup.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(m_dedup_txt, "✦ Gemini 2.5 Pro High");
+
+    // Response Model still substitutes picker alias.
+    frame.payload.model_display_name = "Auto".to_string();
+    frame.payload.model_effort = "xHigh".to_string();
+    frame.response_model = Some("claude-sonnet-4-6".to_string());
+    let m_resp = evaluate_slot_dual(&model_slot, &frame, &cfg).expect("response model");
+    let m_resp_txt: String = m_resp.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(m_resp_txt, "✦ Sonnet 4.6 [xhigh]");
+    frame.response_model = None;
+    frame.payload.model_display_name = "Claude Opus 4.6".to_string();
+    frame.payload.model_effort = "high".to_string();
+
+    // Tokens `arrows` style.
+    let mut tok_slot = ItemSlot::new(ItemId::Tokens);
+    tok_slot.style = Some("arrows".to_string());
+    let tok_eval = evaluate_slot_dual(&tok_slot, &frame, &cfg).expect("tokens arrows");
+    let tok_full: String = tok_eval
+        .full_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(tok_full, "↑48k ↓12k");
+
+    // Quota group `inline` style: active-model-matched (`3p-*`) first, urgency-sorted (`7d:64%` before `5h:82%`),
+    // capped at 2 wide / 1 compact; `gemini-5h` (12%) does not beat active-model buckets.
+    let mut q_slot = ItemSlot::new(ItemId::QuotaGroup);
+    q_slot.style = Some("inline".to_string());
+    q_slot.family = Some("@model".to_string());
+    q_slot.show_reset = Some(true);
+    let q_eval = evaluate_slot_dual(&q_slot, &frame, &cfg).expect("quota inline");
+    let q_full: String = q_eval.full_spans.iter().map(|s| s.text.as_str()).collect();
+    let q_comp: String = q_eval
+        .compact_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(q_full, "⚡ 7d:64%(3d) · 5h:82%(2h15m)");
+    assert_eq!(q_comp, "⚡ 7d:64%(3d)");
+
+    // `ai_credits` fallback when quota buckets are absent or sparse (1 bucket).
+    let mut cr_frame = frame.clone();
+    cr_frame.payload.quota_buckets.clear();
+    cr_frame.payload.ai_credits = Some(420.0);
+    let cr_only = evaluate_slot_dual(&q_slot, &cr_frame, &cfg).expect("ai_credits only");
+    let cr_only_txt: String = cr_only.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(cr_only_txt, "⚡ cr:420");
+
+    cr_frame.payload.quota_buckets = vec![QuotaBucketData {
+        name: "3p-5h".to_string(),
+        disabled: false,
+        remaining_fraction: Some(0.18),
+        remaining_amount: None,
+        reset_in_seconds: Some(18 * 60),
+        reset_time: None,
+    }];
+    let cr_sparse = evaluate_slot_dual(&q_slot, &cr_frame, &cfg).expect("sparse + cr");
+    let cr_sparse_full: String = cr_sparse
+        .full_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    let cr_sparse_comp: String = cr_sparse
+        .compact_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert_eq!(cr_sparse_full, "⚡ 5h:18%(18m) · cr:420");
+    assert_eq!(cr_sparse_comp, "⚡ 5h:18%(18m)");
+
+    // Status `dot` style: 5 canonical states + dot-only compact + CONFIRM urgency preserved in compact.
+    let mut st_slot = ItemSlot::new(ItemId::Status);
+    st_slot.style = Some("dot".to_string());
+    for (state, exp_full, exp_comp) in [
+        ("thinking", "◉ thinking", "◉"),
+        ("working", "● working", "●"),
+        ("tool_use", "⚙ tool_use", "⚙"),
+        ("error", "✖ error", "✖"),
+        ("idle", "○ idle", "○"),
+    ] {
+        let mut sf = frame.clone();
+        sf.payload.agent_state = state.to_string();
+        let ev = evaluate_slot_dual(&st_slot, &sf, &cfg).expect("status dot");
+        let ft: String = ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+        let ct: String = ev.compact_spans.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(ft, exp_full, "state={state}");
+        assert_eq!(ct, exp_comp, "state={state}");
+    }
+    let mut conf_frame = frame.clone();
+    conf_frame.payload.tool_confirmation_pending = true;
+    let conf_ev = evaluate_slot_dual(&st_slot, &conf_frame, &cfg).expect("status confirm");
+    let conf_comp: String = conf_ev
+        .compact_spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert!(
+        conf_comp.contains("CONFIRM"),
+        "compact status dot must preserve CONFIRM urgency: {conf_comp:?}"
+    );
+
+    // Git `branch` style: `⎇ <branch>` + bold warn `*`.
+    let mut git_slot = ItemSlot::new(ItemId::Git);
+    git_slot.style = Some("branch".to_string());
+    let g_ev = evaluate_slot_dual(&git_slot, &frame, &cfg).expect("git branch");
+    let g_txt: String = g_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(g_txt, "⎇ main*");
+    assert!(
+        g_ev.full_spans
+            .last()
+            .is_some_and(|s| s.text == "*" && s.style.bold && s.color == ColorToken::Warn.into())
+    );
+
+    // Dir home-tildefied middle ellipsis `~/…/<parent>/<leaf>` honoring `icon = ""`.
+    let mut dir_slot = ItemSlot::new(ItemId::Dir);
+    dir_slot.max_levels = Some(2);
+    dir_slot.icon = Some(String::new());
+    let d_ev = evaluate_slot_dual(&dir_slot, &frame, &cfg).expect("dir middle ellipsis");
+    let d_txt: String = d_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(d_txt, "~/…/clients/agyline");
 }

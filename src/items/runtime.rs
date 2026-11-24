@@ -707,6 +707,82 @@ pub fn eval_status(
     let bold = TextStyle::PLAIN.bold();
     let custom_ic = slot_custom_icon_color(slot);
 
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("dot"))
+    {
+        if payload.tool_confirmation_pending {
+            let ic = slot
+                .icon
+                .as_deref()
+                .unwrap_or_else(|| glyphs::warn_mark(config.glyphs));
+            let text = if ic.is_empty() {
+                "CONFIRM".to_string()
+            } else {
+                format!("{ic} CONFIRM")
+            };
+            let spans = vec![StyledSpan::styled(ColorToken::Warn, bold, text)];
+            return Some(EvaluatedItem {
+                id: ItemId::Status,
+                priority: slot.effective_priority(),
+                full_spans: spans.clone(),
+                compact_spans: spans,
+            });
+        }
+        let state_low = payload.agent_state.trim().to_ascii_lowercase();
+        let (lbl, tok) = match state_low.as_str() {
+            "" | "idle" => ("idle".to_string(), ColorToken::Muted),
+            "thinking" => ("thinking".to_string(), ColorToken::Model),
+            "working" => ("working".to_string(), ColorToken::Ok),
+            "tool_use" => ("tool_use".to_string(), ColorToken::Cache),
+            "error" => ("error".to_string(), ColorToken::Crit),
+            "reviewing" => ("reviewing".to_string(), ColorToken::Warn),
+            "authenticating" => ("auth".to_string(), ColorToken::Muted),
+            "initializing" => ("init".to_string(), ColorToken::Muted),
+            other => {
+                let clean = sanitize_single_line(other);
+                if clean.is_empty() {
+                    ("idle".to_string(), ColorToken::Muted)
+                } else {
+                    (clean, ColorToken::Muted)
+                }
+            }
+        };
+        let default_ic = glyphs::status_dot_icon(config.glyphs, state_low.as_str());
+        let icon = slot.icon.as_deref().unwrap_or(default_ic);
+        let body_col = slot_fg_color(slot, tok);
+        let mut full_spans = if icon.is_empty() {
+            vec![StyledSpan::new(body_col, lbl.clone())]
+        } else if let Some(ic) = custom_ic
+            && ic != body_col
+        {
+            vec![
+                StyledSpan::new(ic, icon),
+                StyledSpan::new(body_col, format!(" {lbl}")),
+            ]
+        } else {
+            vec![StyledSpan::new(body_col, format!("{icon} {lbl}"))]
+        };
+        if slot.show_pending.unwrap_or(true) && payload.pending_input_count > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Warn,
+                format!(" (+{})", payload.pending_input_count),
+            ));
+        }
+        let compact_spans = if icon.is_empty() {
+            vec![StyledSpan::new(body_col, lbl)]
+        } else {
+            vec![StyledSpan::new(custom_ic.unwrap_or(body_col), icon)]
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Status,
+            priority: slot.effective_priority(),
+            full_spans,
+            compact_spans,
+        });
+    }
+
     let (default_icon, full_lbl, comp_lbl, body_col): (&str, String, String, ColorSpec) =
         if payload.tool_confirmation_pending {
             (

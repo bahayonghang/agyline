@@ -650,7 +650,7 @@ impl ConfigDoc {
 
 impl Default for ConfigDoc {
     fn default() -> Self {
-        presets::hud_preset_doc("default")
+        presets::default_preset_doc()
     }
 }
 

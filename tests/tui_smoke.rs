@@ -380,10 +380,10 @@ fn all_four_tabs_scenarios_width_ruler_and_resize_guard_render_cleanly() {
         assert_eq!(app.active_tab(), TuiTab::Layout);
     }
 
-    // Cycle through all 6 scenarios and verify preview matches render_lines_with_width;
+    // Cycle through all 9 scenarios and verify preview matches render_lines_with_width;
     // switching to narrow_stress defaults simulated width to 74 cols when unpinned.
     let mut seen_scenarios = Vec::new();
-    for _ in 0..6 {
+    for _ in 0..builtin_scenarios().len() {
         seen_scenarios.push(app.active_scenario().name);
         let (rendered, eff) = app.preview_rendered_frame();
         let direct = render_lines_with_width(
@@ -428,7 +428,10 @@ fn all_four_tabs_scenarios_width_ruler_and_resize_guard_render_cleanly() {
             "cache_warm_touch",
             "busy_subagents",
             "warn_crit",
-            "narrow_stress"
+            "narrow_stress",
+            "showcase_wide",
+            "showcase_critical",
+            "showcase_compact",
         ]
     );
 
@@ -764,7 +767,7 @@ fn env_override_badges_and_effective_vs_file_only_toggle_preserve_doc() {
     let (rendered_file, cfg_file) = app.preview_rendered_frame();
     assert!(!cfg_file.single_line);
     assert_eq!(cfg_file.indent, "  ");
-    assert_eq!(rendered_file.lines.len(), 3);
+    assert_eq!(rendered_file.lines.len(), 2);
     assert!(lines_to_plain_string(&app.preview_lines()).starts_with("  "));
 }
 
@@ -909,7 +912,7 @@ fn agy_hook_diff_modal_installs_and_restores_without_saving_config_draft_and_mou
 
     // Mouse click on Tab 4 ("4: agy Hook" on dynamic tab row `preview_box_height + 1`) switches tab!
     let tab_row = app.preview_box_height() + 1;
-    assert_eq!(tab_row, 7);
+    assert_eq!(tab_row, 6);
     app.handle_event(left_click(62, tab_row));
     assert_eq!(app.active_tab(), TuiTab::AgyHook);
 
@@ -953,6 +956,9 @@ fn agy_hook_diff_modal_installs_and_restores_without_saving_config_draft_and_mou
 #[test]
 fn hud_three_row_preview_emits_styles_and_syncs_mouse_clicks_at_dynamic_heights() {
     let sb = Sandbox::new();
+    std::fs::create_dir_all(&sb.agyline_home).expect("mkdir");
+    std::fs::write(sb.agyline_home.join("config.toml"), "preset = \"hud\"\n")
+        .expect("write hud preset");
     let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
     app.handle_event(Event::Resize(100, 28));
 
@@ -993,6 +999,9 @@ fn hud_three_row_preview_emits_styles_and_syncs_mouse_clicks_at_dynamic_heights(
 #[test]
 fn multi_row_editor_navigates_adds_moves_removes_rows_and_edits_new_inspector_fields() {
     let sb = Sandbox::new();
+    std::fs::create_dir_all(&sb.agyline_home).expect("mkdir");
+    std::fs::write(sb.agyline_home.join("config.toml"), "preset = \"hud\"\n")
+        .expect("write hud preset");
     let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
     assert_eq!(app.doc().lines.len(), 3);
 

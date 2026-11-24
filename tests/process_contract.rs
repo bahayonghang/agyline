@@ -74,8 +74,8 @@ fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         concat!(
-            "  \x1b[0m\x1b[0;1;92m\u{25cf} READY\x1b[0;37m \u{2502} \x1b[0;95m\u{ef23} \x1b[0;3;95mModel\x1b[0;37m \u{2502} \x1b[0;95m\u{f49b} \x1b[0;90mctx \x1b[0;90m\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\x1b[0;92m 0.0%\x1b[0m\n",
-            "  \x1b[0m\x1b[0;90m\u{f132} sandbox off\x1b[0;37m \u{2502} \x1b[0;90m\u{e26b} \x1b[0;90mtoken \x1b[0;1;37m0\x1b[0;90m (0\u{2191} 0\u{2193})\x1b[0;37m \u{2502} \x1b[0;90m\u{f43a} 0m\x1b[0m\n",
+            "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} \x1b[0;38;2;127;132;156m\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
+            "  \x1b[0m\x1b[0;38;2;127;132;156m\u{25cb} idle\x1b[0m\n",
         )
     );
 }
@@ -244,7 +244,7 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     assert!(!text.contains(";48;2;"));
     assert_eq!(
         text,
-        "    \x1b[0m\x1b[0;1;32m\u{25cf} READY\x1b[0;90m \u{2502} \x1b[0;1;34mBEST-OF-N\x1b[0;90m \u{2502} \x1b[0;35m\u{ef23} \x1b[0;3;35mGemini 4 Carbon (High)\x1b[0;90m \u{2502} \x1b[0;35m\u{f49b} \x1b[0;90mctx \x1b[0;90m\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\x1b[0;32m 0.0%\x1b[0m\n"
+        "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;124;127;147m\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
     );
 }
 
