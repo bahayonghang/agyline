@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Tabs, Wrap};
 
 use crate::collect::touch::is_valid_loopback_relay_url;
-use crate::config::{ItemSlot, serialize_config_doc};
+use crate::config::{ConfigDoc, ItemId, ItemSlot, serialize_config_doc};
 use crate::install::{
     HookStatus, InstallPlan, SnapshotAction, UninstallPlan, resolve_command_string,
 };
@@ -614,12 +614,13 @@ fn draw_layout_tab(
         )));
         // The field list depends on the item id, so inspector_idx is re-clamped on every move.
         let fields = inspector_fields_for_item(slot.id);
-        for (f_idx, &field) in fields.iter().enumerate() {
+        let insp_offset = app.inspector_list_offset(cols[2].height.saturating_sub(2) as usize);
+        for (f_idx, &field) in fields.iter().enumerate().skip(insp_offset) {
             let selected = insp_focused && app.inspector_idx == f_idx;
             let prefix = if selected { "> " } else { "  " };
-            let val_str = format_inspector_value(slot, field);
+            let val_str = format_inspector_value(&app.doc, slot, field);
             let mut extra_env = String::new();
-            if slot.id == crate::config::ItemId::Mode
+            if slot.id == ItemId::Mode
                 && field == InspectorField::ShowDefault
                 && let Some(b) = env_badge_for_key(app, "mode.show_default")
             {
@@ -646,8 +647,8 @@ fn draw_layout_tab(
 }
 
 /// Inspector text for one field. Unset values print as a default so the draft keeps only real
-/// overrides; the icon is tri-state and an explicit empty string means "hidden".
-fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
+/// overrides; icon and context label are tri-state where an explicit empty string means "hidden".
+fn format_inspector_value(doc: &ConfigDoc, slot: &ItemSlot, field: InspectorField) -> String {
     let fmt_bool = |opt: Option<bool>| -> String {
         let def = inspector_bool_default(slot.id, field);
         match opt {
@@ -688,14 +689,18 @@ fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
             .family
             .clone()
             .unwrap_or_else(|| "gemini (default)".to_string()),
-        InspectorField::Label => slot
-            .label
-            .clone()
-            .unwrap_or_else(|| "(default)".to_string()),
+        InspectorField::Label => match &slot.label {
+            Some(lbl) if lbl.is_empty() && slot.id == ItemId::Context => {
+                "\"\" (hidden)".to_string()
+            }
+            Some(lbl) => lbl.clone(),
+            None if slot.id == ItemId::Context => "ctx (default)".to_string(),
+            None => "(default)".to_string(),
+        },
         InspectorField::BarStyle => slot
             .bar_style
             .clone()
-            .unwrap_or_else(|| "line (default)".to_string()),
+            .unwrap_or_else(|| format!("{} (default)", doc.bar_style.as_key())),
         InspectorField::BarWidth => match slot.bar_width {
             Some(w) => format!("{w}"),
             None => "10 (default)".to_string(),
@@ -713,6 +718,7 @@ fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
         InspectorField::ShowTtl => fmt_bool(slot.show_ttl),
         InspectorField::ShowBreakdown => fmt_bool(slot.show_breakdown),
         InspectorField::ShowPending => fmt_bool(slot.show_pending),
+        InspectorField::ShowTokens => fmt_bool(slot.show_tokens),
     }
 }
 
@@ -732,11 +738,14 @@ fn draw_style_tab(
         ])
         .split(area);
 
+    let visible_rows = area.height.saturating_sub(2) as usize;
+
     // Pane 0: Presets
     let presets_focused = match app.style_pane {
         StylePane::Presets => true,
         StylePane::GlobalStyle | StylePane::PaletteOverrides => false,
     };
+    let preset_offset = app.style_preset_offset(visible_rows);
     let mut preset_lines: Vec<Line<'static>> = Vec::new();
     preset_lines.push(Line::from(Span::styled(
         format!(
@@ -745,7 +754,7 @@ fn draw_style_tab(
         ),
         Style::default().fg(Color::Cyan),
     )));
-    for (idx, name) in app.available_presets.iter().enumerate() {
+    for (idx, name) in app.available_presets.iter().enumerate().skip(preset_offset) {
         let selected = presets_focused && app.style_preset_idx == idx;
         let active = app.doc.preset == *name;
         let prefix = if selected { "> " } else { "  " };
@@ -780,7 +789,8 @@ fn draw_style_tab(
         StylePane::GlobalStyle => true,
         StylePane::Presets | StylePane::PaletteOverrides => false,
     };
-    let mut style_lines: Vec<Line<'static>> = Vec::with_capacity(10);
+    let global_offset = app.style_global_offset(visible_rows);
+    let mut style_lines: Vec<Line<'static>> = Vec::with_capacity(12);
     for (idx, field) in StyleField::ALL.iter().enumerate() {
         let selected = style_focused && app.style_field_idx == idx;
         let prefix = if selected { "> " } else { "  " };
@@ -803,7 +813,40 @@ fn draw_style_tab(
                 format!("{prefix}color_depth: {}", app.doc.color_depth.as_key()),
                 None,
             ),
-            StyleField::Separator => (format!("{prefix}separator: {:?}", app.doc.separator), None),
+            StyleField::ItemStyle => {
+                let eff = effective_cfg.effective_item_style();
+                let degraded = if eff != app.doc.item_style {
+                    format!(" (effective: {})", eff.as_key())
+                } else {
+                    String::new()
+                };
+                (
+                    format!(
+                        "{prefix}item_style: {}{degraded}",
+                        app.doc.item_style.as_key()
+                    ),
+                    None,
+                )
+            }
+            StyleField::BarStyle => (
+                format!("{prefix}bar_style: {}", app.doc.bar_style.as_key()),
+                None,
+            ),
+            StyleField::BarGradient => (
+                format!("{prefix}bar_gradient: {}", app.doc.bar_gradient),
+                None,
+            ),
+            StyleField::Separator => {
+                let txt = if app.doc.separator != effective_cfg.separator {
+                    format!(
+                        "{prefix}separator: {:?} -> {:?}",
+                        app.doc.separator, effective_cfg.separator
+                    )
+                } else {
+                    format!("{prefix}separator: {:?}", app.doc.separator)
+                };
+                (txt, None)
+            }
             StyleField::Indent => (
                 format!("{prefix}indent: {:?}", app.doc.indent),
                 env_badge_for_key(app, "indent"),
@@ -826,19 +869,19 @@ fn draw_style_tab(
             )));
         }
     }
+    let visible_style_lines: Vec<Line<'static>> =
+        style_lines.into_iter().skip(global_offset).collect();
     frame.render_widget(
-        Paragraph::new(style_lines)
-            .wrap(Wrap { trim: false })
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(if style_focused {
-                        Color::Cyan
-                    } else {
-                        Color::DarkGray
-                    }))
-                    .title(" Global Style "),
-            ),
+        Paragraph::new(visible_style_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(if style_focused {
+                    Color::Cyan
+                } else {
+                    Color::DarkGray
+                }))
+                .title(" Global Style "),
+        ),
         cols[1],
     );
 
@@ -847,8 +890,9 @@ fn draw_style_tab(
         StylePane::PaletteOverrides => true,
         StylePane::Presets | StylePane::GlobalStyle => false,
     };
+    let ov_offset = app.palette_override_offset(visible_rows);
     let mut ov_lines: Vec<Line<'static>> = Vec::with_capacity(ColorToken::ALL.len());
-    for (idx, tok) in ColorToken::ALL.iter().copied().enumerate() {
+    for (idx, tok) in ColorToken::ALL.iter().copied().enumerate().skip(ov_offset) {
         let selected = ov_focused && app.palette_override_idx == idx;
         let prefix = if selected { "> " } else { "  " };
         // Swatch is the resolved color (palette + override + env); text is the raw draft.
@@ -891,13 +935,15 @@ fn draw_runtime_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
         .split(area);
+    let visible_rows = area.height.saturating_sub(2) as usize;
 
     let th_focused = match app.runtime_pane {
         RuntimePane::Thresholds => true,
         RuntimePane::Runtime => false,
     };
-    let mut th_lines: Vec<Line<'static>> = Vec::with_capacity(8);
-    for (idx, field) in ThresholdField::ALL.iter().enumerate() {
+    let th_offset = app.threshold_list_offset(visible_rows);
+    let mut th_lines: Vec<Line<'static>> = Vec::with_capacity(ThresholdField::ALL.len());
+    for (idx, field) in ThresholdField::ALL.iter().enumerate().skip(th_offset) {
         let selected = th_focused && app.threshold_field_idx == idx;
         let prefix = if selected { "> " } else { "  " };
         let txt = match field {
@@ -905,17 +951,30 @@ fn draw_runtime_tab(frame: &mut Frame<'_>, area: Rect, app: &ConfiguratorApp) {
                 let env_b = env_badge_for_key(app, "single_line").unwrap_or_default();
                 format!("{prefix}single_line: {}{env_b}", app.doc.single_line)
             }
+            ThresholdField::CompactAt => {
+                if app.doc.compact_at == 0 {
+                    format!("{prefix}compact_at: off (0)")
+                } else {
+                    format!("{prefix}compact_at: {} cols", app.doc.compact_at)
+                }
+            }
             ThresholdField::Overflow => {
                 format!("{prefix}overflow: {}", app.doc.overflow.as_key())
             }
             ThresholdField::ContextWarn => {
                 format!("{prefix}context_warn: {}%", app.doc.thresholds.context_warn)
             }
+            ThresholdField::ContextHigh => {
+                format!("{prefix}context_high: {}%", app.doc.thresholds.context_high)
+            }
             ThresholdField::ContextCrit => {
                 format!("{prefix}context_crit: {}%", app.doc.thresholds.context_crit)
             }
             ThresholdField::QuotaWarn => {
                 format!("{prefix}quota_warn: {}%", app.doc.thresholds.quota_warn)
+            }
+            ThresholdField::QuotaHigh => {
+                format!("{prefix}quota_high: {}%", app.doc.thresholds.quota_high)
             }
             ThresholdField::QuotaCrit => {
                 format!("{prefix}quota_crit: {}%", app.doc.thresholds.quota_crit)
@@ -1302,9 +1361,12 @@ fn draw_active_modal(
         }
         ActiveModal::PresetApply { preset_idx, scope } => {
             // Highlight and scope live in the modal; nothing reaches the doc until Enter.
-            let popup = centered_rect(64, 58, area);
+            let popup = centered_rect(64, 72, area);
             frame.render_widget(Clear, popup);
-            let mut lines = Vec::with_capacity(12);
+            // 2 borders + 3 header lines + 2 footer lines leave the scrollable preset list budget.
+            let list_budget = (popup.height as usize).saturating_sub(7).max(1);
+            let list_offset = (*preset_idx + 1).saturating_sub(list_budget);
+            let mut lines = Vec::with_capacity(14);
             lines.push(Line::from(Span::styled(
                 format!("Scope [Left/Right]: {}", preset_scope_label(*scope)),
                 Style::default()
@@ -1315,7 +1377,13 @@ fn draw_active_modal(
                 "Select Preset [Up/Down], press [Enter] to apply:",
             ));
             lines.push(Line::from(""));
-            for (idx, name) in app.available_presets.iter().enumerate() {
+            for (idx, name) in app
+                .available_presets
+                .iter()
+                .enumerate()
+                .skip(list_offset)
+                .take(list_budget)
+            {
                 let is_sel = idx == *preset_idx;
                 let prefix = if is_sel { "> " } else { "  " };
                 lines.push(Line::from(Span::styled(

@@ -7,7 +7,10 @@ use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 
-use crate::config::{ItemId, ItemSlot, PresetScope};
+use crate::config::{
+    ConfigDoc, DEFAULT_COMPACT_AT, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, OverflowMode,
+    PresetScope,
+};
 use crate::render::{BarStyle, ColorToken};
 use crate::tui::state::{
     ActiveModal, ConfiguratorApp, ConfiguratorExit, HookAction, InspectorField, LayoutPane,
@@ -710,9 +713,12 @@ impl ConfiguratorApp {
             }
             InspectorField::Style => {
                 let options: &[&str] = match slot_snapshot.id {
-                    ItemId::Model => &["", "hud"],
+                    ItemId::Model => &["", "agybar", "hud"],
                     ItemId::Mode => &["", "badge"],
-                    ItemId::Git => &["", "counts"],
+                    ItemId::Git => &["", "branch", "counts"],
+                    ItemId::Status => &["", "dot"],
+                    ItemId::Tokens => &["", "arrows"],
+                    ItemId::QuotaGroup => &["", "inline"],
                     ItemId::Context => &["", "bar"],
                     ItemId::Cache => &["", "hit_rate"],
                     _ => return false,
@@ -749,11 +755,12 @@ impl ConfiguratorApp {
             }
             InspectorField::BarStyle => {
                 let styles = BarStyle::ALL;
+                // Unset slots inherit the top-level `doc.bar_style`, not always `BarStyle::Line`.
                 let cur = slot_snapshot
                     .bar_style
                     .as_deref()
                     .and_then(BarStyle::from_key)
-                    .unwrap_or_default();
+                    .unwrap_or(self.doc.bar_style);
                 let idx = styles.iter().position(|&s| s == cur).unwrap_or(0);
                 let next_idx = if forward {
                     (idx + 1) % styles.len()
@@ -765,7 +772,7 @@ impl ConfiguratorApp {
                 let next_style = styles[next_idx];
                 self.mutate_doc(|doc| {
                     if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
-                        s.bar_style = if next_style == BarStyle::default() {
+                        s.bar_style = if next_style == doc.bar_style {
                             None
                         } else {
                             Some(next_style.as_key().to_string())
@@ -818,7 +825,8 @@ impl ConfiguratorApp {
             | InspectorField::ShowWhenOff
             | InspectorField::ShowTtl
             | InspectorField::ShowBreakdown
-            | InspectorField::ShowPending => {
+            | InspectorField::ShowPending
+            | InspectorField::ShowTokens => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -974,7 +982,8 @@ impl ConfiguratorApp {
             | InspectorField::ShowWhenOff
             | InspectorField::ShowTtl
             | InspectorField::ShowBreakdown
-            | InspectorField::ShowPending => {
+            | InspectorField::ShowPending
+            | InspectorField::ShowTokens => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -1032,6 +1041,9 @@ impl ConfiguratorApp {
                 InspectorField::ShowPending => {
                     flip(&mut slot.show_pending, inspector_bool_default(id, field));
                 }
+                InspectorField::ShowTokens => {
+                    flip(&mut slot.show_tokens, inspector_bool_default(id, field));
+                }
                 InspectorField::Priority
                 | InspectorField::Icon
                 | InspectorField::Fg
@@ -1077,6 +1089,7 @@ impl ConfiguratorApp {
                 InspectorField::ShowTtl => slot.show_ttl = None,
                 InspectorField::ShowBreakdown => slot.show_breakdown = None,
                 InspectorField::ShowPending => slot.show_pending = None,
+                InspectorField::ShowTokens => slot.show_tokens = None,
             }
         });
     }
@@ -1147,7 +1160,7 @@ impl ConfiguratorApp {
                         self.style_field_idx = (self.style_field_idx + 1) % fields.len();
                         true
                     }
-                    // Only the four enum fields cycle; separator and indent are text (Enter).
+                    // Enum/bool fields and separator presets cycle with Left/Right; Enter edits raw text on separator/indent.
                     KeyCode::Left | KeyCode::Char('h') => match field {
                         StyleField::Palette => {
                             self.cycle_palette(false);
@@ -1165,7 +1178,23 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(false);
                             true
                         }
-                        StyleField::Separator | StyleField::Indent => false,
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(false);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(false);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
+                        StyleField::Separator => {
+                            self.cycle_separator_preset(false);
+                            true
+                        }
+                        StyleField::Indent => false,
                     },
                     KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => match field {
                         StyleField::Palette => {
@@ -1184,7 +1213,23 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(true);
                             true
                         }
-                        StyleField::Separator | StyleField::Indent => false,
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(true);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(true);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
+                        StyleField::Separator => {
+                            self.cycle_separator_preset(true);
+                            true
+                        }
+                        StyleField::Indent => false,
                     },
                     KeyCode::Enter => match field {
                         StyleField::Palette => {
@@ -1203,6 +1248,18 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(true);
                             true
                         }
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(true);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(true);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
                         StyleField::Separator => {
                             let init = self.doc.separator.clone();
                             self.start_text_edit(TextEditTarget::StyleSeparator, init);
@@ -1214,10 +1271,24 @@ impl ConfiguratorApp {
                             true
                         }
                     },
-                    // Reference defaults: " | " between items and a two-space indent.
                     KeyCode::Delete | KeyCode::Backspace => match field {
+                        StyleField::ItemStyle => {
+                            self.mutate_doc(|doc| doc.item_style = ItemStyle::Minimal);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            let def = ConfigDoc::default().bar_style;
+                            self.mutate_doc(|doc| doc.bar_style = def);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            let def = ConfigDoc::default().bar_gradient;
+                            self.mutate_doc(|doc| doc.bar_gradient = def);
+                            true
+                        }
                         StyleField::Separator => {
-                            self.mutate_doc(|doc| doc.separator = " | ".to_string());
+                            let def = ConfigDoc::default().separator;
+                            self.mutate_doc(|doc| doc.separator = def);
                             true
                         }
                         StyleField::Indent => {
@@ -1309,9 +1380,12 @@ impl ConfiguratorApp {
                             self.step_threshold_field(field, 1);
                             true
                         }
-                        ThresholdField::ContextWarn
+                        ThresholdField::CompactAt
+                        | ThresholdField::ContextWarn
+                        | ThresholdField::ContextHigh
                         | ThresholdField::ContextCrit
                         | ThresholdField::QuotaWarn
+                        | ThresholdField::QuotaHigh
                         | ThresholdField::QuotaCrit
                         | ThresholdField::CacheWarnSecs => false,
                     },
@@ -1388,35 +1462,109 @@ impl ConfiguratorApp {
         }
     }
 
-    /// One Left/Right step. Each warn/crit pair is clamped against its partner so they can never
-    /// cross or tie: context warn stays below crit, quota warn (remaining %) stays above crit.
+    /// One Left/Right step. Context (`warn < high < crit`) and quota (`warn > high > crit`)
+    /// triples are strictly clamped against adjacent neighbors so bounds can never cross or tie.
     fn step_threshold_field(&mut self, field: ThresholdField, dir: i32) {
         match field {
             ThresholdField::SingleLine => {
                 let next = !self.doc.single_line;
                 self.mutate_doc(|doc| doc.single_line = next);
             }
+            ThresholdField::CompactAt => {
+                let next = if dir >= 0 {
+                    self.doc.compact_at.saturating_add(4).min(MAX_COMPACT_AT)
+                } else {
+                    self.doc.compact_at.saturating_sub(4)
+                };
+                self.mutate_doc(|doc| doc.compact_at = next);
+            }
             ThresholdField::Overflow => self.toggle_overflow(),
             ThresholdField::ContextWarn => {
-                let max_val = (self.doc.thresholds.context_crit - 1.0).max(0.0);
-                let next = (self.doc.thresholds.context_warn + f64::from(dir)).clamp(0.0, max_val);
-                self.mutate_doc(|doc| doc.thresholds.context_warn = next);
+                let cur = self.doc.thresholds.context_warn;
+                let high = self.doc.thresholds.context_high;
+                let next = if dir >= 0 {
+                    let cand = cur + 1.0;
+                    if cand < high {
+                        cand
+                    } else if high - 1.0 > cur {
+                        high - 1.0
+                    } else {
+                        cur
+                    }
+                } else {
+                    (cur - 1.0).max(0.0)
+                };
+                if next < high {
+                    self.mutate_doc(|doc| doc.thresholds.context_warn = next);
+                }
+            }
+            ThresholdField::ContextHigh => {
+                let cur = self.doc.thresholds.context_high;
+                let warn = self.doc.thresholds.context_warn;
+                let crit = self.doc.thresholds.context_crit;
+                let next = if dir >= 0 {
+                    let cand = cur + 1.0;
+                    if cand < crit {
+                        cand
+                    } else if crit - 1.0 > cur {
+                        crit - 1.0
+                    } else {
+                        cur
+                    }
+                } else {
+                    let cand = cur - 1.0;
+                    if cand > warn {
+                        cand
+                    } else if warn + 1.0 < cur {
+                        warn + 1.0
+                    } else {
+                        cur
+                    }
+                };
+                if next > warn && next < crit {
+                    self.mutate_doc(|doc| doc.thresholds.context_high = next);
+                }
             }
             ThresholdField::ContextCrit => {
-                let min_val = (self.doc.thresholds.context_warn + 1.0).min(100.0);
-                let next =
-                    (self.doc.thresholds.context_crit + f64::from(dir)).clamp(min_val, 100.0);
-                self.mutate_doc(|doc| doc.thresholds.context_crit = next);
+                let cur = self.doc.thresholds.context_crit;
+                let high = self.doc.thresholds.context_high;
+                let next = if dir >= 0 {
+                    (cur + 1.0).min(100.0)
+                } else {
+                    let cand = cur - 1.0;
+                    if cand > high {
+                        cand
+                    } else if high + 1.0 < cur {
+                        high + 1.0
+                    } else {
+                        cur
+                    }
+                };
+                if next > high {
+                    self.mutate_doc(|doc| doc.thresholds.context_crit = next);
+                }
             }
             ThresholdField::QuotaWarn => {
-                let min_val = (self.doc.thresholds.quota_crit + 1).min(100);
+                let min_val = (self.doc.thresholds.quota_high + 1).min(100);
                 let next = (self.doc.thresholds.quota_warn + dir).clamp(min_val, 100);
-                self.mutate_doc(|doc| doc.thresholds.quota_warn = next);
+                if next > self.doc.thresholds.quota_high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_warn = next);
+                }
+            }
+            ThresholdField::QuotaHigh => {
+                let min_val = self.doc.thresholds.quota_crit + 1;
+                let max_val = self.doc.thresholds.quota_warn - 1;
+                if min_val <= max_val {
+                    let next = (self.doc.thresholds.quota_high + dir).clamp(min_val, max_val);
+                    self.mutate_doc(|doc| doc.thresholds.quota_high = next);
+                }
             }
             ThresholdField::QuotaCrit => {
-                let max_val = (self.doc.thresholds.quota_warn - 1).max(0);
+                let max_val = (self.doc.thresholds.quota_high - 1).max(0);
                 let next = (self.doc.thresholds.quota_crit + dir).clamp(0, max_val);
-                self.mutate_doc(|doc| doc.thresholds.quota_crit = next);
+                if next < self.doc.thresholds.quota_high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_crit = next);
+                }
             }
             // 5 s steps inside 0..=86400 (one day), the range the numeric editor also enforces.
             ThresholdField::CacheWarnSecs => {
@@ -1436,10 +1584,18 @@ impl ConfiguratorApp {
                 let next = !self.doc.single_line;
                 self.mutate_doc(|doc| doc.single_line = next);
             }
+            ThresholdField::CompactAt => {
+                let init = self.doc.compact_at.to_string();
+                self.start_text_edit(TextEditTarget::ThresholdCompactAt, init);
+            }
             ThresholdField::Overflow => self.toggle_overflow(),
             ThresholdField::ContextWarn => {
                 let init = format!("{}", self.doc.thresholds.context_warn);
                 self.start_text_edit(TextEditTarget::ThresholdContextWarn, init);
+            }
+            ThresholdField::ContextHigh => {
+                let init = format!("{}", self.doc.thresholds.context_high);
+                self.start_text_edit(TextEditTarget::ThresholdContextHigh, init);
             }
             ThresholdField::ContextCrit => {
                 let init = format!("{}", self.doc.thresholds.context_crit);
@@ -1448,6 +1604,10 @@ impl ConfiguratorApp {
             ThresholdField::QuotaWarn => {
                 let init = self.doc.thresholds.quota_warn.to_string();
                 self.start_text_edit(TextEditTarget::ThresholdQuotaWarn, init);
+            }
+            ThresholdField::QuotaHigh => {
+                let init = self.doc.thresholds.quota_high.to_string();
+                self.start_text_edit(TextEditTarget::ThresholdQuotaHigh, init);
             }
             ThresholdField::QuotaCrit => {
                 let init = self.doc.thresholds.quota_crit.to_string();
@@ -1460,29 +1620,80 @@ impl ConfiguratorApp {
         }
     }
 
-    /// Delete/Backspace: the reference defaults (context 50/80, quota 45/20, cache 60 s), each
-    /// re-clamped against its partner so a reset cannot invert the pair.
+    /// Delete/Backspace: resets to canonical defaults (`compact_at` 88, context 50/75/80,
+    /// quota 45/25/20, cache 60 s), clamped against neighbors so a reset never inverts bounds.
     fn reset_threshold_field(&mut self, field: ThresholdField) {
         match field {
             ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = false),
+            ThresholdField::CompactAt => {
+                self.mutate_doc(|doc| doc.compact_at = DEFAULT_COMPACT_AT);
+            }
             ThresholdField::Overflow => {
-                self.mutate_doc(|doc| doc.overflow = crate::config::OverflowMode::Fit)
+                self.mutate_doc(|doc| doc.overflow = OverflowMode::Fit);
             }
             ThresholdField::ContextWarn => {
-                let def = 50.0_f64.min((self.doc.thresholds.context_crit - 1.0).max(0.0));
-                self.mutate_doc(|doc| doc.thresholds.context_warn = def);
+                let high = self.doc.thresholds.context_high;
+                let def = if 50.0 < high {
+                    50.0
+                } else if high >= 1.0 {
+                    high - 1.0
+                } else {
+                    high * 0.5
+                };
+                if def < high {
+                    self.mutate_doc(|doc| doc.thresholds.context_warn = def);
+                }
+            }
+            ThresholdField::ContextHigh => {
+                let warn = self.doc.thresholds.context_warn;
+                let crit = self.doc.thresholds.context_crit;
+                let def = if 75.0 > warn && 75.0 < crit {
+                    75.0
+                } else {
+                    (warn + crit) * 0.5
+                };
+                if def > warn && def < crit {
+                    self.mutate_doc(|doc| doc.thresholds.context_high = def);
+                }
             }
             ThresholdField::ContextCrit => {
-                let def = 80.0_f64.max((self.doc.thresholds.context_warn + 1.0).min(100.0));
-                self.mutate_doc(|doc| doc.thresholds.context_crit = def);
+                let high = self.doc.thresholds.context_high;
+                let def = if 80.0 > high {
+                    80.0
+                } else if high <= 99.0 {
+                    high + 1.0
+                } else {
+                    (high + 100.0) * 0.5
+                };
+                if def > high {
+                    self.mutate_doc(|doc| doc.thresholds.context_crit = def);
+                }
             }
             ThresholdField::QuotaWarn => {
-                let def = 45.max((self.doc.thresholds.quota_crit + 1).min(100));
-                self.mutate_doc(|doc| doc.thresholds.quota_warn = def);
+                let high = self.doc.thresholds.quota_high;
+                let def = 45.max((high + 1).min(100));
+                if def > high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_warn = def);
+                }
+            }
+            ThresholdField::QuotaHigh => {
+                let crit = self.doc.thresholds.quota_crit;
+                let warn = self.doc.thresholds.quota_warn;
+                if warn - crit >= 2 {
+                    let def = if 25 > crit && 25 < warn {
+                        25
+                    } else {
+                        (crit + warn) / 2
+                    };
+                    self.mutate_doc(|doc| doc.thresholds.quota_high = def);
+                }
             }
             ThresholdField::QuotaCrit => {
-                let def = 20.min((self.doc.thresholds.quota_warn - 1).max(0));
-                self.mutate_doc(|doc| doc.thresholds.quota_crit = def);
+                let high = self.doc.thresholds.quota_high;
+                let def = 20.min((high - 1).max(0));
+                if def < high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_crit = def);
+                }
             }
             ThresholdField::CacheWarnSecs => {
                 self.mutate_doc(|doc| doc.thresholds.cache_warn_secs = 60);
@@ -1830,15 +2041,16 @@ impl ConfiguratorApp {
 
         // +1 skips the pane's top border, so inner_row indexes the lines the pane drew.
         let inner_row = row.saturating_sub(body_y + 1) as usize;
+        let visible_rows = footer_y.saturating_sub(body_y + 2) as usize;
         match self.active_tab {
             TuiTab::Layout => {
                 // The body's own top and bottom border rows are not list items.
                 if row == body_y || row == footer_y.saturating_sub(1) {
                     return;
                 }
-                // Both lists are scrolled by these offsets, so screen row -> index + offset.
-                let (rows_offset, catalog_offset) =
-                    self.layout_list_offsets(footer_y.saturating_sub(body_y + 2) as usize);
+                // All three lists scroll by these offsets, so screen row -> index + offset.
+                let (rows_offset, catalog_offset) = self.layout_list_offsets(visible_rows);
+                let insp_offset = self.inspector_list_offset(visible_rows);
                 let c0 = (main_w * 34) / 100;
                 let c1 = c0 + (main_w * 33) / 100;
                 if col < c0 {
@@ -1850,34 +2062,50 @@ impl ConfiguratorApp {
                 } else {
                     self.layout_pane = LayoutPane::Inspector;
                     if inner_row >= 1 {
-                        self.inspector_idx = inner_row - 1;
+                        self.inspector_idx = (inner_row - 1) + insp_offset;
                         self.clamp_layout_selection();
                     }
                 }
             }
             TuiTab::StylePresets => {
+                if row == body_y || row == footer_y.saturating_sub(1) {
+                    return;
+                }
                 let c0 = (main_w * 26) / 100;
                 let c1 = c0 + (main_w * 40) / 100;
                 if col < c0 {
                     self.style_pane = StylePane::Presets;
-                    // Row 0 is the scope header, so preset indices start at inner_row 1.
+                    // Row 0 is the scope header, so scrolled preset indices start at inner_row 1.
+                    let preset_offset = self.style_preset_offset(visible_rows);
                     if inner_row >= 1 && !self.available_presets.is_empty() {
                         self.style_preset_idx =
-                            (inner_row - 1).min(self.available_presets.len() - 1);
+                            ((inner_row - 1) + preset_offset).min(self.available_presets.len() - 1);
                     }
                 } else if col < c1 {
                     self.style_pane = StylePane::GlobalStyle;
-                    self.style_field_idx = inner_row.min(StyleField::ALL.len() - 1);
+                    let row_map = self.style_global_row_map();
+                    let global_offset = self.style_global_offset(visible_rows);
+                    self.style_field_idx = row_map
+                        .get(inner_row + global_offset)
+                        .copied()
+                        .unwrap_or(StyleField::ALL.len() - 1);
                 } else {
                     self.style_pane = StylePane::PaletteOverrides;
-                    self.palette_override_idx = inner_row.min(ColorToken::ALL.len() - 1);
+                    let ov_offset = self.palette_override_offset(visible_rows);
+                    self.palette_override_idx =
+                        (inner_row + ov_offset).min(ColorToken::ALL.len() - 1);
                 }
             }
             TuiTab::ThresholdsRuntime => {
+                if row == body_y || row == footer_y.saturating_sub(1) {
+                    return;
+                }
                 let c0 = (main_w * 52) / 100;
                 if col < c0 {
                     self.runtime_pane = RuntimePane::Thresholds;
-                    self.threshold_field_idx = inner_row.min(ThresholdField::ALL.len() - 1);
+                    let th_offset = self.threshold_list_offset(visible_rows);
+                    self.threshold_field_idx =
+                        (inner_row + th_offset).min(ThresholdField::ALL.len() - 1);
                 } else {
                     self.runtime_pane = RuntimePane::Runtime;
                     self.runtime_field_idx = inner_row.min(RuntimeSubField::ALL.len() - 1);

@@ -185,7 +185,8 @@ impl ItemStyle {
 
 /// Default `Compact Threshold` in terminal columns; `0` disables automatic single-row collapse.
 pub const DEFAULT_COMPACT_AT: usize = 88;
-const MAX_COMPACT_AT: usize = 500;
+/// Maximum configurable `Compact Threshold` in columns.
+pub const MAX_COMPACT_AT: usize = 500;
 
 /// Resolves semantic separator presets (`pipe`, `dashed`, `dot`, `square`, `none`) and strips
 /// control characters from arbitrary raw strings while preserving surrounding spacing.
