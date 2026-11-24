@@ -24,3 +24,8 @@ harness = false
 [[bench]]
 name = "pipe_e2e"
 harness = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

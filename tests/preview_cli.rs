@@ -77,6 +77,8 @@ impl Drop for PreviewSandbox {
 #[test]
 fn default_quota_uses_the_selected_model_and_keeps_both_periods_together() {
     let sb = PreviewSandbox::new("model_quota");
+    fs::create_dir_all(&sb.home).expect("create classic home");
+    fs::write(sb.home.join("config.toml"), "preset = \"classic\"\n").expect("write classic");
     let mut payload = serde_json::json!({
         "model": { "id": "models/GEMINI-4-carbon", "display_name": "Gemini Pro Orchestrator" },
         "cycle_mode": "auto",
@@ -231,7 +233,7 @@ fn preview_default_scenario_list_all_plain_width_and_zero_state_writes() {
     assert!(!all_txt.contains("\x1b["));
     assert!(all_txt.contains("normal"));
     assert!(all_txt.contains("narrow_stress"));
-    assert!(all_txt.contains("approval required"));
+    assert!(all_txt.contains("CONFIRM"));
 
     // 4. `-s narrow_stress --plain` narrows to <= 74 cols by default, while `-w 0` forces Full
     let narrow_default = sb.run(&["preview", "-s", "narrow_stress", "--plain"], b"", &[]);
@@ -387,4 +389,31 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
     assert_eq!(help_out.status.code(), Some(0));
     assert!(help_out.stderr.is_empty());
     assert!(String::from_utf8_lossy(&help_out.stdout).contains("Usage: agyline preview"));
+}
+
+#[test]
+fn hud_default_preset_renders_three_rows_and_collapses_on_single_line() {
+    let sb = PreviewSandbox::new("hud_default");
+    let full = sb.run(&["preview", "-s", "normal", "--plain", "-w", "0"], b"", &[]);
+    assert_eq!(full.status.code(), Some(0));
+    let full_txt = String::from_utf8(full.stdout).expect("utf8");
+    let lines: Vec<&str> = full_txt.lines().collect();
+    assert_eq!(lines.len(), 3, "HUD default must emit 3 rows: {full_txt:?}");
+    assert!(lines[0].contains("WORKING") && lines[0].contains("AUTO"));
+    assert!(lines[0].contains("Gemini 2.5 Pro (High)") && lines[0].contains("main*"));
+    assert!(lines[1].contains("Gemini 5h") && lines[1].contains("3P 5h"));
+    assert!(
+        lines[2].contains("sandbox") && lines[2].contains("token 4.6M") && lines[2].contains("58m")
+    );
+
+    let single = sb.run(
+        &["preview", "-s", "normal", "--plain", "-w", "0"],
+        b"",
+        &[("AGY_STATUSLINE_LINES", "1")],
+    );
+    assert_eq!(single.status.code(), Some(0));
+    let single_txt = String::from_utf8(single.stdout).expect("utf8");
+    assert_eq!(single_txt.lines().count(), 1);
+    assert!(single_txt.contains("WORKING") && single_txt.contains("AUTO"));
+    assert!(!single_txt.contains("Gemini 5h") && !single_txt.contains("token 4.6M"));
 }

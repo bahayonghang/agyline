@@ -94,7 +94,7 @@ items = ["model", { item = "quota", bucket = "flash", label = "fl", show_reset =
 // and explicit config.toml keys still override the preset's fields.
 #[test]
 fn presets_apply_scopes_and_load_custom_presets_from_agyline_home() {
-    assert_eq!(builtin_presets().len(), 5);
+    assert_eq!(builtin_presets().len(), 7);
 
     let mut doc = ConfigDoc {
         separator: " / ".to_string(),
@@ -257,7 +257,7 @@ items = ["model", "context"]
         out_256.ansi
     );
     assert!(
-        out_256.ansi.contains("\x1b[0;38;5;244m | "),
+        out_256.ansi.contains("\x1b[0;38;5;244m \u{2502} "),
         "actual: {:?}",
         out_256.ansi
     );
@@ -367,10 +367,14 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     let out = run_live_frame(b"{}", &env);
     assert_eq!(
         out.plain,
-        "  \u{ef23} Model | \u{f49b} 0% | \u{f1c0} cold ! config\n"
+        concat!(
+            "  \u{25cf} READY \u{2502} Model \u{2502} ctx            0.0% ! config\n",
+            "  sandbox off \u{2502} token 0 (0\u{2191} 0\u{2193}) \u{2502} 0m\n",
+        )
     );
+    let first_ansi_line = out.ansi.lines().next().expect("row 1 ansi");
     assert!(
-        out.ansi.ends_with("\x1b[0;31m ! config\x1b[0m\n"),
+        first_ansi_line.ends_with("\x1b[0;31m ! config\x1b[0m"),
         "actual ansi: {:?}",
         out.ansi
     );
@@ -404,10 +408,10 @@ items = ["model", "future_unknown_item", { id = "context", priority = 99, unknow
     assert_eq!(doc.glyphs, GlyphSet::Ascii);
     assert_eq!(doc.color_depth, ColorDepth::Auto);
     assert_eq!(doc.overflow, OverflowMode::Fit);
-    assert_eq!(doc.thresholds.context_warn, 50.0);
-    assert_eq!(doc.thresholds.context_crit, 80.0);
-    assert_eq!(doc.thresholds.quota_warn, 45);
-    assert_eq!(doc.thresholds.quota_crit, 20);
+    assert_eq!(doc.thresholds.context_warn, 60.0);
+    assert_eq!(doc.thresholds.context_crit, 90.0);
+    assert_eq!(doc.thresholds.quota_warn, 40);
+    assert_eq!(doc.thresholds.quota_crit, 10);
     assert_eq!(doc.thresholds.cache_warn_secs, 60);
     assert_eq!(doc.lines.len(), 1);
     assert_eq!(doc.lines[0].len(), 2);
@@ -416,12 +420,12 @@ items = ["model", "future_unknown_item", { id = "context", priority = 99, unknow
     assert_eq!(doc.lines[0][1].priority, None);
 }
 
-// The catalog is exactly the 20 ItemId::ALL entries in order; quota is the only repeatable item
-// (allow_multiple, 4 options), so the configurator can place independent quota buckets.
+// The catalog is exactly the 24 ItemId::ALL entries in order; quota and quota_group are
+// repeatable (`allow_multiple`), so the configurator can place independent quota buckets/families.
 #[test]
-fn items_catalog_exposes_all_twenty_items_with_priorities_and_options() {
+fn items_catalog_exposes_all_twenty_four_items_with_priorities_and_options() {
     let cat = items::catalog();
-    assert_eq!(cat.len(), 20);
+    assert_eq!(cat.len(), 24);
     for (idx, expected_id) in ItemId::ALL.iter().copied().enumerate() {
         assert_eq!(cat[idx].id, expected_id);
         assert_eq!(cat[idx].key, expected_id.as_key());
@@ -429,11 +433,18 @@ fn items_catalog_exposes_all_twenty_items_with_priorities_and_options() {
     }
     let quota_meta = cat.iter().find(|c| c.id == ItemId::Quota).expect("quota");
     assert!(quota_meta.allow_multiple);
-    assert_eq!(quota_meta.options.len(), 4);
+    assert_eq!(quota_meta.options.len(), 8);
+
+    let qg_meta = cat
+        .iter()
+        .find(|c| c.id == ItemId::QuotaGroup)
+        .expect("quota_group");
+    assert!(qg_meta.allow_multiple);
+    assert_eq!(qg_meta.options.len(), 8);
 
     let model_meta = cat.iter().find(|c| c.id == ItemId::Model).expect("model");
     assert!(!model_meta.allow_multiple);
-    assert!(model_meta.options.is_empty());
+    assert_eq!(model_meta.options.len(), 1);
 }
 
 // Renders all 20 items at once: email PII and subagent role prompts never reach the line, and
@@ -639,6 +650,7 @@ fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() 
             has_conflict: false,
             ahead: 12,
             behind: 3,
+            ..agyline::GitFrameState::default()
         }),
         cache: agyline::CacheFrameState {
             cache_ts: Some(1_700_000_010 - 115),
@@ -647,6 +659,7 @@ fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() 
         },
         last_tps: Some("64.5".to_string()),
         response_model: None,
+        ..agyline::FrameData::default()
     };
 
     // 1. Widthless -> all Full, zero narrowing
@@ -717,4 +730,130 @@ fn three_stage_width_narrowing_downgrades_drops_and_grapheme_truncates_safely() 
     let unnarrowed_plain = agyline::emit_plain(&unnarrowed, &cfg);
     assert!(str_display_width(unnarrowed_plain.trim_end_matches('\n')) > 80);
     let _ = env;
+}
+
+#[test]
+fn hud_items_and_new_slot_options_roundtrip_degrade_and_render_full_and_compact() {
+    let toml_src = r#"
+separator = " │ "
+indent = "  "
+
+[thresholds]
+context_warn = 60
+context_crit = 90
+quota_warn = 40
+quota_crit = 10
+
+[[line]]
+items = [
+  { id = "status", show_pending = true },
+  { id = "mode", style = "badge" },
+  { id = "model", style = "hud", icon = "", fg = "context" },
+  { id = "context", style = "bar", bar_style = "solid", bar_width = 10, icon = "" },
+  { id = "dir", max_levels = 2, icon = "", fg = "model" },
+  { id = "git", style = "counts", icon = "" },
+]
+
+[[line]]
+items = [
+  { id = "quota_group", family = "gemini", label = "Gemini", show_used = true, show_bar = true, show_reset = true },
+  { id = "quota_group", family = "3p", label = "3P", show_used = false, show_bar = false, show_reset = true },
+]
+
+[[line]]
+items = [
+  { id = "sandbox", show_when_off = true, icon = "" },
+  { id = "tokens", show_breakdown = true },
+  { id = "cache", style = "hit_rate", show_ttl = true, icon = "" },
+  "duration",
+]
+"#;
+
+    let (doc, warnings) = parse_config_doc(toml_src).expect("parse hud slot options");
+    assert!(warnings.is_empty(), "warnings: {warnings:?}");
+    let serialized = serialize_config_doc(&doc);
+    let (reparsed, warnings2) = parse_config_doc(&serialized).expect("roundtrip hud options");
+    assert!(warnings2.is_empty(), "warnings2: {warnings2:?}");
+    assert_eq!(reparsed, doc);
+
+    // Invalid option bounds warn and drop gracefully
+    let bad_toml = r#"
+[[line]]
+items = [{ id = "dir", max_levels = 99 }, { id = "context", style = "bar", bar_style = "neon", bar_width = 2 }]
+"#;
+    let (bad_doc, bad_warnings) = parse_config_doc(bad_toml).expect("tolerant parse");
+    assert_eq!(bad_doc.lines[0][0].max_levels, None);
+    assert_eq!(bad_doc.lines[0][1].bar_style, None);
+    assert_eq!(bad_doc.lines[0][1].bar_width, None);
+    assert!(bad_warnings.len() >= 3);
+
+    // Evaluate all HUD styles
+    let mut env_vars = BTreeMap::new();
+    env_vars.insert("HOME".to_string(), "/home/dev".to_string());
+    env_vars.insert("USERPROFILE".to_string(), "/home/dev".to_string());
+    let cfg = EffectiveConfig::from_doc(&doc, None, &env_vars, true);
+
+    let payload = agyline::parse_stdin_payload(
+        br#"{
+            "session_id": "hud_test",
+            "agent_state": "working",
+            "execution_mode": "accept-edits",
+            "pending_input_count": 2,
+            "vim": { "mode": "insert" },
+            "model": { "display_name": "Gemini 4 Neon (XHigh)" },
+            "cwd": "/home/dev/projects/antigravity-hud",
+            "sandbox": { "enabled": false },
+            "context_window": {
+                "current_usage": { "input_tokens": 19700, "cache_read_input_tokens": 177300 },
+                "total_input_tokens": 4478000,
+                "total_output_tokens": 122000,
+                "context_window_size": 1000000
+            },
+            "quota": {
+                "gemini-5h": { "remaining_fraction": 0.927, "reset_in_seconds": 9840 },
+                "gemini-weekly": { "remaining_fraction": 0.797, "reset_in_seconds": 446400 },
+                "3p-5h": { "remaining_fraction": 1.0, "reset_in_seconds": 18000 }
+            }
+        }"#,
+    )
+    .expect("parse hud payload");
+
+    let frame = agyline::FrameData {
+        payload,
+        now_sec: 1_700_003_480,
+        git: Some(agyline::GitFrameState {
+            branch: "main".to_string(),
+            dirty: true,
+            modified: 1,
+            untracked: 7,
+            ..agyline::GitFrameState::default()
+        }),
+        cache: agyline::CacheFrameState {
+            cache_ts: Some(1_700_003_400),
+            relay_touches: 1,
+            relay_status: Some(agyline::RelayStatus::Live),
+        },
+        session_start_sec: Some(1_700_000_000), // 3480s = 58m
+        user_home: Some(PathBuf::from("/home/dev")),
+        ..agyline::FrameData::default()
+    };
+
+    let rendered = agyline::render_lines(&frame, &cfg);
+    let plain = agyline::emit_plain(&rendered, &cfg);
+    let rows: Vec<&str> = plain.lines().collect();
+    assert_eq!(rows.len(), 3, "plain: {plain:?}");
+    assert!(rows[0].contains("WORKING (+2) │ EDITS [I] │ Gemini 4 Neon (XHigh) │ ctx "));
+    assert!(rows[0].contains(" 19.7% │ ~/projects/antigravity-hud │ main* !1 ?7"));
+    assert!(rows[1].contains("Gemini 5h "));
+    assert!(rows[1].contains(" 7.3% 2h44m / week "));
+    assert!(rows[1].contains(" 20.3% 5d4h │ 3P 5h 100.0% 5h0m"));
+    assert!(rows[2].contains("sandbox off │ token 4.6M (4.5M↑ 122k↓) │ cache 90.0%"));
+    assert!(rows[2].contains("3:40"));
+    assert!(rows[2].ends_with("│ 58m"));
+
+    let ansi = agyline::emit_ansi(&rendered, &cfg);
+    // Bold WORKING (`;1;`), Italic model (`;3;`), Bold 4.6M (`;1;`)
+    assert!(ansi.contains(";1;96m⚙ WORKING\x1b[0;33m (+2)"));
+    assert!(ansi.contains(";3;95mGemini 4 Neon (XHigh)"));
+    assert!(ansi.contains(";1;37m4.6M"));
 }

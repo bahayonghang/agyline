@@ -17,7 +17,7 @@ use crate::install::{
 use crate::platform;
 use crate::render::{emit_ansi, emit_plain};
 use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_payload};
-use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame};
+use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame_ansi};
 
 /// The three streams and their TTY flags, injected so tests can drive every mode without a real
 /// terminal. Mode selection reads the flags, never the stream contents.
@@ -60,6 +60,7 @@ enum CliAction {
     LiveRender,
     HiddenRefreshGit(Vec<OsString>),
     HiddenTouch(Vec<OsString>),
+    HiddenRefreshTranscript(Vec<OsString>),
     Help(HelpTopic),
     Version,
     Configurator,
@@ -108,6 +109,10 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
             0
         }
         CliAction::HiddenTouch(tail) => crate::collect::touch::run_touch_worker(&tail),
+        CliAction::HiddenRefreshTranscript(tail) => {
+            crate::collect::run_hidden_refresh_transcript(&tail);
+            0
+        }
         CliAction::Help(topic) => {
             let text = help_text(topic);
             let _ = streams.stdout.write_all(text.as_bytes());
@@ -173,9 +178,9 @@ fn execute_live_render(streams: &mut CliStreams<'_>) -> u8 {
     }
     let spawner = SystemSpawner;
     let env = RenderEnv::from_process(&spawner);
-    let out = run_live_frame(&buf, &env);
-    if !out.ansi.is_empty() {
-        let _ = streams.stdout.write_all(out.ansi.as_bytes());
+    let ansi = run_live_frame_ansi(&buf, &env);
+    if !ansi.is_empty() {
+        let _ = streams.stdout.write_all(ansi.as_bytes());
         let _ = streams.stdout.flush();
     }
     0
@@ -364,6 +369,9 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
     }
     if first == "__touch" {
         return CliAction::HiddenTouch(args[2..].to_vec());
+    }
+    if first == "__refresh-transcript" {
+        return CliAction::HiddenRefreshTranscript(args[2..].to_vec());
     }
 
     match first.as_ref() {

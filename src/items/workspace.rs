@@ -3,13 +3,15 @@
 //! and `statusline.py`. Compact widths are agyline's own; the reference prints a single width. Git
 //! state is already resolved in `FrameData`: nothing here runs `git` or reads the filesystem.
 
+use std::path::Path;
+
 use crate::collect::FrameData;
-use crate::config::{EffectiveConfig, ItemId, ItemSlot};
+use crate::config::{EffectiveConfig, GlyphSet, ItemId, ItemSlot};
 use crate::items::{
     EvaluatedItem, coalesced_icon_body_spans, slot_custom_icon_color, slot_fg_color,
     truncate_chars_with_ellipsis,
 };
-use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
+use crate::render::{ColorSpec, ColorToken, StyledSpan, TextStyle, glyphs};
 
 /// Model segment: picker display name, else `model.id`, else the literal `Model`, plus effort
 /// joined by the reference's middle dot. Never `None`; the compact form shortens the name only.
@@ -59,6 +61,47 @@ pub fn eval_model(
     let body_col = slot_fg_color(slot, ColorToken::Model);
     let custom_ic = slot_custom_icon_color(slot);
     let compact_base = truncate_chars_with_ellipsis(&pretty_base, 20, config.glyphs);
+
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("hud"))
+    {
+        let hud_effort = if effort_label == "xHigh" {
+            "XHigh".to_string()
+        } else {
+            effort_label
+        };
+        let full_body = if hud_effort.is_empty() {
+            pretty_base
+        } else {
+            format!("{pretty_base} ({hud_effort})")
+        };
+        let italic = TextStyle::PLAIN.italic();
+        let build_hud = |body: String| -> Vec<StyledSpan> {
+            if icon.is_empty() {
+                vec![StyledSpan::styled(body_col, italic, body)]
+            } else if let Some(ic) = custom_ic
+                && ic != body_col
+            {
+                vec![
+                    StyledSpan::new(ic, icon),
+                    StyledSpan::styled(body_col, italic, format!(" {body}")),
+                ]
+            } else {
+                vec![
+                    StyledSpan::new(body_col, format!("{icon} ")),
+                    StyledSpan::styled(body_col, italic, body),
+                ]
+            }
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Model,
+            priority: slot.effective_priority(),
+            full_spans: build_hud(full_body),
+            compact_spans: build_hud(compact_base),
+        });
+    }
 
     let build = |name: String| -> Vec<StyledSpan> {
         let mut spans = coalesced_icon_body_spans(icon, custom_ic, body_col, name);
@@ -114,6 +157,17 @@ pub fn eval_dir(
     let body_col = slot_fg_color(slot, ColorToken::Dir);
     let compact_leaf = truncate_chars_with_ellipsis(leaf, 12, config.glyphs);
 
+    let full_dir = if let Some(max_levels) = slot.max_levels {
+        format_multi_level_dir(
+            cwd,
+            frame.user_home.as_deref(),
+            usize::from(max_levels.clamp(1, 8)),
+            config.glyphs,
+        )
+    } else {
+        leaf.to_string()
+    };
+
     let build = |dir_txt: &str| -> Vec<StyledSpan> {
         if icon.is_empty() {
             vec![StyledSpan::new(body_col, dir_txt)]
@@ -128,9 +182,79 @@ pub fn eval_dir(
     Some(EvaluatedItem {
         id: ItemId::Dir,
         priority: slot.effective_priority(),
-        full_spans: build(leaf),
+        full_spans: build(&full_dir),
         compact_spans: build(&compact_leaf),
     })
+}
+
+fn format_multi_level_dir(
+    cwd: &str,
+    user_home: Option<&Path>,
+    max_levels: usize,
+    glyphs: GlyphSet,
+) -> String {
+    let norm_cwd = cwd.replace('\\', "/");
+    let trimmed_cwd = if norm_cwd.len() > 1 {
+        norm_cwd.trim_end_matches('/')
+    } else {
+        norm_cwd.as_str()
+    };
+    let norm_home = user_home.map(|h| {
+        let s = h.to_string_lossy().replace('\\', "/");
+        if s.len() > 1 {
+            s.trim_end_matches('/').to_string()
+        } else {
+            s
+        }
+    });
+
+    let (prefix, rel) = if let Some(ref home) = norm_home
+        && !home.is_empty()
+        && path_starts_with_component(trimmed_cwd, home)
+    {
+        ("~/", &trimmed_cwd[home.len()..])
+    } else if let Some(rest) = trimmed_cwd.strip_prefix('/') {
+        ("/", rest)
+    } else {
+        ("", trimmed_cwd)
+    };
+
+    let segs: Vec<&str> = rel.split('/').filter(|s| !s.is_empty()).collect();
+    if segs.is_empty() {
+        if prefix == "/" {
+            "/".to_string()
+        } else if prefix == "~/" {
+            "~".to_string()
+        } else {
+            trimmed_cwd.to_string()
+        }
+    } else if segs.len() > max_levels {
+        format!(
+            "{}/{}",
+            glyphs::ellipsis(glyphs),
+            segs[segs.len() - max_levels..].join("/")
+        )
+    } else {
+        format!("{prefix}{}", segs.join("/"))
+    }
+}
+
+fn path_starts_with_component(path: &str, home: &str) -> bool {
+    if path.len() < home.len() {
+        return false;
+    }
+    let Some(head) = path.get(..home.len()) else {
+        return false;
+    };
+    let matches_head = if cfg!(windows) || path.as_bytes().get(1) == Some(&b':') {
+        head.eq_ignore_ascii_case(home)
+    } else {
+        head == home
+    };
+    if !matches_head {
+        return false;
+    }
+    path.len() == home.len() || path.as_bytes()[home.len()] == b'/'
 }
 
 /// Git segment from the cached frame state; `None` when no branch is known. A conflict paints the
@@ -166,6 +290,97 @@ pub fn eval_git(
         .unwrap_or_else(|| glyphs::git_icon(config.glyphs));
     let base_col = slot_fg_color(slot, ColorToken::Git);
     let custom_ic = slot_custom_icon_color(slot);
+
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("counts"))
+    {
+        let branch_col: ColorSpec = if git.dirty || git.has_conflict {
+            ColorToken::Crit.into()
+        } else {
+            base_col
+        };
+        let build_branch_only = |limit: usize| -> Vec<StyledSpan> {
+            let short = truncate_chars_with_ellipsis(&git.branch, limit, config.glyphs);
+            let label = if git.dirty {
+                format!("{short}*")
+            } else {
+                short
+            };
+            coalesced_icon_body_spans(icon, custom_ic, branch_col, label)
+        };
+        let mut full_spans = build_branch_only(24);
+        if git.conflicted > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Crit,
+                format!(" ={}", git.conflicted),
+            ));
+        }
+        if git.staged > 0 {
+            full_spans.push(StyledSpan::new(ColorToken::Ok, format!(" +{}", git.staged)));
+        }
+        if git.modified > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Warn,
+                format!(" !{}", git.modified),
+            ));
+        }
+        if git.deleted > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Crit,
+                format!(
+                    " {}{}",
+                    glyphs::git_deleted_mark(config.glyphs),
+                    git.deleted
+                ),
+            ));
+        }
+        if git.renamed > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Context,
+                format!(
+                    " {}{}",
+                    glyphs::git_renamed_mark(config.glyphs),
+                    git.renamed
+                ),
+            ));
+        }
+        if git.untracked > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Muted,
+                format!(" ?{}", git.untracked),
+            ));
+        }
+        if git.stashed > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Model,
+                format!(" ${}", git.stashed),
+            ));
+        }
+        if git.ahead > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Model,
+                format!(" {}{}", glyphs::git_ahead_prefix(config.glyphs), git.ahead),
+            ));
+        }
+        if git.behind > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Model,
+                format!(
+                    " {}{}",
+                    glyphs::git_behind_prefix(config.glyphs),
+                    git.behind
+                ),
+            ));
+        }
+        return Some(EvaluatedItem {
+            id: ItemId::Git,
+            priority: slot.effective_priority(),
+            full_spans,
+            compact_spans: build_branch_only(12),
+        });
+    }
 
     let build = |branch_limit: usize| -> Vec<StyledSpan> {
         let br_short = truncate_chars_with_ellipsis(&git.branch, branch_limit, config.glyphs);

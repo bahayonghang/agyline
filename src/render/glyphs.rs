@@ -219,3 +219,80 @@ pub fn ellipsis(glyphs: GlyphSet) -> &'static str {
         GlyphSet::Ascii => "...",
     }
 }
+
+pub fn status_ready_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25cf}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn status_working_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2699}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn status_tool_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{1f527}",
+        GlyphSet::Ascii => ">",
+    }
+}
+
+pub fn status_review_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25c8}",
+        GlyphSet::Ascii => "~",
+    }
+}
+
+pub fn status_error_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2716}",
+        GlyphSet::Ascii => "x",
+    }
+}
+
+pub fn status_thinking_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25c6}",
+        GlyphSet::Ascii => "?",
+    }
+}
+
+pub fn status_wait_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{23f3}",
+        GlyphSet::Ascii => "...",
+    }
+}
+
+pub fn git_deleted_mark(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2718}",
+        GlyphSet::Ascii => "-",
+    }
+}
+
+pub fn git_renamed_mark(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{00bb}",
+        GlyphSet::Ascii => ">",
+    }
+}
+
+pub fn token_in_arrow(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2191}",
+        GlyphSet::Ascii => "^",
+    }
+}
+
+pub fn token_out_arrow(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2193}",
+        GlyphSet::Ascii => "v",
+    }
+}

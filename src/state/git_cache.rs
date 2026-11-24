@@ -23,7 +23,7 @@ static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A cached git snapshot for one cwd. `version`/`cwd` are validated on read (mismatch = miss);
 /// `updated_at_ms` drives staleness. Written by the refresh worker, read on the render path.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct GitCacheEntry {
     pub version: u32,
     pub cwd: String,
@@ -34,6 +34,20 @@ pub struct GitCacheEntry {
     pub has_conflict: bool,
     pub ahead: i64,
     pub behind: i64,
+    #[serde(default)]
+    pub conflicted: u32,
+    #[serde(default)]
+    pub staged: u32,
+    #[serde(default)]
+    pub modified: u32,
+    #[serde(default)]
+    pub deleted: u32,
+    #[serde(default)]
+    pub renamed: u32,
+    #[serde(default)]
+    pub untracked: u32,
+    #[serde(default)]
+    pub stashed: u32,
 }
 
 /// On-disk shape with optional git fields: a non-repo entry omits branch/dirty/etc. The read path
@@ -49,6 +63,20 @@ struct RawGitCacheEntry {
     has_conflict: Option<bool>,
     ahead: Option<i64>,
     behind: Option<i64>,
+    #[serde(default)]
+    conflicted: u32,
+    #[serde(default)]
+    staged: u32,
+    #[serde(default)]
+    modified: u32,
+    #[serde(default)]
+    deleted: u32,
+    #[serde(default)]
+    renamed: u32,
+    #[serde(default)]
+    untracked: u32,
+    #[serde(default)]
+    stashed: u32,
 }
 
 /// Normalizes a cwd for hashing: strips trailing separators, keeping a minimum length so roots
@@ -165,6 +193,13 @@ pub fn read_git_cache(home_dir: &Path, raw_cwd: &str) -> Option<GitCacheEntry> {
             has_conflict: parsed.has_conflict?,
             ahead: parsed.ahead?,
             behind: parsed.behind?,
+            conflicted: parsed.conflicted,
+            staged: parsed.staged,
+            modified: parsed.modified,
+            deleted: parsed.deleted,
+            renamed: parsed.renamed,
+            untracked: parsed.untracked,
+            stashed: parsed.stashed,
         })
     } else {
         Some(GitCacheEntry {
@@ -177,6 +212,13 @@ pub fn read_git_cache(home_dir: &Path, raw_cwd: &str) -> Option<GitCacheEntry> {
             has_conflict: parsed.has_conflict.unwrap_or(false),
             ahead: parsed.ahead.unwrap_or(0),
             behind: parsed.behind.unwrap_or(0),
+            conflicted: parsed.conflicted,
+            staged: parsed.staged,
+            modified: parsed.modified,
+            deleted: parsed.deleted,
+            renamed: parsed.renamed,
+            untracked: parsed.untracked,
+            stashed: parsed.stashed,
         })
     }
 }

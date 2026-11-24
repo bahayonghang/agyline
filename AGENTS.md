@@ -36,11 +36,11 @@ The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-C
 
 ## Default line
 
-The default layout shows the selected model group's 5-hour and weekly quotas with reset countdowns on the second row. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
+The `default` layout uses the 3-row `hud` preset (`status`, badge `mode`, italic `model`, bar `context`, multi-level `dir`, per-count `git` on row 1; dual `Gemini` & `3P` 5-hour/weekly `quota_group` bars on row 2; `sandbox`, `tokens`, hit-rate `cache`, `duration`, and non-zero runtime items on row 3). The prior 2-row `@model` layout is preserved as the `classic` preset. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
 
-Stdin fields the scripts already read:
+Stdin fields read by agyline include:
 
-`session_id`, `conversation_id`, `agent_state`, `execution_mode`, `cycle_mode`, `model.display_name`, `model.id`, `model.effort`, `thinkingLevel`, `cwd`, `workspace.current_dir`, `workspace.project_dir`, `vcs.branch`, `vcs.dirty`, `sandbox.enabled`, `sandbox.allow_network`, `context_window` (input, output, cache read, total output, window size, used percentage), `cost`, `quota.*.remaining_fraction`, `subagents`, `task_count`, `pending_input_count`, `tool_confirmation_pending`.
+`session_id`, `conversation_id`, `agent_state`, `execution_mode`, `cycle_mode`, `model.display_name`, `model.id`, `model.effort`, `thinkingLevel`, `cwd`, `workspace.current_dir`, `workspace.project_dir`, `workspace.vcs`, `workspace.sandbox`, `vcs.type`, `vcs.branch`, `vcs.dirty`, `sandbox.enabled`, `sandbox.allow_network`, `context_window` (`current_usage.input_tokens`, `current_usage.output_tokens`, `current_usage.cache_read_input_tokens`, `current_usage.cache_creation_input_tokens`, `total_input_tokens`, `total_output_tokens`, `context_window_size`, `used_percentage`, `remaining_percentage`), `cost`, `quota.*.remaining_fraction`, `subagents`, `task_count`, `pending_input_count`, `tool_confirmation_pending`, `transcript_path`.
 
 ## Integration
 

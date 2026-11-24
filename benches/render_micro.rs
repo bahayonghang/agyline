@@ -44,6 +44,11 @@ fn main() {
     let raw_json = br#"{"session_id":"bench_1","agent_state":"working","execution_mode":"auto","model":{"display_name":"Gemini 2.5 Pro","effort":"high"},"cwd":"/workspace/agyline","vcs":{"branch":"main","dirty":true},"sandbox":{"enabled":true,"allow_network":false},"context_window":{"current_usage":{"input_tokens":9600,"output_tokens":524,"cache_read_input_tokens":230400},"total_output_tokens":524,"context_window_size":1000000},"quota":{"gemini-5h":{"remaining_fraction":0.68,"reset_in_seconds":11520},"3p-5h":{"remaining_fraction":0.53,"reset_in_seconds":6300}},"cost":{"total_usd":1.42,"subagent_usd":0.64}}"#;
 
     let default_cfg = EffectiveConfig::default();
+    let hud_tc_doc = ConfigDoc {
+        color_depth: ColorDepth::TrueColor,
+        ..ConfigDoc::default()
+    };
+    let hud_tc_cfg = EffectiveConfig::from_doc(&hud_tc_doc, None, &BTreeMap::new(), false);
     let sc_normal = find_scenario("normal").expect("normal scenario");
     let sc_busy = find_scenario("busy_subagents").expect("busy_subagents scenario");
     let sc_narrow = find_scenario("narrow_stress").expect("narrow_stress scenario");
@@ -68,9 +73,23 @@ fn main() {
         },
     );
 
+    run_bench("render + emit_ansi (hud 3-row)", warmup, samples, || {
+        let rendered = render_lines(black_box(&sc_normal.frame), black_box(&hud_tc_cfg));
+        emit_ansi(&rendered, &hud_tc_cfg).len()
+    });
+
     run_bench("render + emit_ansi (dashboard 20)", warmup, samples, || {
         let rendered = render_lines(black_box(&sc_busy.frame), black_box(&dash_cfg));
         emit_ansi(&rendered, &dash_cfg).len()
+    });
+
+    run_bench("render_with_width(74) (hud 3-row)", warmup, samples, || {
+        let rendered = render_lines_with_width(
+            black_box(&sc_narrow.frame),
+            black_box(&hud_tc_cfg),
+            Some(74),
+        );
+        emit_ansi(&rendered, &hud_tc_cfg).len()
     });
 
     run_bench("render_with_width(74) (narrowing)", warmup, samples, || {

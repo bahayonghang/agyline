@@ -3,6 +3,7 @@
 //! deterministic (fixed anchor clock, no I/O, no state writes), so repeat runs and goldens agree.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use crate::collect::{CacheFrameState, FrameData, GitFrameState, RelayStatus};
@@ -67,9 +68,7 @@ pub fn stateless_frame_from_payload(payload: Payload, now_sec: i64) -> FrameData
         Some(GitFrameState {
             branch: payload.vcs_branch.clone(),
             dirty: payload.vcs_dirty,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..GitFrameState::default()
         })
     };
     FrameData {
@@ -79,6 +78,7 @@ pub fn stateless_frame_from_payload(payload: Payload, now_sec: i64) -> FrameData
         cache: CacheFrameState::default(),
         last_tps: None,
         response_model: None,
+        ..FrameData::default()
     }
 }
 
@@ -86,40 +86,9 @@ pub fn stateless_frame_from_payload(payload: Payload, now_sec: i64) -> FrameData
 /// the reference's fallback label when neither `display_name` nor `id` is present.
 fn empty_payload() -> Payload {
     Payload {
-        session_id: None,
         agent_state: "idle".to_string(),
-        exec_mode: String::new(),
         model_display_name: "Model".to_string(),
-        model_id: String::new(),
-        model_effort: String::new(),
-        cwd: String::new(),
-        vcs_branch: String::new(),
-        vcs_dirty: false,
-        sandbox_enabled: false,
-        sandbox_allow_network: false,
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_read_input_tokens: 0,
-        total_output_tokens: 0,
-        context_window_size: 0.0,
-        used_percentage: 0.0,
-        remaining_percentage: None,
-        cost_usd: 0.0,
-        subagent_cost_usd: 0.0,
-        quota_buckets: Vec::new(),
-        subagents_total: 0,
-        subagents_running: 0,
-        subagents: Vec::new(),
-        task_count: 0,
-        pending_input_count: 0,
-        tool_confirmation_pending: false,
-        terminal_width: None,
-        vim_mode: String::new(),
-        conversation_title: String::new(),
-        agent_name: String::new(),
-        artifact_count: 0,
-        version: String::new(),
-        plan_tier: String::new(),
+        ..Payload::default()
     }
 }
 
@@ -146,10 +115,13 @@ fn build_scenarios() -> Vec<Scenario> {
     p_normal.exec_mode = "auto".to_string();
     p_normal.model_display_name = "Gemini 2.5 Pro".to_string();
     p_normal.model_effort = "High".to_string();
-    p_normal.cwd = "/workspace/agyline".to_string();
+    p_normal.cwd = "/home/dev/projects/agyline".to_string();
     p_normal.sandbox_enabled = true;
     p_normal.input_tokens = 9_600;
     p_normal.cache_read_input_tokens = 230_400;
+    p_normal.cache_creation_input_tokens = 2_200;
+    p_normal.total_input_tokens = 4_480_000;
+    p_normal.total_output_tokens = 122_000;
     p_normal.context_window_size = 1_000_000.0;
     p_normal.used_percentage = 24.0;
     p_normal.quota_buckets = vec![
@@ -177,6 +149,9 @@ fn build_scenarios() -> Vec<Scenario> {
                 has_conflict: false,
                 ahead: 2,
                 behind: 0,
+                modified: 1,
+                untracked: 7,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState {
                 // `300 - 222` reads as "222 s left": 300 s is the reference prompt-cache window.
@@ -186,6 +161,9 @@ fn build_scenarios() -> Vec<Scenario> {
             },
             last_tps: Some("52.4".to_string()),
             response_model: None,
+            session_start_sec: Some(now_sec - 58 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 
@@ -195,7 +173,7 @@ fn build_scenarios() -> Vec<Scenario> {
     p_pre.exec_mode = "auto".to_string();
     p_pre.model_display_name = "Opus 4.6".to_string();
     p_pre.model_effort = "High".to_string();
-    p_pre.cwd = "/workspace/agyline".to_string();
+    p_pre.cwd = "/home/dev/projects/agyline".to_string();
     p_pre.quota_buckets = vec![
         bucket("gemini-5h", 91.0, 4 * 3600 + 58 * 60),
         bucket("3p-5h", 82.0, 4 * 3600 + 40 * 60),
@@ -213,14 +191,14 @@ fn build_scenarios() -> Vec<Scenario> {
             now_sec,
             git: Some(GitFrameState {
                 branch: "main".to_string(),
-                dirty: false,
-                has_conflict: false,
-                ahead: 0,
-                behind: 0,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState::default(),
             last_tps: None,
             response_model: None,
+            session_start_sec: None,
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 
@@ -230,11 +208,13 @@ fn build_scenarios() -> Vec<Scenario> {
     p_touch.exec_mode = "accept-edits".to_string();
     p_touch.model_display_name = "Sonnet 4.5".to_string();
     p_touch.model_effort = "High".to_string();
-    p_touch.cwd = "/workspace/agyline".to_string();
+    p_touch.cwd = "/home/dev/projects/agyline".to_string();
     p_touch.sandbox_enabled = true;
     p_touch.sandbox_allow_network = true;
     p_touch.input_tokens = 1_120;
     p_touch.cache_read_input_tokens = 110_880;
+    p_touch.total_input_tokens = 890_000;
+    p_touch.total_output_tokens = 42_000;
     p_touch.context_window_size = 200_000.0;
     p_touch.used_percentage = 56.0;
     p_touch.cost_usd = 0.384;
@@ -266,6 +246,10 @@ fn build_scenarios() -> Vec<Scenario> {
                 has_conflict: false,
                 ahead: 1,
                 behind: 0,
+                staged: 2,
+                modified: 3,
+                untracked: 1,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState {
                 // 44 s left: inside the reference's last-60 s touch window, 2 of 4 touches used.
@@ -275,6 +259,9 @@ fn build_scenarios() -> Vec<Scenario> {
             },
             last_tps: Some("74.8".to_string()),
             response_model: None,
+            session_start_sec: Some(now_sec - 23 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 
@@ -285,10 +272,12 @@ fn build_scenarios() -> Vec<Scenario> {
     p_busy.exec_mode = "plan".to_string();
     p_busy.model_display_name = "Gemini 2.5 Pro".to_string();
     p_busy.model_effort = "xHigh".to_string();
-    p_busy.cwd = "/workspace/agyline".to_string();
+    p_busy.cwd = "/home/dev/projects/agyline".to_string();
     p_busy.sandbox_enabled = true;
     p_busy.input_tokens = 25_200;
     p_busy.cache_read_input_tokens = 394_800;
+    p_busy.total_input_tokens = 2_140_000;
+    p_busy.total_output_tokens = 98_500;
     p_busy.context_window_size = 1_000_000.0;
     p_busy.used_percentage = 42.0;
     p_busy.cost_usd = 1.42;
@@ -344,6 +333,12 @@ fn build_scenarios() -> Vec<Scenario> {
                 has_conflict: false,
                 ahead: 4,
                 behind: 1,
+                staged: 1,
+                modified: 4,
+                deleted: 1,
+                renamed: 1,
+                stashed: 2,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState {
                 // 275 s left: relay live, but outside the touch window, so no keepalive is due.
@@ -353,6 +348,9 @@ fn build_scenarios() -> Vec<Scenario> {
             },
             last_tps: Some("118".to_string()),
             response_model: None,
+            session_start_sec: Some(now_sec - 95 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 
@@ -364,9 +362,11 @@ fn build_scenarios() -> Vec<Scenario> {
     p_warn.tool_confirmation_pending = true;
     p_warn.model_display_name = "Opus 4.6 1M".to_string();
     p_warn.model_effort = "Max".to_string();
-    p_warn.cwd = "/workspace/agyline".to_string();
+    p_warn.cwd = "/home/dev/projects/agyline".to_string();
     p_warn.input_tokens = 103_200;
     p_warn.cache_read_input_tokens = 756_800;
+    p_warn.total_input_tokens = 5_820_000;
+    p_warn.total_output_tokens = 184_000;
     p_warn.context_window_size = 1_000_000.0;
     p_warn.used_percentage = 86.0;
     p_warn.cost_usd = 4.85;
@@ -405,6 +405,9 @@ fn build_scenarios() -> Vec<Scenario> {
                 has_conflict: true,
                 ahead: 0,
                 behind: 3,
+                conflicted: 2,
+                modified: 3,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState {
                 // 25 s left with a failed relay: the badge reads Fail, not a live keepalive.
@@ -414,6 +417,9 @@ fn build_scenarios() -> Vec<Scenario> {
             },
             last_tps: Some("31.6".to_string()),
             response_model: None,
+            session_start_sec: Some(now_sec - 142 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 
@@ -429,6 +435,8 @@ fn build_scenarios() -> Vec<Scenario> {
     p_narrow.sandbox_allow_network = true;
     p_narrow.input_tokens = 18_900;
     p_narrow.cache_read_input_tokens = 611_100;
+    p_narrow.total_input_tokens = 1_450_000;
+    p_narrow.total_output_tokens = 64_000;
     p_narrow.context_window_size = 1_000_000.0;
     p_narrow.used_percentage = 63.0;
     p_narrow.cost_usd = 0.95;
@@ -478,6 +486,9 @@ fn build_scenarios() -> Vec<Scenario> {
                 has_conflict: false,
                 ahead: 12,
                 behind: 3,
+                modified: 2,
+                untracked: 3,
+                ..GitFrameState::default()
             }),
             cache: CacheFrameState {
                 cache_ts: Some(now_sec - (300 - 185)),
@@ -486,6 +497,9 @@ fn build_scenarios() -> Vec<Scenario> {
             },
             last_tps: Some("64.5".to_string()),
             response_model: None,
+            session_start_sec: Some(now_sec - 47 * 60),
+            user_home: Some(PathBuf::from("/home/dev")),
+            transcript_totals: None,
         },
     };
 

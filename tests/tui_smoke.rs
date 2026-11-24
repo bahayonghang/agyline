@@ -15,7 +15,7 @@ use crossterm::event::{
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 
 use agyline::{
     Ansi16Color, ColorDepth, ConfigDoc, ConfiguratorApp, ConfiguratorEnv, ConfiguratorExit,
@@ -251,8 +251,8 @@ fn layout_catalog_selection_scrolls_into_view_and_mouse_uses_visible_items() {
         let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
         app.handle_event(Event::Resize(w, h));
         app.handle_event(press(KeyCode::Tab));
-        // Walk past the visible window so the selection has to scroll rather than clip.
-        for _ in 0..19 {
+        // Walk past the visible window across all 24 catalog items so Plan (index 22) scrolls into view.
+        for _ in 0..22 {
             app.handle_event(press(KeyCode::Down));
         }
         let mut terminal = Terminal::new(TestBackend::new(w, h)).expect("terminal");
@@ -334,12 +334,13 @@ fn minimum_terminal_exposes_all_four_clickable_tabs() {
     ] {
         render_tui_frame(&mut terminal, &app).expect("draw tabs");
         let screen = buffer_text(&terminal);
-        let tab_line = screen.lines().nth(6).expect("tab line");
+        let tab_row = app.preview_box_height() + 1;
+        let tab_line = screen.lines().nth(tab_row as usize).expect("tab line");
         // Click the column where the title was drawn, not a hardcoded offset.
         let column = tab_line
             .find(title)
             .unwrap_or_else(|| panic!("missing {title}: {tab_line}"));
-        app.handle_event(left_click(column as u16 + 2, 6));
+        app.handle_event(left_click(column as u16 + 2, tab_row));
         assert_eq!(app.active_tab(), tab);
     }
 }
@@ -483,9 +484,15 @@ fn type_str(app: &mut ConfiguratorApp, s: &str) {
 #[test]
 fn layout_quota_multi_buckets_reorder_inspector_and_toml_drawer_shorthands() {
     let sb = Sandbox::new();
+    std::fs::create_dir_all(&sb.agyline_home).expect("mkdir");
+    std::fs::write(
+        sb.agyline_home.join("config.toml"),
+        "preset = \"cometix\"\n",
+    )
+    .expect("write cometix");
     let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
 
-    // Default Line 1 ends with 'budget' (index 6). Navigate to 'budget' and remove it with 'x'.
+    // Reference Line 1 ends with 'budget' (index 6). Navigate to 'budget' and remove it with 'x'.
     for _ in 0..6 {
         app.handle_event(press(KeyCode::Down));
     }
@@ -652,9 +659,10 @@ fn preset_modal_scopes_and_hundred_step_undo_redo_restore_exact_doc() {
     // Open the preset modal from the default layout.
     app.handle_event(press(KeyCode::Char('r')));
     assert!(app.has_active_modal());
-    // Select 'dashboard' (Down x2), scope 'Style' (Right x2: All -> Layout -> Style), Enter!
-    app.handle_event(press(KeyCode::Down));
-    app.handle_event(press(KeyCode::Down));
+    // Select 'dashboard' (Down x5), scope 'Style' (Right x2: All -> Layout -> Style), Enter!
+    for _ in 0..5 {
+        app.handle_event(press(KeyCode::Down));
+    }
     app.handle_event(press(KeyCode::Right));
     app.handle_event(press(KeyCode::Right));
     app.handle_event(press(KeyCode::Enter));
@@ -667,9 +675,11 @@ fn preset_modal_scopes_and_hundred_step_undo_redo_restore_exact_doc() {
     );
     let after_style = app.doc().clone();
 
-    // Open Preset modal again: select 'minimal' (Down x1 from cometix or set cleanly), scope 'Layout' (Right x1)
+    // Open Preset modal again: select 'minimal' (Down x4), scope 'Layout' (Right x1)
     app.handle_event(press(KeyCode::Char('r')));
-    app.handle_event(press(KeyCode::Down)); // minimal
+    for _ in 0..4 {
+        app.handle_event(press(KeyCode::Down));
+    }
     app.handle_event(press(KeyCode::Right)); // All -> Layout
     app.handle_event(press(KeyCode::Enter));
     assert!(app.doc().single_line);
@@ -681,11 +691,11 @@ fn preset_modal_scopes_and_hundred_step_undo_redo_restore_exact_doc() {
     );
     let after_layout = app.doc().clone();
 
-    // Open Preset modal: select 'cache-focus' (Down x3), scope 'All' (default), Enter
+    // Open Preset modal: select 'cache-focus' (Down x6), scope 'All' (default), Enter
     app.handle_event(press(KeyCode::Char('r')));
-    app.handle_event(press(KeyCode::Down));
-    app.handle_event(press(KeyCode::Down));
-    app.handle_event(press(KeyCode::Down));
+    for _ in 0..6 {
+        app.handle_event(press(KeyCode::Down));
+    }
     app.handle_event(press(KeyCode::Enter));
     assert_eq!(app.doc().palette, "catppuccin-mocha");
     assert!(!app.doc().single_line);
@@ -754,7 +764,7 @@ fn env_override_badges_and_effective_vs_file_only_toggle_preserve_doc() {
     let (rendered_file, cfg_file) = app.preview_rendered_frame();
     assert!(!cfg_file.single_line);
     assert_eq!(cfg_file.indent, "  ");
-    assert_eq!(rendered_file.lines.len(), 2);
+    assert_eq!(rendered_file.lines.len(), 3);
     assert!(lines_to_plain_string(&app.preview_lines()).starts_with("  "));
 }
 
@@ -897,8 +907,10 @@ fn agy_hook_diff_modal_installs_and_restores_without_saving_config_draft_and_mou
     app.handle_event(press(KeyCode::Char('5')));
     assert!(app.is_dirty());
 
-    // Mouse click on Tab 4 ("4: agy Hook" on row 6 around column 60) switches tab!
-    app.handle_event(left_click(62, 6));
+    // Mouse click on Tab 4 ("4: agy Hook" on dynamic tab row `preview_box_height + 1`) switches tab!
+    let tab_row = app.preview_box_height() + 1;
+    assert_eq!(tab_row, 7);
+    app.handle_event(left_click(62, tab_row));
     assert_eq!(app.active_tab(), TuiTab::AgyHook);
 
     // Press 'i' to preview settings.json install diff modal.
@@ -936,4 +948,119 @@ fn agy_hook_diff_modal_installs_and_restores_without_saving_config_draft_and_mou
         std::fs::read_to_string(&sb.settings_path).unwrap(),
         seed_settings
     );
+}
+
+#[test]
+fn hud_three_row_preview_emits_styles_and_syncs_mouse_clicks_at_dynamic_heights() {
+    let sb = Sandbox::new();
+    let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+    app.handle_event(Event::Resize(100, 28));
+
+    // Default 3-row HUD preview height = 6 -> tab bar at row 7; spans carry BOLD/ITALIC/bg track.
+    assert_eq!(app.preview_box_height(), 6);
+    let preview = app.preview_lines();
+    assert_eq!(preview.len(), 3);
+    assert!(
+        preview[0]
+            .spans
+            .iter()
+            .any(|s| s.style.add_modifier.contains(Modifier::BOLD))
+    );
+    assert!(
+        preview[0]
+            .spans
+            .iter()
+            .any(|s| s.style.add_modifier.contains(Modifier::ITALIC))
+    );
+    assert!(preview[0].spans.iter().any(|s| s.style.bg.is_some()));
+
+    app.handle_event(left_click(15, 7)); // Tab 2 (Style & Presets) at row 7
+    assert_eq!(app.active_tab(), TuiTab::StylePresets);
+
+    // Switch preset to `cometix` (2 rows rendered -> preview height = 5 -> tab bar at row 6).
+    app.handle_event(press(KeyCode::Char('r')));
+    for _ in 0..3 {
+        app.handle_event(press(KeyCode::Down));
+    }
+    app.handle_event(press(KeyCode::Enter));
+    assert_eq!(app.doc().preset, "cometix");
+    assert_eq!(app.preview_box_height(), 5);
+    app.handle_event(left_click(36, 6)); // Tab 3 (Runtime) at row 6
+    assert_eq!(app.active_tab(), TuiTab::ThresholdsRuntime);
+}
+
+#[test]
+fn multi_row_editor_navigates_adds_moves_removes_rows_and_edits_new_inspector_fields() {
+    let sb = Sandbox::new();
+    let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+    assert_eq!(app.doc().lines.len(), 3);
+
+    // Test cyclic 'm' slot move across 3 rows (Row 1 -> Row 2 -> Row 3 -> Row 1).
+    let moved_id = app.doc().lines[0][0].id;
+    app.handle_event(press(KeyCode::Char('m'))); // Row 1 -> Row 2
+    assert_eq!(app.doc().lines[1].last().map(|s| s.id), Some(moved_id));
+    app.handle_event(press(KeyCode::Char('m'))); // Row 2 -> Row 3
+    assert_eq!(app.doc().lines[2].last().map(|s| s.id), Some(moved_id));
+    app.handle_event(press(KeyCode::Char('m'))); // Row 3 -> Row 1
+    assert_eq!(app.doc().lines[0].last().map(|s| s.id), Some(moved_id));
+
+    // Add Row 4 with 'a', remove empty Row 4 with 'X', and undo/redo restores row counts cleanly.
+    app.handle_event(press(KeyCode::Char('a')));
+    assert_eq!(app.doc().lines.len(), 4);
+    assert!(app.doc().lines[3].is_empty());
+
+    app.handle_event(press(KeyCode::Char('X')));
+    assert_eq!(app.doc().lines.len(), 3);
+    app.handle_event(ctrl_press('z'));
+    assert_eq!(app.doc().lines.len(), 4);
+    app.handle_event(ctrl_press('y'));
+    assert_eq!(app.doc().lines.len(), 3);
+
+    // Select Row 1 slot 0 first (resetting after Row 4 removal above), then move to `context` (index 3).
+    let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
+    for _ in 0..3 {
+        app.handle_event(press(KeyCode::Down));
+    }
+    app.handle_event(press(KeyCode::Tab)); // Catalog
+    app.handle_event(press(KeyCode::Tab)); // Inspector
+    // context fields: 0=priority,1=icon,2=fg,3=icon_color,4=style,5=show_remaining,6=show_bar,7=bar_style,8=bar_width
+    for _ in 0..7 {
+        app.handle_event(press(KeyCode::Down));
+    }
+    app.handle_event(press(KeyCode::Right)); // bar_style: solid -> block
+    assert_eq!(app.doc().lines[0][3].bar_style.as_deref(), Some("block"));
+
+    app.handle_event(press(KeyCode::Down)); // bar_width
+    app.handle_event(press(KeyCode::Enter));
+    type_str(&mut app, "12");
+    app.handle_event(press(KeyCode::Enter));
+    assert_eq!(app.doc().lines[0][3].bar_width, Some(12));
+
+    // Return to Active Rows, navigate to Row 2 `quota_group:gemini` (index 6 in flattened slots),
+    // and toggle `show_used` (default true on QuotaGroup) -> Some(false) -> remaining % in preview!
+    app.handle_event(press(KeyCode::Tab)); // ActiveRows
+    for _ in 0..3 {
+        app.handle_event(press(KeyCode::Down)); // context(3)->dir(4)->git(5)->quota_group:gemini(6)
+    }
+    app.handle_event(press(KeyCode::Tab)); // Catalog
+    app.handle_event(press(KeyCode::Tab)); // Inspector
+    // quota_group fields: 0..3 base, 4=family, 5=label, 6=show_used
+    for _ in 0..6 {
+        app.handle_event(press(KeyCode::Down));
+    }
+    app.handle_event(press(KeyCode::Char(' ')));
+    assert_eq!(app.doc().lines[1][0].show_used, Some(false));
+
+    let (rendered, cfg) = app.preview_rendered_frame();
+    let plain = emit_plain(&rendered, &cfg);
+    assert!(
+        plain.contains("Gemini 5h ") && plain.contains("68.0% 3h12m"),
+        "actual:\n{plain}"
+    );
+    assert!(plain.contains("███░░░░░░░░░ 24.0%"), "actual:\n{plain}");
+
+    let saved = serialize_config_doc(app.doc());
+    assert!(saved.contains("bar_style = \"block\""));
+    assert!(saved.contains("bar_width = 12"));
+    assert!(saved.contains("show_used = false"));
 }

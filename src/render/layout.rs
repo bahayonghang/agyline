@@ -30,14 +30,38 @@ struct ActiveSlot {
     eval: EvaluatedItem,
     use_compact: bool,
     dropped: bool,
+    full_w: usize,
+    compact_w: usize,
+    has_compact_diff: bool,
 }
 
 impl ActiveSlot {
+    fn from_eval(origin: Option<(usize, usize)>, eval: EvaluatedItem, use_compact: bool) -> Self {
+        let has_compact_diff = eval.has_compact_diff();
+        Self {
+            origin,
+            eval,
+            use_compact,
+            dropped: false,
+            full_w: 0,
+            compact_w: 0,
+            has_compact_diff,
+        }
+    }
+
     fn current_spans(&self) -> &[StyledSpan] {
         if self.use_compact {
             &self.eval.compact_spans
         } else {
             &self.eval.full_spans
+        }
+    }
+
+    fn current_width(&self) -> usize {
+        if self.use_compact {
+            self.compact_w
+        } else {
+            self.full_w
         }
     }
 }
@@ -134,12 +158,11 @@ pub fn layout_evaluated_rows(
                     slot_outcomes[row_idx][slot_idx] = SlotOutcome::Compact;
                 }
             }
-            working_rows[if promote { 0 } else { row_idx }].push(ActiveSlot {
-                origin: Some((row_idx, slot_idx)),
+            working_rows[if promote { 0 } else { row_idx }].push(ActiveSlot::from_eval(
+                Some((row_idx, slot_idx)),
                 eval,
-                use_compact: promote,
-                dropped: false,
-            });
+                promote,
+            ));
         }
     }
 
@@ -148,12 +171,7 @@ pub fn layout_evaluated_rows(
         && !working_rows[0].iter().any(|s| s.eval.id == ItemId::Mode)
         && let Some(pill) = eval_single_line_mode_pill(frame, config)
     {
-        working_rows[0].push(ActiveSlot {
-            origin: None,
-            eval: pill,
-            use_compact: false,
-            dropped: false,
-        });
+        working_rows[0].push(ActiveSlot::from_eval(None, pill, false));
     }
 
     // A zero budget counts as no budget: narrowing to 0 columns would print nothing useful.
@@ -201,7 +219,19 @@ fn narrow_single_row(
     // 9 is the display width of the " ! config" badge reserved on the first emitted row.
     let broken_w = if append_broken { 9 } else { 0 };
 
-    if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
+    let mut surviving_count = active.len();
+    let mut total_w = indent_w + broken_w + sep_w * surviving_count.saturating_sub(1);
+    for slot in active.iter_mut() {
+        slot.full_w = spans_display_width(&slot.eval.full_spans);
+        slot.compact_w = if slot.has_compact_diff {
+            spans_display_width(&slot.eval.compact_spans)
+        } else {
+            slot.full_w
+        };
+        total_w += slot.current_width();
+    }
+
+    if total_w <= budget {
         return StyledLine {
             items: collect_surviving_items(active),
             indent_override: None,
@@ -219,15 +249,18 @@ fn narrow_single_row(
             .then_with(|| b.cmp(&a))
     });
 
-    // Stage 1: Downgrade eligible items from Full -> Compact.
+    // Stage 1: Downgrade eligible items from Full -> Compact in O(1) width updates.
     for &idx in &order {
         // Skip items whose compact form is identical: downgrading them would save no columns.
-        if !active[idx].use_compact && active[idx].eval.has_compact_diff() {
+        if !active[idx].use_compact && active[idx].has_compact_diff {
+            let prev_w = active[idx].full_w;
+            let next_w = active[idx].compact_w;
             active[idx].use_compact = true;
+            total_w = total_w.saturating_add(next_w).saturating_sub(prev_w);
             if let Some((row, slot)) = active[idx].origin {
                 slot_outcomes[row][slot] = SlotOutcome::Compact;
             }
-            if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
+            if total_w <= budget {
                 return StyledLine {
                     items: collect_surviving_items(active),
                     indent_override: None,
@@ -238,18 +271,19 @@ fn narrow_single_row(
     }
 
     // Stage 2: Drop whole items right-to-left (5 -> 1), keeping at least 1 surviving item.
-    let mut surviving_count = active.len();
     for &idx in &order {
         // Keep one survivor for Stage 3 to truncate; dropping it would leave an empty row.
         if surviving_count <= 1 {
             break;
         }
+        let item_w = active[idx].current_width();
         active[idx].dropped = true;
         surviving_count -= 1;
+        total_w = total_w.saturating_sub(item_w + sep_w);
         if let Some((row, slot)) = active[idx].origin {
             slot_outcomes[row][slot] = SlotOutcome::Dropped;
         }
-        if compute_row_width(active, indent_w, sep_w, broken_w) <= budget {
+        if total_w <= budget {
             return StyledLine {
                 items: collect_surviving_items(active),
                 indent_override: None,
@@ -334,23 +368,6 @@ fn collect_surviving_items(active: &[ActiveSlot]) -> Vec<StyledItem> {
         .collect()
 }
 
-fn compute_row_width(
-    active: &[ActiveSlot],
-    indent_w: usize,
-    sep_w: usize,
-    broken_w: usize,
-) -> usize {
-    let mut total = indent_w + broken_w;
-    // Separators only between survivors, so a dropped item leaves no phantom separator behind.
-    for (seen, slot) in active.iter().filter(|s| !s.dropped).enumerate() {
-        if seen > 0 {
-            total += sep_w;
-        }
-        total += spans_display_width(slot.current_spans());
-    }
-    total
-}
-
 fn spans_display_width(spans: &[StyledSpan]) -> usize {
     spans.iter().map(|sp| str_display_width(&sp.text)).sum()
 }
@@ -379,7 +396,7 @@ fn clip_spans_with_ellipsis(
             let gw = grapheme_display_width(g);
             if used + gw > text_limit {
                 if !acc.is_empty() {
-                    clipped.push(StyledSpan::new(sp.color, acc));
+                    clipped.push(StyledSpan::styled(sp.color, sp.style, acc));
                 }
                 clipped.push(StyledSpan::new(ColorToken::Muted, ell));
                 return clipped;
@@ -388,7 +405,7 @@ fn clip_spans_with_ellipsis(
             used += gw;
         }
         if !acc.is_empty() {
-            clipped.push(StyledSpan::new(sp.color, acc));
+            clipped.push(StyledSpan::styled(sp.color, sp.style, acc));
         }
     }
 

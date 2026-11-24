@@ -22,7 +22,8 @@ use crate::tui::convert::{
 use crate::tui::state::{
     ActiveModal, ConfiguratorApp, HookAction, HookModalPlan, HookModalState, InspectorField,
     LayoutPane, RuntimePane, RuntimeSubField, StyleField, StylePane, ThresholdField, TuiTab,
-    inspector_fields_for_item, ordered_catalog_entries, preset_scope_label,
+    inspector_bool_default, inspector_fields_for_item, ordered_catalog_entries, preset_scope_label,
+    preview_box_height,
 };
 
 /// Smallest terminal the workbench is drawn in. 80 cols keep the tab bar's Min(50) plus its
@@ -40,6 +41,9 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
         return;
     }
 
+    let (rendered_preview, effective_cfg) = app.preview_rendered_frame();
+    let preview_h = preview_box_height(rendered_preview.lines.len());
+
     let has_broken_banner = app.loaded_from_broken_toml;
     // Chrome in draw order: top bar, optional banner, preview, tab bar, body, footer. The idx
     // walk below must skip the banner slot exactly when it was not pushed here.
@@ -48,8 +52,7 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     if has_broken_banner {
         constraints.push(Constraint::Length(1));
     }
-    // 5 rows = 2 borders + 1 width ruler + the 2 lines a two-line status line can render.
-    constraints.push(Constraint::Length(5));
+    constraints.push(Constraint::Length(preview_h));
     constraints.push(Constraint::Length(1));
     constraints.push(Constraint::Min(10));
     constraints.push(Constraint::Length(1));
@@ -76,8 +79,6 @@ pub fn draw_workbench(frame: &mut Frame<'_>, app: &ConfiguratorApp) {
     let body_area = chunks[idx];
     idx += 1;
     let footer_area = chunks[idx];
-
-    let (rendered_preview, effective_cfg) = app.preview_rendered_frame();
 
     draw_top_bar(frame, top_area, app);
     if let Some(b_area) = banner_area {
@@ -428,9 +429,9 @@ fn draw_layout_tab(
         LayoutPane::Catalog | LayoutPane::Inspector => false,
     };
     let mut row_items: Vec<ListItem<'static>> = Vec::new();
-    // Always two rows; an empty one still gets a selectable line so the cursor can land on it.
-    for r_idx in 0..2 {
-        let inactive_note = if r_idx == 1 && app.doc.single_line {
+    let row_count = app.doc.lines.len().max(2);
+    for r_idx in 0..row_count {
+        let inactive_note = if r_idx > 0 && app.doc.single_line {
             " (inactive: single_line)"
         } else {
             ""
@@ -438,7 +439,7 @@ fn draw_layout_tab(
         row_items.push(ListItem::new(Line::from(Span::styled(
             format!("-- Line {}{} --", r_idx + 1, inactive_note),
             Style::default()
-                .fg(if r_idx == 1 && app.doc.single_line {
+                .fg(if r_idx > 0 && app.doc.single_line {
                     Color::DarkGray
                 } else {
                     Color::Cyan
@@ -469,7 +470,7 @@ fn draw_layout_tab(
                             Style::default()
                                 .fg(Color::White)
                                 .add_modifier(Modifier::BOLD)
-                        } else if r_idx == 1 && app.doc.single_line {
+                        } else if r_idx > 0 && app.doc.single_line {
                             Style::default().fg(Color::DarkGray)
                         } else {
                             Style::default().fg(Color::Gray)
@@ -481,6 +482,13 @@ fn draw_layout_tab(
                 {
                     spans.push(Span::styled(
                         format!(":{b}"),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                } else if let Some(ref f) = slot.family
+                    && !f.is_empty()
+                {
+                    spans.push(Span::styled(
+                        format!(":{f}"),
                         Style::default().fg(Color::DarkGray),
                     ));
                 }
@@ -505,7 +513,7 @@ fn draw_layout_tab(
         } else {
             Color::DarkGray
         }))
-        .title(" Active Rows (J/K order, m row, x del) ");
+        .title(" Active Rows (J/K, m row, a/+ add, x/X del) ");
     frame.render_widget(
         List::new(row_items.into_iter().skip(rows_offset).collect::<Vec<_>>()).block(rows_block),
         cols[0],
@@ -640,6 +648,14 @@ fn draw_layout_tab(
 /// Inspector text for one field. Unset values print as a default so the draft keeps only real
 /// overrides; the icon is tri-state and an explicit empty string means "hidden".
 fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
+    let fmt_bool = |opt: Option<bool>| -> String {
+        let def = inspector_bool_default(slot.id, field);
+        match opt {
+            Some(v) => format!("{v}"),
+            None if def => "true (default)".to_string(),
+            None => "false".to_string(),
+        }
+    };
     match field {
         InspectorField::Priority => match slot.priority {
             Some(p) => format!("P{p}"),
@@ -656,21 +672,47 @@ fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
             .icon_color
             .clone()
             .unwrap_or_else(|| "(default)".to_string()),
-        InspectorField::ShowRemaining => format!("{}", slot.show_remaining.unwrap_or(false)),
+        InspectorField::Style => slot
+            .style
+            .clone()
+            .unwrap_or_else(|| "default (default)".to_string()),
+        InspectorField::MaxLevels => match slot.max_levels {
+            Some(n) => format!("{n}"),
+            None => "leaf (default)".to_string(),
+        },
         InspectorField::Bucket => slot
             .bucket
             .clone()
             .unwrap_or_else(|| "(auto min)".to_string()),
+        InspectorField::Family => slot
+            .family
+            .clone()
+            .unwrap_or_else(|| "gemini (default)".to_string()),
         InspectorField::Label => slot
             .label
             .clone()
             .unwrap_or_else(|| "(default)".to_string()),
-        InspectorField::ShowReset => format!("{}", slot.show_reset.unwrap_or(false)),
-        InspectorField::ShowAmount => format!("{}", slot.show_amount.unwrap_or(false)),
-        InspectorField::ShowSubagent => format!("{}", slot.show_subagent.unwrap_or(false)),
-        InspectorField::ShowDefault => format!("{}", slot.show_default.unwrap_or(false)),
-        InspectorField::Compact => format!("{}", slot.compact.unwrap_or(false)),
-        InspectorField::ShowDetail => format!("{}", slot.show_detail.unwrap_or(false)),
+        InspectorField::BarStyle => slot
+            .bar_style
+            .clone()
+            .unwrap_or_else(|| "solid (default)".to_string()),
+        InspectorField::BarWidth => match slot.bar_width {
+            Some(w) => format!("{w}"),
+            None => "10 (default)".to_string(),
+        },
+        InspectorField::ShowRemaining => fmt_bool(slot.show_remaining),
+        InspectorField::ShowUsed => fmt_bool(slot.show_used),
+        InspectorField::ShowBar => fmt_bool(slot.show_bar),
+        InspectorField::ShowReset => fmt_bool(slot.show_reset),
+        InspectorField::ShowAmount => fmt_bool(slot.show_amount),
+        InspectorField::ShowSubagent => fmt_bool(slot.show_subagent),
+        InspectorField::ShowDefault => fmt_bool(slot.show_default),
+        InspectorField::Compact => fmt_bool(slot.compact),
+        InspectorField::ShowDetail => fmt_bool(slot.show_detail),
+        InspectorField::ShowWhenOff => fmt_bool(slot.show_when_off),
+        InspectorField::ShowTtl => fmt_bool(slot.show_ttl),
+        InspectorField::ShowBreakdown => fmt_bool(slot.show_breakdown),
+        InspectorField::ShowPending => fmt_bool(slot.show_pending),
     }
 }
 

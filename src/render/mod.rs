@@ -5,23 +5,69 @@
 use crate::config::ItemId;
 
 pub use ansi::{emit_ansi, emit_plain};
+pub use bar::{BarStyle, render_usage_bar};
 pub use layout::{SlotOutcome, str_display_width};
 pub use palette::{
     Ansi16Color, ColorSpec, ColorToken, EffectiveColorDepth, PaletteInfo, PalettePolarity,
-    ResolvedColor, ResolvedPalette, builtin_palettes, discover_palettes, parse_color_spec,
-    resolve_effective_color_depth, resolve_palette,
+    ResolvedColor, ResolvedPalette, bar_track_color, builtin_palettes, discover_palettes,
+    parse_color_spec, resolve_effective_color_depth, resolve_palette,
 };
 
 pub mod ansi;
+pub mod bar;
 pub mod glyphs;
 pub mod layout;
 pub mod palette;
 
-/// One run of text in one color. `color` is still symbolic here: the palette and the terminal's
-/// color depth are applied at emit time, never while building spans.
+/// Typographic modifiers and optional background carried by a span so ANSI emission and the
+/// configurator preview style the same text identically without re-parsing escapes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TextStyle {
+    pub bold: bool,
+    pub italic: bool,
+    pub dim: bool,
+    pub bg: Option<ColorSpec>,
+}
+
+impl TextStyle {
+    pub const PLAIN: Self = Self {
+        bold: false,
+        italic: false,
+        dim: false,
+        bg: None,
+    };
+
+    pub const fn is_plain(self) -> bool {
+        !self.bold && !self.italic && !self.dim && self.bg.is_none()
+    }
+
+    pub const fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    pub const fn italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+
+    pub const fn dim(mut self) -> Self {
+        self.dim = true;
+        self
+    }
+
+    pub const fn with_bg(mut self, bg: ColorSpec) -> Self {
+        self.bg = Some(bg);
+        self
+    }
+}
+
+/// One run of text in one color and text style. `color` and `style.bg` stay symbolic here: the
+/// palette and the terminal's color depth are applied at emit time, never while building spans.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledSpan {
     pub color: ColorSpec,
+    pub style: TextStyle,
     pub text: String,
 }
 
@@ -29,8 +75,37 @@ impl StyledSpan {
     pub fn new(color: impl Into<ColorSpec>, text: impl Into<String>) -> Self {
         Self {
             color: color.into(),
+            style: TextStyle::PLAIN,
             text: text.into(),
         }
+    }
+
+    pub fn styled(color: impl Into<ColorSpec>, style: TextStyle, text: impl Into<String>) -> Self {
+        Self {
+            color: color.into(),
+            style,
+            text: text.into(),
+        }
+    }
+
+    pub fn bold(mut self) -> Self {
+        self.style.bold = true;
+        self
+    }
+
+    pub fn italic(mut self) -> Self {
+        self.style.italic = true;
+        self
+    }
+
+    pub fn dim(mut self) -> Self {
+        self.style.dim = true;
+        self
+    }
+
+    pub fn with_bg(mut self, bg: impl Into<ColorSpec>) -> Self {
+        self.style.bg = Some(bg.into());
+        self
     }
 }
 

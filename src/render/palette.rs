@@ -9,6 +9,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::{ColorDepth, PaletteOverrides, ThemePolarity};
+use crate::render::TextStyle;
 
 /// Semantic color slots rather than literal colors: items ask for `Ok`/`Warn`/`Crit` and the
 /// palette decides what those mean. `Auto` is the mode pill's accent.
@@ -159,6 +160,10 @@ impl Ansi16Color {
             Self::BrightCyan => 96,
             Self::BrightWhite => 97,
         }
+    }
+
+    pub const fn bg_sgr_code(self) -> u8 {
+        self.sgr_code() + 10
     }
 
     /// Fixed RGB stand-ins for the 16 SGR codes, used only to quantize wider colors down to 16;
@@ -378,6 +383,58 @@ impl ResolvedColor {
                 let _ = write!(out, "\x1b[0;38;2;{r};{g};{b}m");
             }
         }
+    }
+
+    /// Writes foreground, text modifiers, and optional background inside one `\x1b[0...m` sequence.
+    /// Plain foreground-only spans delegate to `write_sgr` so `cometix` output remains byte-exact.
+    pub fn write_sgr_styled(self, style: TextStyle, bg: Option<ResolvedColor>, out: &mut String) {
+        if style.is_plain() && bg.is_none() {
+            self.write_sgr(out);
+            return;
+        }
+        out.push_str("\x1b[0");
+        if style.bold {
+            out.push_str(";1");
+        }
+        if style.dim {
+            out.push_str(";2");
+        }
+        if style.italic {
+            out.push_str(";3");
+        }
+        match self {
+            Self::Ansi16(c) => {
+                let _ = write!(out, ";{}", c.sgr_code());
+            }
+            Self::Ansi256(idx) => {
+                let _ = write!(out, ";38;5;{idx}");
+            }
+            Self::Rgb(r, g, b) => {
+                let _ = write!(out, ";38;2;{r};{g};{b}");
+            }
+        }
+        if let Some(bg_col) = bg {
+            match bg_col {
+                Self::Ansi16(c) => {
+                    let _ = write!(out, ";{}", c.bg_sgr_code());
+                }
+                Self::Ansi256(idx) => {
+                    let _ = write!(out, ";48;5;{idx}");
+                }
+                Self::Rgb(r, g, b) => {
+                    let _ = write!(out, ";48;2;{r};{g};{b}");
+                }
+            }
+        }
+        out.push('m');
+    }
+}
+
+/// Polarity-aware unfilled track background for solid `Usage Bar` rendering.
+pub fn bar_track_color(polarity: ThemePolarity) -> ColorSpec {
+    match polarity {
+        ThemePolarity::Dark => ColorSpec::Rgb(59, 63, 76),
+        ThemePolarity::Light => ColorSpec::Rgb(218, 222, 230),
     }
 }
 

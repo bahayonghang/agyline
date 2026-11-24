@@ -159,8 +159,7 @@ pub enum PresetScope {
     Style,
 }
 
-/// The 20-item catalog. `Quota` is the only repeatable id (one slot per bucket); the parser does
-/// not enforce uniqueness, the configurator's catalog does.
+/// The 24-item catalog. `Quota` and `QuotaGroup` are repeatable (one slot per bucket/family).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemId {
     Model,
@@ -183,11 +182,15 @@ pub enum ItemId {
     Artifacts,
     Version,
     Plan,
+    Status,
+    Tokens,
+    Duration,
+    QuotaGroup,
 }
 
 impl ItemId {
     /// Picker order, grouped Workspace, Usage, Runtime, then Session/Identity.
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 24] = [
         Self::Model,
         Self::Dir,
         Self::Git,
@@ -208,6 +211,10 @@ impl ItemId {
         Self::Artifacts,
         Self::Version,
         Self::Plan,
+        Self::Status,
+        Self::Tokens,
+        Self::Duration,
+        Self::QuotaGroup,
     ];
 
     pub const fn as_key(self) -> &'static str {
@@ -232,6 +239,10 @@ impl ItemId {
             Self::Artifacts => "artifacts",
             Self::Version => "version",
             Self::Plan => "plan",
+            Self::Status => "status",
+            Self::Tokens => "tokens",
+            Self::Duration => "duration",
+            Self::QuotaGroup => "quota_group",
         }
     }
 
@@ -257,6 +268,10 @@ impl ItemId {
             "artifacts" => Some(Self::Artifacts),
             "version" => Some(Self::Version),
             "plan" => Some(Self::Plan),
+            "status" => Some(Self::Status),
+            "tokens" => Some(Self::Tokens),
+            "duration" => Some(Self::Duration),
+            "quota_group" | "quota-group" => Some(Self::QuotaGroup),
             _ => None,
         }
     }
@@ -264,10 +279,15 @@ impl ItemId {
     /// Narrowing rank when a slot sets no valid `priority`: 1 survives longest, 5 drops first.
     pub const fn default_priority(self) -> u8 {
         match self {
-            Self::Model | Self::Context | Self::Mode => 1,
-            Self::Git | Self::Subagents | Self::Queue | Self::Vim | Self::Agent => 2,
-            Self::Dir | Self::Budget | Self::Quota | Self::Cost | Self::Tasks => 3,
-            Self::Cache | Self::Sandbox | Self::Title | Self::Artifacts => 4,
+            Self::Status | Self::Model | Self::Context | Self::Mode => 1,
+            Self::Git
+            | Self::QuotaGroup
+            | Self::Subagents
+            | Self::Queue
+            | Self::Vim
+            | Self::Agent => 2,
+            Self::Dir | Self::Budget | Self::Quota | Self::Tokens | Self::Cost | Self::Tasks => 3,
+            Self::Cache | Self::Duration | Self::Sandbox | Self::Title | Self::Artifacts => 4,
             Self::Speed | Self::Version | Self::Plan => 5,
         }
     }
@@ -320,6 +340,28 @@ pub struct ItemSlot {
     pub compact: Option<bool>,
     /// Subagents: expand up to two running names and models.
     pub show_detail: Option<bool>,
+    /// Visual variant (`hud`, `badge`, `bar`, `counts`, `hit_rate`) for HUD-styled items.
+    pub style: Option<String>,
+    /// Dir: max trailing path levels to show (`1..=8`) with home tildefying.
+    pub max_levels: Option<u8>,
+    /// Sandbox: render `sandbox off` even when disabled.
+    pub show_when_off: Option<bool>,
+    /// Quota / QuotaGroup: display used percentage instead of remaining percentage.
+    pub show_used: Option<bool>,
+    /// Context / Quota / QuotaGroup: display proportional `Usage Bar`.
+    pub show_bar: Option<bool>,
+    /// `Usage Bar` style (`solid`, `block`, `ascii`).
+    pub bar_style: Option<String>,
+    /// `Usage Bar` column width (`4..=20`, default `10`).
+    pub bar_width: Option<u8>,
+    /// QuotaGroup: model family (`gemini`, `3p`, `@model`).
+    pub family: Option<String>,
+    /// Cache (hit_rate): also append 5-minute TTL and relay badge when active.
+    pub show_ttl: Option<bool>,
+    /// Tokens: append `(in↑ out↓)` breakdown after total.
+    pub show_breakdown: Option<bool>,
+    /// Status: append `(+N)` pending input count when non-zero.
+    pub show_pending: Option<bool>,
 }
 
 impl ItemSlot {
@@ -349,6 +391,17 @@ impl ItemSlot {
             show_default: None,
             compact: None,
             show_detail: None,
+            style: None,
+            max_levels: None,
+            show_when_off: None,
+            show_used: None,
+            show_bar: None,
+            bar_style: None,
+            bar_width: None,
+            family: None,
+            show_ttl: None,
+            show_breakdown: None,
+            show_pending: None,
         }
     }
 
@@ -367,6 +420,17 @@ impl ItemSlot {
             && self.show_default.is_none()
             && self.compact.is_none()
             && self.show_detail.is_none()
+            && self.style.is_none()
+            && self.max_levels.is_none()
+            && self.show_when_off.is_none()
+            && self.show_used.is_none()
+            && self.show_bar.is_none()
+            && self.bar_style.is_none()
+            && self.bar_width.is_none()
+            && self.family.is_none()
+            && self.show_ttl.is_none()
+            && self.show_breakdown.is_none()
+            && self.show_pending.is_none()
     }
 
     /// The slot's priority when it is inside 1..=5, else the item default; bad values are ignored,
@@ -515,26 +579,7 @@ impl ConfigDoc {
 
 impl Default for ConfigDoc {
     fn default() -> Self {
-        let mut doc = Self::base(
-            "default",
-            presets::workspace_and_runtime_lines(ItemId::Cost),
-        );
-        doc.lines[1].splice(
-            1..1,
-            [
-                (ModelQuotaPeriod::FiveHours, "5h"),
-                (ModelQuotaPeriod::Weekly, "weekly"),
-            ]
-            .map(|(period, label)| {
-                let mut slot = ItemSlot::new(ItemId::Quota);
-                slot.bucket = Some(period.selector().to_string());
-                slot.label = Some(label.to_string());
-                slot.show_reset = Some(true);
-                slot.priority = Some(2);
-                slot
-            }),
-        );
-        doc
+        presets::hud_preset_doc("default")
     }
 }
 
@@ -906,6 +951,12 @@ impl EffectiveConfig {
             .any(|slot| slot.id == ItemId::Mode && slot.show_default == Some(true));
         let show_default_mode = force_show_default_mode.unwrap_or(any_slot_shows_default);
 
+        let separator = if doc.glyphs == GlyphSet::Ascii && doc.separator == " \u{2502} " {
+            " | ".to_string()
+        } else {
+            doc.separator.clone()
+        };
+
         Self {
             preset: doc.preset.clone(),
             palette: doc.palette.clone(),
@@ -914,7 +965,7 @@ impl EffectiveConfig {
             glyphs: doc.glyphs,
             color_depth: doc.color_depth,
             effective_color_depth,
-            separator: doc.separator.clone(),
+            separator,
             indent,
             single_line,
             overflow: doc.overflow,
@@ -958,12 +1009,15 @@ fn parse_config_overlay_with_home(
     if allow_preset && let Some(preset_val) = tbl.get("preset") {
         if let Some(preset_name) = preset_val.as_str() {
             let trimmed = preset_name.trim();
-            if !trimmed.is_empty()
-                && !presets::apply_preset(doc, trimmed, PresetScope::All, home_dir)
-            {
-                warnings.push(format!(
-                    "unknown preset '{trimmed}', using the default layout"
-                ));
+            if !trimmed.is_empty() {
+                if let Some(built) = presets::build_preset_doc(trimmed, home_dir) {
+                    doc.thresholds = built.thresholds;
+                    let _ = presets::apply_preset(doc, trimmed, PresetScope::All, home_dir);
+                } else {
+                    warnings.push(format!(
+                        "unknown preset '{trimmed}', using the default layout"
+                    ));
+                }
             }
         } else {
             warnings.push("invalid 'preset': expected string".to_string());
@@ -1352,6 +1406,75 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                         Some(b) => slot.show_detail = Some(b),
                         None => warnings.push(format!("invalid '{id_str}.show_detail'")),
                     },
+                    "style" => match v.as_str() {
+                        Some(s) if !s.trim().is_empty() => slot.style = Some(s.trim().to_string()),
+                        _ => warnings.push(format!("invalid '{id_str}.style': expected string")),
+                    },
+                    "max_levels" => {
+                        if let Some(n) = v
+                            .as_integer()
+                            .and_then(|i| u8::try_from(i).ok())
+                            .filter(|n| (1..=8).contains(n))
+                        {
+                            slot.max_levels = Some(n);
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.max_levels': expected integer 1..=8"
+                            ));
+                        }
+                    }
+                    "show_when_off" => match v.as_bool() {
+                        Some(b) => slot.show_when_off = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_when_off'")),
+                    },
+                    "show_used" => match v.as_bool() {
+                        Some(b) => slot.show_used = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_used'")),
+                    },
+                    "show_bar" => match v.as_bool() {
+                        Some(b) => slot.show_bar = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_bar'")),
+                    },
+                    "bar_style" => {
+                        if let Some(bs) = v.as_str().and_then(crate::render::BarStyle::from_key) {
+                            slot.bar_style = Some(bs.as_key().to_string());
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.bar_style': expected solid, block, or ascii"
+                            ));
+                        }
+                    }
+                    "bar_width" => {
+                        if let Some(w) = v
+                            .as_integer()
+                            .and_then(|i| u8::try_from(i).ok())
+                            .filter(|w| (4..=20).contains(w))
+                        {
+                            slot.bar_width = Some(w);
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.bar_width': expected integer 4..=20"
+                            ));
+                        }
+                    }
+                    "family" => match v.as_str() {
+                        Some(s) if !s.trim().is_empty() => {
+                            slot.family = Some(s.trim().to_string());
+                        }
+                        _ => warnings.push(format!("invalid '{id_str}.family': expected string")),
+                    },
+                    "show_ttl" => match v.as_bool() {
+                        Some(b) => slot.show_ttl = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_ttl'")),
+                    },
+                    "show_breakdown" => match v.as_bool() {
+                        Some(b) => slot.show_breakdown = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_breakdown'")),
+                    },
+                    "show_pending" => match v.as_bool() {
+                        Some(b) => slot.show_pending = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_pending'")),
+                    },
                     other => warnings.push(format!("unknown option '{id_str}.{other}' ignored")),
                 }
             }
@@ -1475,6 +1598,39 @@ fn format_item_slot_toml(slot: &ItemSlot) -> String {
     }
     if let Some(v) = slot.show_detail {
         fields.push(format!("show_detail = {v}"));
+    }
+    if let Some(ref st) = slot.style {
+        fields.push(format!("style = {}", quote_toml_str(st)));
+    }
+    if let Some(ml) = slot.max_levels {
+        fields.push(format!("max_levels = {ml}"));
+    }
+    if let Some(v) = slot.show_when_off {
+        fields.push(format!("show_when_off = {v}"));
+    }
+    if let Some(v) = slot.show_used {
+        fields.push(format!("show_used = {v}"));
+    }
+    if let Some(v) = slot.show_bar {
+        fields.push(format!("show_bar = {v}"));
+    }
+    if let Some(ref bs) = slot.bar_style {
+        fields.push(format!("bar_style = {}", quote_toml_str(bs)));
+    }
+    if let Some(bw) = slot.bar_width {
+        fields.push(format!("bar_width = {bw}"));
+    }
+    if let Some(ref fam) = slot.family {
+        fields.push(format!("family = {}", quote_toml_str(fam)));
+    }
+    if let Some(v) = slot.show_ttl {
+        fields.push(format!("show_ttl = {v}"));
+    }
+    if let Some(v) = slot.show_breakdown {
+        fields.push(format!("show_breakdown = {v}"));
+    }
+    if let Some(v) = slot.show_pending {
+        fields.push(format!("show_pending = {v}"));
     }
     if let Some(ref ic) = slot.icon {
         fields.push(format!("icon = {}", quote_toml_str(ic)));

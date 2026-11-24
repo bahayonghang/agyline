@@ -13,8 +13,8 @@
         "version": "v1.5.9",
         "conversation_title": "Fix\n  cache"
       },
-      "expected_plain": "  \ue62b INSERT | \udb81\udea9 ops | \uf1c9 3 artifacts | \udb80\udda5 Ultra | v1.5.9 | \udb82\udf79 Fix cache\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\ue62b INSERT\u001b[0;37m | \u001b[0;96m\udb81\udea9 ops\u001b[0;37m | \u001b[0;94m\uf1c9 3 artifacts\u001b[0;37m | \u001b[0;95m\udb80\udda5 Ultra\u001b[0;37m | \u001b[0;90mv1.5.9\u001b[0;37m | \u001b[0;90m\udb82\udf79 Fix cache\u001b[0m\n"
+      "expected_plain": "  \ue62b INSERT │ \udb81\udea9 ops │ \uf1c9 3 artifacts │ \udb80\udda5 Ultra │ v1.5.9 │ \udb82\udf79 Fix cache\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\ue62b INSERT\u001b[0;37m │ \u001b[0;96m\udb81\udea9 ops\u001b[0;37m │ \u001b[0;94m\uf1c9 3 artifacts\u001b[0;37m │ \u001b[0;95m\udb80\udda5 Ultra\u001b[0;37m │ \u001b[0;90mv1.5.9\u001b[0;37m │ \u001b[0;90m\udb82\udf79 Fix cache\u001b[0m\n"
     },
     {
       "id": "IC02_split_quota_buckets_and_cost_subagent",
@@ -28,8 +28,8 @@
         },
         "cost": { "total_usd": 1.42, "subagent_usd": 0.64 }
       },
-      "expected_plain": "  \udb80\udc81 72% gem (3h12m) | \udb80\udc7c 30% 3p (48m) | $1.42 (sub $0.64)\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;92m\udb80\udc81 72% gem (3h12m)\u001b[0;37m | \u001b[0;33m\udb80\udc7c 30% 3p (48m)\u001b[0;37m | \u001b[0;33m$1.42 (sub $0.64)\u001b[0m\n"
+      "expected_plain": "  \udb80\udc81 72% gem (3h12m) │ \udb80\udc7c 30% 3p (48m) │ $1.42 (sub $0.64)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;92m\udb80\udc81 72% gem (3h12m)\u001b[0;37m │ \u001b[0;33m\udb80\udc7c 30% 3p (48m)\u001b[0;37m │ \u001b[0;33m$1.42 (sub $0.64)\u001b[0m\n"
     },
     {
       "id": "IC03_extended_item_options",
@@ -47,8 +47,8 @@
           { "status": "thinking", "name": "c", "model": "gpt-5" }
         ]
       },
-      "expected_plain": "  \uf49b 80% left \u00b7 20k tokens | \u25b8\u25b8 ask | \uf0e8 3/3 agents running (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;95m\uf49b\u001b[0;95m 80% left\u001b[0;37m \u00b7 \u001b[0;95m20k tokens\u001b[0;37m | \u001b[0;90m\u25b8\u25b8 ask\u001b[0;37m | \u001b[0;96m\uf0e8 3/3 agents running\u001b[0;90m (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\u001b[0m\n"
+      "expected_plain": "  \uf49b 80% left \u00b7 20k tokens │ \u25b8\u25b8 ask │ \uf0e8 3/3 agents running (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;95m\uf49b\u001b[0;95m 80% left\u001b[0;37m \u00b7 \u001b[0;95m20k tokens\u001b[0;37m │ \u001b[0;90m\u25b8\u25b8 ask\u001b[0;37m │ \u001b[0;96m\uf0e8 3/3 agents running\u001b[0;90m (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\u001b[0m\n"
     },
     {
       "id": "IC04_glyphs_unicode",
@@ -62,8 +62,8 @@
         "vim": "NORMAL",
         "plan_tier": "Pro"
       },
-      "expected_plain": "  \u25c6 Opus 4.6 | \u25b8 agyline | \u2387 main \u2713 | V NORMAL | \u2605 Pro\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\u25c6 Opus 4.6\u001b[0;37m | \u001b[0;93m\u25b8\u001b[0;92m agyline\u001b[0;37m | \u001b[0;94m\u2387 main \u2713\u001b[0;37m | \u001b[0;92mV NORMAL\u001b[0;37m | \u001b[0;95m\u2605 Pro\u001b[0m\n"
+      "expected_plain": "  \u25c6 Opus 4.6 │ \u25b8 agyline │ \u2387 main \u2713 │ V NORMAL │ \u2605 Pro\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\u25c6 Opus 4.6\u001b[0;37m │ \u001b[0;93m\u25b8\u001b[0;92m agyline\u001b[0;37m │ \u001b[0;94m\u2387 main \u2713\u001b[0;37m │ \u001b[0;92mV NORMAL\u001b[0;37m │ \u001b[0;95m\u2605 Pro\u001b[0m\n"
     },
     {
       "id": "IC05_glyphs_ascii",
@@ -87,8 +87,8 @@
         "model": { "display_name": "Opus 4.6" },
         "cwd": "D:\\agyline"
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \udb80\ude4b agyline\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;38;2;137;220;235m\uef23 Opus 4.6\u001b[0;38;2;108;112;134m | \u001b[0;38;2;249;226;175m\udb80\ude4b\u001b[0;38;2;166;227;161m agyline\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \udb80\ude4b agyline\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;38;2;137;220;235m\uef23 Opus 4.6\u001b[0;38;2;108;112;134m │ \u001b[0;38;2;249;226;175m\udb80\ude4b\u001b[0;38;2;166;227;161m agyline\u001b[0m\n"
     },
     {
       "id": "IC07_palette_polarity_fallback_to_terminal_light",
@@ -99,8 +99,8 @@
         "model": { "display_name": "Opus 4.6" },
         "cwd": "D:\\agyline"
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \udb80\ude4b agyline\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m | \u001b[0;33m\udb80\ude4b\u001b[0;32m agyline\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \udb80\ude4b agyline\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m │ \u001b[0;33m\udb80\ude4b\u001b[0;32m agyline\u001b[0m\n"
     },
     {
       "id": "IC08_color_depth_none",
@@ -110,8 +110,8 @@
         "session_id": "",
         "model": { "display_name": "Opus 4.6" }
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \uf49b 0%\n",
-      "expected_ansi": "  \uef23 Opus 4.6 | \uf49b 0%\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \uf49b 0%\n",
+      "expected_ansi": "  \uef23 Opus 4.6 │ \uf49b 0%\n"
     },
     {
       "id": "IC09_agy_env_precedence_and_colorfgbg_auto",
@@ -127,8 +127,8 @@
         "model": { "display_name": "Opus 4.6" },
         "execution_mode": "auto"
       },
-      "expected_plain": " \uef23 Opus 4.6 | \u25b8\u25b8 auto\n",
-      "expected_ansi": " \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m | \u001b[0;31m\u25b8\u25b8 auto\u001b[0m\n"
+      "expected_plain": " \uef23 Opus 4.6 │ \u25b8\u25b8 auto\n",
+      "expected_ansi": " \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m │ \u001b[0;31m\u25b8\u25b8 auto\u001b[0m\n"
     },
     {
       "id": "IC10_broken_toml_fallback_indicator",
@@ -137,8 +137,8 @@
       "payload": {
         "session_id": ""
       },
-      "expected_plain": "  \uef23 Model | \uf49b 0% | \uf1c0 cold ! config\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Model\u001b[0;37m | \u001b[0;95m\uf49b 0%\u001b[0;37m | \u001b[0;34m\uf1c0\u001b[0;90m cold\u001b[0;31m ! config\u001b[0m\n"
+      "expected_plain": "  ● READY │ Model │ ctx            0.0% ! config\n  sandbox off │ token 0 (0↑ 0↓) │ 0m\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;1;92m● READY\u001b[0;37m │ \u001b[0;3;95mModel\u001b[0;37m │ \u001b[0;90mctx \u001b[0;90;48;2;59;63;76m          \u001b[0;92m 0.0%\u001b[0;31m ! config\u001b[0m\n  \u001b[0m\u001b[0;90msandbox off\u001b[0;37m │ \u001b[0;90mtoken \u001b[0;1;37m0\u001b[0;90m (0↑ 0↓)\u001b[0;37m │ \u001b[0;90m0m\u001b[0m\n"
     },
     {
       "id": "IC11_narrowing_stage1_compact",
@@ -153,8 +153,8 @@
         },
         "terminal_width": 30
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \uf49b 20% \u00b7 20k\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Opus 4.6\u001b[0;37m | \u001b[0;95m\uf49b\u001b[0;95m 20%\u001b[0;37m \u00b7 \u001b[0;95m20k\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \uf49b 20% \u00b7 20k\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Opus 4.6\u001b[0;37m │ \u001b[0;95m\uf49b\u001b[0;95m 20%\u001b[0;37m \u00b7 \u001b[0;95m20k\u001b[0m\n"
     },
     {
       "id": "IC12_narrowing_stage2_and_stage3_cjk_zwj_pua",

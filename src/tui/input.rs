@@ -7,13 +7,13 @@ use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 
-use crate::config::{ItemSlot, PresetScope};
-use crate::render::ColorToken;
+use crate::config::{ItemId, ItemSlot, PresetScope};
+use crate::render::{BarStyle, ColorToken};
 use crate::tui::state::{
     ActiveModal, ConfiguratorApp, ConfiguratorExit, HookAction, InspectorField, LayoutPane,
-    RuntimePane, RuntimeSubField, StyleField, StylePane, TextEditTarget, ThresholdField, TuiTab,
-    inspector_fields_for_item, ordered_catalog_entries, preset_scope_label, preset_scope_next,
-    preset_scope_prev,
+    MAX_LAYOUT_ROWS, RuntimePane, RuntimeSubField, StyleField, StylePane, TextEditTarget,
+    ThresholdField, TuiTab, inspector_bool_default, inspector_fields_for_item,
+    ordered_catalog_entries, preset_scope_label, preset_scope_next, preset_scope_prev,
 };
 
 impl ConfiguratorApp {
@@ -541,7 +541,15 @@ impl ConfiguratorApp {
                 self.move_selected_slot_other_row();
                 true
             }
-            // Delete removes the slot here; in the Inspector the same key resets one field.
+            KeyCode::Char('a') | KeyCode::Char('+') => {
+                self.add_layout_row();
+                true
+            }
+            // Delete removes the slot here; Shift+X removes an empty trailing/extra row when > 2 rows.
+            KeyCode::Char('X') => {
+                self.remove_empty_selected_row();
+                true
+            }
             KeyCode::Char('x') | KeyCode::Delete | KeyCode::Backspace => {
                 self.remove_selected_slot();
                 true
@@ -586,10 +594,14 @@ impl ConfiguratorApp {
             // append a new instance; singletons move from the other row instead of doubling.
             KeyCode::Char(' ') | KeyCode::Enter => {
                 let entry = entries[self.catalog_idx.min(count - 1)];
-                let target_row = self.selected_row.min(1);
+                let max_row = self.doc.lines.len().max(2) - 1;
+                let target_row = self.selected_row.min(max_row);
                 let mut added_slot_idx: Option<usize> = None;
                 self.mutate_doc(|doc| {
                     Self::ensure_two_rows(doc);
+                    while doc.lines.len() <= target_row {
+                        doc.lines.push(Vec::new());
+                    }
                     if entry.allow_multiple {
                         doc.lines[target_row].push(ItemSlot::new(entry.id));
                         added_slot_idx = Some(doc.lines[target_row].len() - 1);
@@ -598,8 +610,11 @@ impl ConfiguratorApp {
                     {
                         doc.lines[target_row].remove(pos);
                     } else {
-                        let other_row = 1 - target_row;
-                        doc.lines[other_row].retain(|s| s.id != entry.id);
+                        for (r_idx, row) in doc.lines.iter_mut().enumerate() {
+                            if r_idx != target_row {
+                                row.retain(|s| s.id != entry.id);
+                            }
+                        }
                         doc.lines[target_row].push(ItemSlot::new(entry.id));
                         added_slot_idx = Some(doc.lines[target_row].len() - 1);
                     }
@@ -693,13 +708,117 @@ impl ConfiguratorApp {
                 self.set_selected_slot_priority(next);
                 true
             }
+            InspectorField::Style => {
+                let options: &[&str] = match slot_snapshot.id {
+                    ItemId::Model => &["", "hud"],
+                    ItemId::Mode => &["", "badge"],
+                    ItemId::Git => &["", "counts"],
+                    ItemId::Context => &["", "bar"],
+                    ItemId::Cache => &["", "hit_rate"],
+                    _ => return false,
+                };
+                let cur = slot_snapshot.style.as_deref().unwrap_or("");
+                let idx = options
+                    .iter()
+                    .position(|o| o.eq_ignore_ascii_case(cur))
+                    .unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % options.len()
+                } else if idx == 0 {
+                    options.len() - 1
+                } else {
+                    idx - 1
+                };
+                let chosen = options[next_idx];
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.style = (!chosen.is_empty()).then(|| chosen.to_string());
+                    }
+                });
+                true
+            }
+            InspectorField::MaxLevels => {
+                let cur = i32::from(slot_snapshot.max_levels.unwrap_or(2));
+                let next = (cur + if forward { 1 } else { -1 }).clamp(1, 8) as u8;
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.max_levels = Some(next);
+                    }
+                });
+                true
+            }
+            InspectorField::BarStyle => {
+                let styles = [BarStyle::Solid, BarStyle::Block, BarStyle::Ascii];
+                let cur = slot_snapshot
+                    .bar_style
+                    .as_deref()
+                    .and_then(BarStyle::from_key)
+                    .unwrap_or(BarStyle::Solid);
+                let idx = styles.iter().position(|&s| s == cur).unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % styles.len()
+                } else if idx == 0 {
+                    styles.len() - 1
+                } else {
+                    idx - 1
+                };
+                let next_style = styles[next_idx];
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.bar_style = if next_style == BarStyle::Solid {
+                            None
+                        } else {
+                            Some(next_style.as_key().to_string())
+                        };
+                    }
+                });
+                true
+            }
+            InspectorField::BarWidth => {
+                let cur = i32::from(slot_snapshot.bar_width.unwrap_or(10));
+                let next = (cur + if forward { 1 } else { -1 }).clamp(4, 20) as u8;
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.bar_width = (next != 10).then_some(next);
+                    }
+                });
+                true
+            }
+            InspectorField::Family => {
+                let fams = ["gemini", "3p", "@model"];
+                let cur = slot_snapshot.family.as_deref().unwrap_or("gemini");
+                let idx = fams
+                    .iter()
+                    .position(|f| f.eq_ignore_ascii_case(cur))
+                    .unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % fams.len()
+                } else if idx == 0 {
+                    fams.len() - 1
+                } else {
+                    idx - 1
+                };
+                let next = fams[next_idx].to_string();
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.family = Some(next);
+                    }
+                });
+                true
+            }
             InspectorField::ShowRemaining
+            | InspectorField::ShowUsed
+            | InspectorField::ShowBar
             | InspectorField::ShowReset
             | InspectorField::ShowAmount
             | InspectorField::ShowSubagent
             | InspectorField::ShowDefault
             | InspectorField::Compact
-            | InspectorField::ShowDetail => {
+            | InspectorField::ShowDetail
+            | InspectorField::ShowWhenOff
+            | InspectorField::ShowTtl
+            | InspectorField::ShowBreakdown
+            | InspectorField::ShowPending => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -760,10 +879,46 @@ impl ConfiguratorApp {
                 );
                 true
             }
+            InspectorField::Style => {
+                let init = slot_snapshot.style.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorStyle {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::MaxLevels => {
+                let init = slot_snapshot
+                    .max_levels
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorMaxLevels {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
             InspectorField::Bucket => {
                 let init = slot_snapshot.bucket.clone().unwrap_or_default();
                 self.start_text_edit(
                     TextEditTarget::InspectorBucket {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::Family => {
+                let init = slot_snapshot.family.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorFamily {
                         row,
                         slot: slot_idx,
                     },
@@ -782,13 +937,44 @@ impl ConfiguratorApp {
                 );
                 true
             }
+            InspectorField::BarStyle => {
+                let init = slot_snapshot.bar_style.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorBarStyle {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::BarWidth => {
+                let init = slot_snapshot
+                    .bar_width
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorBarWidth {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
             InspectorField::ShowRemaining
+            | InspectorField::ShowUsed
+            | InspectorField::ShowBar
             | InspectorField::ShowReset
             | InspectorField::ShowAmount
             | InspectorField::ShowSubagent
             | InspectorField::ShowDefault
             | InspectorField::Compact
-            | InspectorField::ShowDetail => {
+            | InspectorField::ShowDetail
+            | InspectorField::ShowWhenOff
+            | InspectorField::ShowTtl
+            | InspectorField::ShowBreakdown
+            | InspectorField::ShowPending => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -800,29 +986,63 @@ impl ConfiguratorApp {
             let Some(slot) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) else {
                 return;
             };
-            // Tri-state: true goes back to None (inherit) rather than Some(false), so the TOML
-            // never carries a key that restates the default.
-            let flip = |opt: &mut Option<bool>| {
-                *opt = if opt.unwrap_or(false) {
-                    None
-                } else {
-                    Some(true)
-                };
+            let id = slot.id;
+            // Inheriting `None` yields `def`; toggling sets `Some(!def)`, toggling again clears to `None`.
+            let flip = |opt: &mut Option<bool>, def: bool| {
+                let next = !opt.unwrap_or(def);
+                *opt = if next == def { None } else { Some(next) };
             };
             match field {
-                InspectorField::ShowRemaining => flip(&mut slot.show_remaining),
-                InspectorField::ShowReset => flip(&mut slot.show_reset),
-                InspectorField::ShowAmount => flip(&mut slot.show_amount),
-                InspectorField::ShowSubagent => flip(&mut slot.show_subagent),
-                InspectorField::ShowDefault => flip(&mut slot.show_default),
-                InspectorField::Compact => flip(&mut slot.compact),
-                InspectorField::ShowDetail => flip(&mut slot.show_detail),
+                InspectorField::ShowRemaining => {
+                    flip(&mut slot.show_remaining, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowUsed => {
+                    flip(&mut slot.show_used, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowBar => {
+                    flip(&mut slot.show_bar, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowReset => {
+                    flip(&mut slot.show_reset, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowAmount => {
+                    flip(&mut slot.show_amount, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowSubagent => {
+                    flip(&mut slot.show_subagent, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowDefault => {
+                    flip(&mut slot.show_default, inspector_bool_default(id, field));
+                }
+                InspectorField::Compact => {
+                    flip(&mut slot.compact, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowDetail => {
+                    flip(&mut slot.show_detail, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowWhenOff => {
+                    flip(&mut slot.show_when_off, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowTtl => {
+                    flip(&mut slot.show_ttl, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowBreakdown => {
+                    flip(&mut slot.show_breakdown, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowPending => {
+                    flip(&mut slot.show_pending, inspector_bool_default(id, field));
+                }
                 InspectorField::Priority
                 | InspectorField::Icon
                 | InspectorField::Fg
                 | InspectorField::IconColor
+                | InspectorField::Style
+                | InspectorField::MaxLevels
                 | InspectorField::Bucket
-                | InspectorField::Label => {}
+                | InspectorField::Family
+                | InspectorField::Label
+                | InspectorField::BarStyle
+                | InspectorField::BarWidth => {}
             }
         });
     }
@@ -837,15 +1057,26 @@ impl ConfiguratorApp {
                 InspectorField::Icon => slot.icon = None,
                 InspectorField::Fg => slot.fg = None,
                 InspectorField::IconColor => slot.icon_color = None,
+                InspectorField::Style => slot.style = None,
+                InspectorField::MaxLevels => slot.max_levels = None,
                 InspectorField::ShowRemaining => slot.show_remaining = None,
                 InspectorField::Bucket => slot.bucket = None,
+                InspectorField::Family => slot.family = None,
                 InspectorField::Label => slot.label = None,
+                InspectorField::ShowUsed => slot.show_used = None,
+                InspectorField::ShowBar => slot.show_bar = None,
+                InspectorField::BarStyle => slot.bar_style = None,
+                InspectorField::BarWidth => slot.bar_width = None,
                 InspectorField::ShowReset => slot.show_reset = None,
                 InspectorField::ShowAmount => slot.show_amount = None,
                 InspectorField::ShowSubagent => slot.show_subagent = None,
                 InspectorField::ShowDefault => slot.show_default = None,
                 InspectorField::Compact => slot.compact = None,
                 InspectorField::ShowDetail => slot.show_detail = None,
+                InspectorField::ShowWhenOff => slot.show_when_off = None,
+                InspectorField::ShowTtl => slot.show_ttl = None,
+                InspectorField::ShowBreakdown => slot.show_breakdown = None,
+                InspectorField::ShowPending => slot.show_pending = None,
             }
         });
     }
@@ -1259,11 +1490,12 @@ impl ConfiguratorApp {
         }
     }
 
-    /// Moves the selection over both rows flattened into one list, wrapping at the ends. An empty
-    /// row contributes one position so it stays selectable; the Inspector index resets each move.
+    /// Moves the selection over all configured rows flattened into one list, wrapping at the ends.
+    /// An empty row contributes one position so it stays selectable; Inspector index resets each move.
     fn move_active_rows_cursor(&mut self, delta: isize) {
         let mut positions: Vec<(usize, usize)> = Vec::new();
-        for r in 0..2 {
+        let row_count = self.doc.lines.len().max(2);
+        for r in 0..row_count {
             let n = self.doc.lines.get(r).map_or(0, Vec::len);
             if n == 0 {
                 positions.push((r, 0));
@@ -1310,11 +1542,12 @@ impl ConfiguratorApp {
         self.selected_slot = target_idx;
     }
 
-    /// 'm': appends the slot to the end of the other row and follows it there. A no-op on an empty
-    /// row, which has no slot to move.
+    /// 'm': appends the slot to the end of the next row (`(from_row + 1) % row_count`) and follows
+    /// it there. A no-op on an empty row, which has no slot to move.
     fn move_selected_slot_other_row(&mut self) {
-        let from_row = self.selected_row.min(1);
-        let to_row = 1 - from_row;
+        let row_count = self.doc.lines.len().max(2);
+        let from_row = self.selected_row.min(row_count - 1);
+        let to_row = (from_row + 1) % row_count;
         let slot_idx = self.selected_slot;
         let has_slot = self
             .doc
@@ -1333,6 +1566,41 @@ impl ConfiguratorApp {
         });
         self.selected_row = to_row;
         self.selected_slot = new_slot_idx;
+    }
+
+    fn add_layout_row(&mut self) {
+        if self.doc.lines.len().max(2) >= MAX_LAYOUT_ROWS {
+            self.status_toast = Some(format!("Maximum {MAX_LAYOUT_ROWS} rows reached"));
+            return;
+        }
+        let mut new_row = 0usize;
+        self.mutate_doc(|doc| {
+            Self::ensure_two_rows(doc);
+            if doc.lines.len() < MAX_LAYOUT_ROWS {
+                doc.lines.push(Vec::new());
+            }
+            new_row = doc.lines.len() - 1;
+        });
+        self.selected_row = new_row;
+        self.selected_slot = 0;
+        self.inspector_idx = 0;
+    }
+
+    fn remove_empty_selected_row(&mut self) {
+        if self.doc.lines.len() <= 2 {
+            return;
+        }
+        let row_idx = self.selected_row;
+        let is_empty = self.doc.lines.get(row_idx).is_some_and(Vec::is_empty);
+        if !is_empty {
+            self.status_toast = Some("Clear items from row before removing it with X".to_string());
+            return;
+        }
+        self.mutate_doc(|doc| {
+            if doc.lines.len() > 2 && row_idx < doc.lines.len() && doc.lines[row_idx].is_empty() {
+                doc.lines.remove(row_idx);
+            }
+        });
     }
 
     fn remove_selected_slot(&mut self) {
@@ -1516,9 +1784,10 @@ impl ConfiguratorApp {
     /// second copy of that layout, so chrome heights, pane percentages and scroll offsets must
     /// stay in sync with `draw_workbench` and the tab drawers.
     fn handle_left_click(&mut self, col: u16, row: u16) {
-        // Chrome rows: top bar 1, optional broken banner 1, preview 5, tab bar 1, then the body.
+        // Chrome rows: top bar 1, optional broken banner 1, dynamic preview_h, tab bar 1, then body.
         let preview_y: u16 = if self.loaded_from_broken_toml { 2 } else { 1 };
-        let tabs_y: u16 = preview_y + 5;
+        let preview_h = self.preview_box_height();
+        let tabs_y: u16 = preview_y + preview_h;
         let body_y: u16 = tabs_y + 1;
         let footer_y: u16 = self.term_size.1.saturating_sub(1);
 
@@ -1636,7 +1905,8 @@ impl ConfiguratorApp {
     /// empty-row lines `draw_layout_tab` emits. Clicking a line header selects that row's slot 0.
     fn click_active_rows_item(&mut self, inner_row: usize) {
         let mut line_cursor = 0usize;
-        for r_idx in 0..2 {
+        let row_count = self.doc.lines.len().max(2);
+        for r_idx in 0..row_count {
             if inner_row == line_cursor {
                 self.selected_row = r_idx;
                 self.selected_slot = 0;

@@ -65,10 +65,7 @@ fn porcelain_v2_parses_clean_dirty_ignored_conflict_ahead_behind_detached_and_ut
         parse_porcelain_v2(clean_with_ignored),
         ParsedGitStatus {
             branch: "main".to_string(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..ParsedGitStatus::default()
         }
     );
 
@@ -84,9 +81,11 @@ fn porcelain_v2_parses_clean_dirty_ignored_conflict_ahead_behind_detached_and_ut
         ParsedGitStatus {
             branch: "feature/twenty-five-chars".to_string(),
             dirty: true,
-            has_conflict: false,
             ahead: 2,
             behind: 1,
+            modified: 1,
+            untracked: 1,
+            ..ParsedGitStatus::default()
         }
     );
 
@@ -100,8 +99,8 @@ u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 README.md\n";
             branch: "main".to_string(),
             dirty: true,
             has_conflict: true,
-            ahead: 0,
-            behind: 0,
+            conflicted: 1,
+            ..ParsedGitStatus::default()
         }
     );
 
@@ -112,9 +111,8 @@ u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 README.md\n";
         ParsedGitStatus {
             branch: "main".to_string(),
             dirty: true,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            untracked: 1,
+            ..ParsedGitStatus::default()
         }
     );
 
@@ -125,10 +123,7 @@ u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 README.md\n";
         parse_porcelain_v2(detached_sha),
         ParsedGitStatus {
             branch: "fb7464b".to_string(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..ParsedGitStatus::default()
         }
     );
 
@@ -137,10 +132,37 @@ u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 README.md\n";
         parse_porcelain_v2(detached_initial),
         ParsedGitStatus {
             branch: "HEAD".to_string(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..ParsedGitStatus::default()
+        }
+    );
+
+    // 5b. Detailed per-category counts (`conflicted`, `staged`, `modified`, `deleted`, `renamed`, `untracked`, `stashed`)
+    let detailed = b"# branch.oid 0123456789abcdef\n\
+# branch.head main\n\
+# branch.ab +3 -2\n\
+# stash 4\n\
+1 A. N... 000000 100644 100644 0000000 1111111 staged.rs\n\
+1 MM N... 100644 100644 100644 1111111 2222222 both.rs\n\
+1 .D N... 100644 100644 000000 1111111 0000000 deleted.rs\n\
+2 R. N... 100644 100644 100644 1111111 2222222 R100 new.rs\told.rs\n\
+u UU N... 100644 100644 100644 100644 1111111 2222222 3333333 clash.rs\n\
+? u1.txt\n\
+? u2.txt\n";
+    assert_eq!(
+        parse_porcelain_v2(detailed),
+        ParsedGitStatus {
+            branch: "main".to_string(),
+            dirty: true,
+            has_conflict: true,
+            ahead: 3,
+            behind: 2,
+            conflicted: 1,
+            staged: 2,
+            modified: 1,
+            deleted: 1,
+            renamed: 1,
+            untracked: 2,
+            stashed: 4,
         }
     );
 
@@ -210,6 +232,7 @@ fn git_cache_store_normalizes_lexical_cwd_verifies_embedded_key_and_self_heals()
         has_conflict: false,
         ahead: 3,
         behind: 1,
+        ..GitCacheEntry::default()
     };
     write_git_cache(home, &entry).expect("atomic write git cache");
 
@@ -418,6 +441,7 @@ impl Spawner for RecordingSpawner {
 fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
     let sandbox = TempDirGuard::new("git_seq");
     let home = &sandbox.path;
+    fs::write(home.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
     let spawner = RecordingSpawner::default();
 
     // Non-existent workspace directory proves zero workspace disk access on the print path!
@@ -455,10 +479,7 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
             updated_at_ms: 10_000,
             is_repo: true,
             branch: "main".to_string(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..GitCacheEntry::default()
         },
     )
     .expect("seed positive cache");
@@ -479,10 +500,7 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
         delta_git,
         Some(GitFrameState {
             branch: "main".to_string(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..GitFrameState::default()
         })
     );
     assert_eq!(spawner.take_git_spawns(), vec![repo_cwd.to_string()]);
@@ -518,11 +536,7 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
             cwd: repo_cwd.to_string(),
             updated_at_ms: 700_000,
             is_repo: false,
-            branch: String::new(),
-            dirty: false,
-            has_conflict: false,
-            ahead: 0,
-            behind: 0,
+            ..GitCacheEntry::default()
         },
     )
     .expect("seed negative cache");
@@ -563,6 +577,7 @@ fn git_cache_lifecycle_swr_negative_cache_and_vcs_merge_sequence() {
             has_conflict: true,
             ahead: 4,
             behind: 2,
+            ..GitCacheEntry::default()
         },
     )
     .expect("seed merge cache");
@@ -654,6 +669,8 @@ fn create_dir_link(link_path: &Path, target_dir: &Path) {
 fn refresh_git_worker_resolves_junction_or_symlink_dash_cwd_and_negative_cache() {
     let sandbox = TempDirGuard::new("junction_d08");
     let home_dir = sandbox.path.join("agyline_home");
+    fs::create_dir_all(&home_dir).expect("mkdir home_dir");
+    fs::write(home_dir.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
     let real_repo = sandbox.path.join("real_repo");
     init_real_git_repo(&real_repo, "main");
     let sub_pkg = real_repo.join("packages").join("inner");
@@ -862,6 +879,8 @@ fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
     let home_dir = sandbox.path.join("agyline_home");
     fs::create_dir_all(&fake_bin_dir).expect("mkdir fake_bin");
     fs::create_dir_all(&pid_dir).expect("mkdir pids");
+    fs::create_dir_all(&home_dir).expect("mkdir home_dir");
+    fs::write(home_dir.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
 
     // Compile a standalone fake `git` binary that records its PID and sleeps 3 seconds.
     let fake_src = sandbox.path.join("fake_git.rs");
@@ -971,6 +990,7 @@ fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
             has_conflict: false,
             ahead: 1,
             behind: 0,
+            ..GitCacheEntry::default()
         },
     )
     .expect("seed stale cache");
@@ -1060,4 +1080,57 @@ fn pipe_eof_zero_handle_leak_returns_under_800ms_when_fake_git_sleeps_3s() {
         }
     }
     thread::sleep(Duration::from_millis(50));
+}
+
+#[test]
+fn non_git_vcs_type_skips_git_cache_and_worker_spawns() {
+    let sandbox = TempDirGuard::new("non_git_vcs");
+    let home = &sandbox.path;
+    let spawner = RecordingSpawner::default();
+    let payload = parse_stdin_payload(
+        br#"{"session_id":"s_hg","cwd":"D:\\Virtual\\hg-repo","vcs":{"type":"hg","branch":"default","dirty":true}}"#,
+    )
+    .expect("parse");
+    let env = RenderEnv {
+        home_dir: home.clone(),
+        temp_dir: home.join("tmp"),
+        conversations_dir: home.join("conv"),
+        env_vars: BTreeMap::new(),
+        now_ms: 1_700_000_000_000,
+        spawner: &spawner,
+    };
+    let cfg = EffectiveConfig::default();
+    assert_eq!(resolve_git_frame(&payload, &cfg, &env, 0), None);
+    assert!(spawner.take_git_spawns().is_empty());
+}
+
+#[test]
+fn demand_gating_skips_git_cache_and_spawns_when_layout_has_no_git_item() {
+    let sandbox = TempDirGuard::new("demand_gate_no_git");
+    let home = &sandbox.path;
+    fs::write(
+        home.join("config.toml"),
+        "[[line]]\nitems = [\"dir\", \"context\"]\n",
+    )
+    .expect("write config");
+    let spawner = RecordingSpawner::default();
+    let payload_bytes = serde_json::to_vec(&serde_json::json!({
+        "session_id": "gate_no_git",
+        "cwd": "D:\\VirtualWorkspace\\repo",
+        "vcs": { "type": "git" },
+        "context_window": { "used_percentage": 20 }
+    }))
+    .expect("json");
+    let env = RenderEnv {
+        home_dir: home.clone(),
+        temp_dir: home.join("temp"),
+        conversations_dir: home.join("conversations"),
+        env_vars: BTreeMap::new(),
+        now_ms: 1_700_000_000_000,
+        spawner: &spawner,
+    };
+    let out = run_live_frame(&payload_bytes, &env);
+    assert!(out.plain.contains("repo"));
+    assert!(spawner.take_git_spawns().is_empty());
+    assert!(!home.join("state").exists());
 }

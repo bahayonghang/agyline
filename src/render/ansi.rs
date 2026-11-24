@@ -3,7 +3,9 @@
 //! Both emitters skip rows with nothing to show and badge the first row they actually emit.
 
 use crate::config::EffectiveConfig;
-use crate::render::{ColorToken, EffectiveColorDepth, RenderedFrame};
+use crate::render::{ColorToken, EffectiveColorDepth, RenderedFrame, ResolvedColor, TextStyle};
+
+type SgrKey = (ResolvedColor, TextStyle, Option<ResolvedColor>);
 
 /// Colored output quantized to `config.effective_color_depth`. Depth `None` delegates to
 /// `emit_plain`, so a NO_COLOR terminal receives no escapes at all. Every row ends reset + `\n`.
@@ -28,16 +30,29 @@ pub fn emit_ansi(frame: &RenderedFrame, config: &EffectiveConfig) -> String {
                 // Reference row framing: indent, reset, items, reset (statusline.py `r_esc`).
                 out.push_str(indent);
                 out.push_str("\x1b[0m");
+                let mut last_sgr: Option<SgrKey> = None;
                 for (idx, item) in line.items.iter().enumerate() {
                     if idx > 0 {
                         if let Some(c) = sep_col {
                             c.write_sgr(&mut out);
                         }
+                        last_sgr = None;
                         out.push_str(&config.separator);
                     }
                     for span in &item.spans {
-                        if let Some(c) = config.resolve_span_color(span.color) {
-                            c.write_sgr(&mut out);
+                        let fg = config.resolve_span_color(span.color);
+                        let bg = span.style.bg.and_then(|b| config.resolve_span_color(b));
+                        let is_plain = span.style.is_plain() && bg.is_none();
+                        if let Some(fg_col) = fg {
+                            let key = (fg_col, span.style, bg);
+                            if is_plain {
+                                // Emit plain spans verbatim so `cometix` adjacent plain spans remain byte-exact.
+                                fg_col.write_sgr(&mut out);
+                                last_sgr = None;
+                            } else if last_sgr != Some(key) {
+                                fg_col.write_sgr_styled(span.style, bg, &mut out);
+                                last_sgr = Some(key);
+                            }
                         }
                         out.push_str(&span.text);
                     }

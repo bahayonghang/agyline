@@ -24,7 +24,7 @@ use crate::install::{
 };
 use crate::items::{ItemCatalogEntry, ItemCategory, catalog};
 use crate::platform;
-use crate::render::{ColorToken, RenderedFrame, discover_palettes, parse_color_spec};
+use crate::render::{BarStyle, ColorToken, RenderedFrame, discover_palettes, parse_color_spec};
 use crate::scenarios::{Scenario, builtin_scenarios};
 use crate::state::maybe_sweep_stale_state;
 use crate::statusline::render_lines_with_width;
@@ -33,6 +33,13 @@ use crate::tui::convert::rendered_frame_to_ratatui_lines;
 // History holds whole-doc snapshots, so it is capped and the oldest is evicted when full. Undo and
 // redo only move snapshots between the two stacks, so this bounds their combined memory too.
 pub const MAX_UNDO_STEPS: usize = 100;
+/// Maximum configurable statusline rows supported by the Layout editor.
+pub const MAX_LAYOUT_ROWS: usize = 5;
+
+/// Dynamic outer height of the Live Preview box: 2 borders + 1 width ruler + 2..=4 status rows.
+pub fn preview_box_height(rendered_line_count: usize) -> u16 {
+    3 + rendered_line_count.clamp(2, 4) as u16
+}
 
 // Keeps temp names unique when two writes share a nanosecond timestamp or the clock is coarse.
 static TUI_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -238,15 +245,26 @@ pub enum InspectorField {
     Icon,
     Fg,
     IconColor,
+    Style,
+    MaxLevels,
     ShowRemaining,
     Bucket,
+    Family,
     Label,
+    ShowUsed,
+    ShowBar,
+    BarStyle,
+    BarWidth,
     ShowReset,
     ShowAmount,
     ShowSubagent,
     ShowDefault,
     Compact,
     ShowDetail,
+    ShowWhenOff,
+    ShowTtl,
+    ShowBreakdown,
+    ShowPending,
 }
 
 impl InspectorField {
@@ -257,17 +275,46 @@ impl InspectorField {
             Self::Icon => "icon",
             Self::Fg => "fg",
             Self::IconColor => "icon_color",
+            Self::Style => "style",
+            Self::MaxLevels => "max_levels",
             Self::ShowRemaining => "show_remaining",
             Self::Bucket => "bucket",
+            Self::Family => "family",
             Self::Label => "label",
+            Self::ShowUsed => "show_used",
+            Self::ShowBar => "show_bar",
+            Self::BarStyle => "bar_style",
+            Self::BarWidth => "bar_width",
             Self::ShowReset => "show_reset",
             Self::ShowAmount => "show_amount",
             Self::ShowSubagent => "show_subagent",
             Self::ShowDefault => "show_default",
             Self::Compact => "compact",
             Self::ShowDetail => "show_detail",
+            Self::ShowWhenOff => "show_when_off",
+            Self::ShowTtl => "show_ttl",
+            Self::ShowBreakdown => "show_breakdown",
+            Self::ShowPending => "show_pending",
         }
     }
+}
+
+/// Default boolean value when a per-slot toggle is unset (`None`), so the Inspector and toggle
+/// actions stay synchronized for items whose options default to `true` (e.g. HUD `QuotaGroup`).
+pub const fn inspector_bool_default(id: ItemId, field: InspectorField) -> bool {
+    matches!(
+        (id, field),
+        (ItemId::Status, InspectorField::ShowPending)
+            | (ItemId::Tokens, InspectorField::ShowBreakdown)
+            | (ItemId::Context, InspectorField::ShowBar)
+            | (
+                ItemId::QuotaGroup,
+                InspectorField::ShowUsed
+                    | InspectorField::ShowBar
+                    | InspectorField::ShowReset
+                    | InspectorField::ShowAmount,
+            )
+    )
 }
 
 // Per-item field sets: the four base keys plus only the options that item actually reads.
@@ -277,12 +324,52 @@ const INSP_BASE: [InspectorField; 4] = [
     InspectorField::Fg,
     InspectorField::IconColor,
 ];
-const INSP_CONTEXT: [InspectorField; 5] = [
+const INSP_STATUS: [InspectorField; 5] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
+    InspectorField::ShowPending,
+];
+const INSP_STYLE: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+];
+const INSP_DIR: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::MaxLevels,
+];
+const INSP_CONTEXT: [InspectorField; 9] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
     InspectorField::ShowRemaining,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
+];
+const INSP_CACHE: [InspectorField; 6] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+    InspectorField::ShowTtl,
+];
+const INSP_TOKENS: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::ShowBreakdown,
 ];
 const INSP_BUDGET: [InspectorField; 8] = [
     InspectorField::Priority,
@@ -294,11 +381,12 @@ const INSP_BUDGET: [InspectorField; 8] = [
     InspectorField::ShowAmount,
     InspectorField::ShowSubagent,
 ];
-const INSP_MODE: [InspectorField; 6] = [
+const INSP_MODE: [InspectorField; 7] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
+    InspectorField::Style,
     InspectorField::ShowDefault,
     InspectorField::Compact,
 ];
@@ -309,13 +397,38 @@ const INSP_SUBAGENTS: [InspectorField; 5] = [
     InspectorField::IconColor,
     InspectorField::ShowDetail,
 ];
-const INSP_QUOTA: [InspectorField; 8] = [
+const INSP_SANDBOX: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::ShowWhenOff,
+];
+const INSP_QUOTA: [InspectorField; 12] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
     InspectorField::Bucket,
     InspectorField::Label,
+    InspectorField::ShowReset,
+    InspectorField::ShowAmount,
+    InspectorField::ShowUsed,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
+];
+const INSP_QUOTA_GROUP: [InspectorField; 12] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Family,
+    InspectorField::Label,
+    InspectorField::ShowUsed,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
     InspectorField::ShowReset,
     InspectorField::ShowAmount,
 ];
@@ -331,20 +444,23 @@ const INSP_COST: [InspectorField; 5] = [
 /// change of selection or item kind.
 pub fn inspector_fields_for_item(id: ItemId) -> &'static [InspectorField] {
     match id {
+        ItemId::Status => &INSP_STATUS,
+        ItemId::Model | ItemId::Git => &INSP_STYLE,
+        ItemId::Dir => &INSP_DIR,
         ItemId::Context => &INSP_CONTEXT,
+        ItemId::Cache => &INSP_CACHE,
+        ItemId::Tokens => &INSP_TOKENS,
         ItemId::Budget => &INSP_BUDGET,
         ItemId::Mode => &INSP_MODE,
         ItemId::Subagents => &INSP_SUBAGENTS,
+        ItemId::Sandbox => &INSP_SANDBOX,
         ItemId::Quota => &INSP_QUOTA,
+        ItemId::QuotaGroup => &INSP_QUOTA_GROUP,
         ItemId::Cost => &INSP_COST,
-        ItemId::Model
-        | ItemId::Dir
-        | ItemId::Git
-        | ItemId::Cache
-        | ItemId::Speed
+        ItemId::Speed
         | ItemId::Tasks
         | ItemId::Queue
-        | ItemId::Sandbox
+        | ItemId::Duration
         | ItemId::Vim
         | ItemId::Title
         | ItemId::Agent
@@ -417,8 +533,13 @@ pub enum TextEditTarget {
     InspectorIcon { row: usize, slot: usize },
     InspectorFg { row: usize, slot: usize },
     InspectorIconColor { row: usize, slot: usize },
+    InspectorStyle { row: usize, slot: usize },
+    InspectorMaxLevels { row: usize, slot: usize },
     InspectorBucket { row: usize, slot: usize },
+    InspectorFamily { row: usize, slot: usize },
     InspectorLabel { row: usize, slot: usize },
+    InspectorBarStyle { row: usize, slot: usize },
+    InspectorBarWidth { row: usize, slot: usize },
     StyleSeparator,
     StyleIndent,
     PaletteTokenOverride(ColorToken),
@@ -437,8 +558,13 @@ impl TextEditTarget {
             Self::InspectorIcon { .. } => "icon",
             Self::InspectorFg { .. } => "fg",
             Self::InspectorIconColor { .. } => "icon_color",
+            Self::InspectorStyle { .. } => "style",
+            Self::InspectorMaxLevels { .. } => "max_levels",
             Self::InspectorBucket { .. } => "bucket",
+            Self::InspectorFamily { .. } => "family",
             Self::InspectorLabel { .. } => "label",
+            Self::InspectorBarStyle { .. } => "bar_style",
+            Self::InspectorBarWidth { .. } => "bar_width",
             Self::StyleSeparator => "separator",
             Self::StyleIndent => "indent",
             Self::PaletteTokenOverride(tok) => tok.as_key(),
@@ -623,7 +749,7 @@ fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::R
 /// Catalog grouped in category order (Workspace, Usage, Runtime, Session). The Layout pane draws
 /// and the mouse hit-tests by index into this list, so the order is part of the UI contract.
 pub fn ordered_catalog_entries() -> Vec<&'static ItemCatalogEntry> {
-    let mut out = Vec::with_capacity(20);
+    let mut out = Vec::with_capacity(24);
     for cat in [
         ItemCategory::Workspace,
         ItemCategory::Usage,
@@ -890,6 +1016,13 @@ impl ConfiguratorApp {
         (rendered, cfg)
     }
 
+    /// Dynamic Live Preview box height for the currently rendered output. Shared by `view.rs`
+    /// and `input.rs` mouse hit-testing so clicks on tabs and panes stay aligned.
+    pub fn preview_box_height(&self) -> u16 {
+        let (rendered, _) = self.preview_rendered_frame();
+        preview_box_height(rendered.lines.len())
+    }
+
     /// Preview as ratatui lines; the text must equal `emit_plain` of the same frame.
     pub fn preview_lines(&self) -> Vec<Line<'static>> {
         let (rendered, cfg) = self.preview_rendered_frame();
@@ -948,7 +1081,8 @@ impl ConfiguratorApp {
     /// Keeps row, slot and inspector indices inside the doc. Must run after every mutation,
     /// undo, redo and reload, or the next draw and mouse hit test index out of bounds.
     pub(crate) fn clamp_layout_selection(&mut self) {
-        self.selected_row = self.selected_row.min(1);
+        let max_row = self.doc.lines.len().max(2) - 1;
+        self.selected_row = self.selected_row.min(max_row);
         let row_len = self.doc.lines.get(self.selected_row).map_or(0, Vec::len);
         if row_len == 0 {
             self.selected_slot = 0;
@@ -1033,6 +1167,40 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
+            TextEditTarget::InspectorStyle { row, slot } => {
+                let next = (!trimmed.is_empty()).then_some(trimmed);
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.style = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorMaxLevels { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else {
+                    let Ok(v) = trimmed.parse::<u8>() else {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Expected integer 1..=8 (empty clears)".to_string());
+                        }
+                        return;
+                    };
+                    if !(1..=8).contains(&v) {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Require 1 <= max_levels <= 8".to_string());
+                        }
+                        return;
+                    }
+                    Some(v)
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.max_levels = next;
+                    }
+                });
+                self.text_edit = None;
+            }
             TextEditTarget::InspectorBucket { row, slot } => {
                 let next = (!trimmed.is_empty()).then_some(trimmed);
                 self.mutate_doc(|doc| {
@@ -1042,11 +1210,63 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
+            TextEditTarget::InspectorFamily { row, slot } => {
+                let next = (!trimmed.is_empty()).then_some(trimmed);
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.family = next;
+                    }
+                });
+                self.text_edit = None;
+            }
             TextEditTarget::InspectorLabel { row, slot } => {
                 let next = (!trimmed.is_empty()).then_some(trimmed);
                 self.mutate_doc(|doc| {
                     if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
                         s.label = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorBarStyle { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else if let Some(parsed) = BarStyle::from_key(&trimmed) {
+                    Some(parsed.as_key().to_string())
+                } else {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some("Expected bar_style: solid, block, or ascii".to_string());
+                    }
+                    return;
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.bar_style = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorBarWidth { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else {
+                    let Ok(v) = trimmed.parse::<u8>() else {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Expected integer 4..=20 (empty clears)".to_string());
+                        }
+                        return;
+                    };
+                    if !(4..=20).contains(&v) {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Require 4 <= bar_width <= 20".to_string());
+                        }
+                        return;
+                    }
+                    Some(v)
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.bar_width = next;
                     }
                 });
                 self.text_edit = None;

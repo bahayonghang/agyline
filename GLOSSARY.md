@@ -59,3 +59,19 @@ _Avoid_: Palette, preset
 **Scenario**:
 A named sample session state used by preview and the configurator to render representative status line conditions without reading or mutating live session state.
 _Avoid_: Preset, test fixture
+
+**Status Badge**:
+A compact indicator placed at the start of a row reflecting the active agent state, tool confirmation urgency, and queued pending inputs.
+_Avoid_: State pill, status label
+
+**Usage Bar**:
+A visual progress meter displaying proportional consumption or remaining quota along a track, degrading across terminal color depths and glyph sets.
+_Avoid_: Progress bar, gauge, meter
+
+**Quota Group**:
+A pair of related Quota Buckets sharing a model family across reset windows (such as 5-hour and weekly limits) displayed together as one Item.
+_Avoid_: Quota pair, family quota
+
+**Text Style**:
+Typographic attributes carried by rendered text spans—such as bold, italic, dim, and optional background color—applied consistently across ANSI output and configurator preview.
+_Avoid_: ANSI flags, formatting mask

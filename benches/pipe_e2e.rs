@@ -228,6 +228,7 @@ fn main() {
         std::process::id()
     ));
     let home_warm = root.join("home_warm");
+    let home_minimal = root.join("home_minimal");
     let home_cold = root.join("home_cold");
     let home_sql = root.join("home_sql");
     let home_lock = root.join("home_lock");
@@ -255,6 +256,7 @@ fn main() {
             has_conflict: false,
             ahead: 1,
             behind: 0,
+            ..GitCacheEntry::default()
         },
     )
     .expect("seed warm git cache");
@@ -275,6 +277,35 @@ fn main() {
         }
     }))
     .expect("warm json");
+
+    let narrow_hud_payload = serde_json::to_vec(&serde_json::json!({
+        "session_id": "bench_warm",
+        "agent_state": "working",
+        "execution_mode": "accept-edits",
+        "model": { "display_name": "Gemini 4 Neon", "effort": "xHigh" },
+        "cwd": cwd_str,
+        "terminal_width": 74,
+        "context_window": {
+            "current_usage": { "input_tokens": 9600, "cache_read_input_tokens": 187400 },
+            "total_input_tokens": 4480000,
+            "total_output_tokens": 122000,
+            "context_window_size": 1000000
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.927, "reset_in_seconds": 9840 },
+            "gemini-weekly": { "remaining_fraction": 0.797, "reset_in_seconds": 446400 },
+            "3p-5h": { "remaining_fraction": 1.0, "reset_in_seconds": 18000 },
+            "3p-weekly": { "remaining_fraction": 0.48, "reset_in_seconds": 255600 }
+        }
+    }))
+    .expect("narrow hud json");
+
+    fs::create_dir_all(&home_minimal).expect("create home_minimal");
+    fs::write(
+        home_minimal.join("config.toml"),
+        "[[line]]\nitems = [\"dir\", \"context\"]\n",
+    )
+    .expect("write minimal 2-item config");
 
     // 2. Slow git shim for cold cache non-blocking check
     let slow_git_dir = root.join("slow_git_bin");
@@ -320,6 +351,28 @@ fn main() {
             &user_home,
             None,
             &warm_payload,
+        )
+    });
+
+    measure_workload("narrow_74_hud (direct)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_warm,
+            &user_home,
+            None,
+            &narrow_hud_payload,
+        )
+    });
+
+    measure_workload("minimal_2item (direct, gated)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_minimal,
+            &user_home,
+            None,
+            &narrow_hud_payload,
         )
     });
 

@@ -72,9 +72,11 @@ fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "stderr must be 0 B");
     assert_eq!(
-        output.stdout,
-        "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n"
-            .as_bytes()
+        String::from_utf8_lossy(&output.stdout),
+        concat!(
+            "  \x1b[0m\x1b[0;1;92m\u{25cf} READY\x1b[0;37m \u{2502} \x1b[0;3;95mModel\x1b[0;37m \u{2502} \x1b[0;90mctx \x1b[0;90;48;2;59;63;76m          \x1b[0;92m 0.0%\x1b[0m\n",
+            "  \x1b[0m\x1b[0;90msandbox off\x1b[0;37m \u{2502} \x1b[0;90mtoken \x1b[0;1;37m0\x1b[0;90m (0\u{2191} 0\u{2193})\x1b[0;37m \u{2502} \x1b[0;90m0m\x1b[0m\n",
+        )
     );
 }
 
@@ -241,7 +243,7 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     assert!(!text.contains("secret@example.com"));
     assert_eq!(
         text,
-        "    \x1b[0m\x1b[0;36m\u{ef23} Gemini 4 Carbon\x1b[0;90m \u{00b7} \x1b[0;36mHigh\x1b[0;90m | \x1b[0;35m\u{f49b} 0%\x1b[0;90m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0;90m | \x1b[0;31m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
+        "    \x1b[0m\x1b[0;1;32m\u{25cf} READY\x1b[0;90m \u{2502} \x1b[0;1;34mBEST-OF-N\x1b[0;90m \u{2502} \x1b[0;3;35mGemini 4 Carbon (High)\x1b[0;90m \u{2502} \x1b[0;90mctx \x1b[0;90;48;2;218;222;230m          \x1b[0;32m 0.0%\x1b[0m\n"
     );
 }
 

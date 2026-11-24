@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agyline::{
-    CacheFrameState, EffectiveConfig, FrameData, GitCacheEntry, GitFrameState, NoopSpawner,
-    RelayStatus, RenderEnv, emit_ansi, emit_plain, parse_stdin_payload, render_lines,
-    run_live_frame, write_git_cache,
+    CacheFrameState, ColorDepth, ConfigDoc, EffectiveConfig, FrameData, GitCacheEntry,
+    GitFrameState, NoopSpawner, RelayStatus, RenderEnv, emit_ansi, emit_plain, parse_stdin_payload,
+    render_lines, render_lines_with_width, run_live_frame, str_display_width, write_git_cache,
 };
 use rusqlite::{Connection, params};
 use serde::Deserialize;
@@ -343,7 +343,8 @@ fn items_and_config_golden_cases_match_plain_and_ansi_bytes() {
 // bytes for git/cache/relay/speed formatting independent of the collection path.
 #[test]
 fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() {
-    let config = EffectiveConfig::default();
+    let config =
+        EffectiveConfig::from_doc(&ConfigDoc::cometix_base(), None, &BTreeMap::new(), false);
 
     // D05 exact byte check: long branch truncation + dirty + ahead/behind
     let d05_payload =
@@ -358,10 +359,9 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
             has_conflict: false,
             ahead: 2,
             behind: 1,
+            ..GitFrameState::default()
         }),
-        cache: CacheFrameState::default(),
-        last_tps: None,
-        response_model: None,
+        ..FrameData::default()
     };
     let d05_rendered = render_lines(&d05_frame, &config);
     assert_eq!(
@@ -386,10 +386,9 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
             has_conflict: true,
             ahead: 0,
             behind: 0,
+            ..GitFrameState::default()
         }),
-        cache: CacheFrameState::default(),
-        last_tps: None,
-        response_model: None,
+        ..FrameData::default()
     };
     let d06_rendered = render_lines(&d06_frame, &config);
     assert_eq!(
@@ -413,6 +412,7 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
         },
         last_tps: Some("64.5".to_string()),
         response_model: Some("claude-opus-4-6".to_string()),
+        ..FrameData::default()
     };
     let h08_rendered = render_lines(&h08_frame, &config);
     assert_eq!(
@@ -432,6 +432,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     let home_dir =
         std::env::temp_dir().join(format!("agyline_golden_git_{}_{nanos}", std::process::id()));
     fs::create_dir_all(&home_dir).expect("create temp golden home");
+    fs::write(home_dir.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
 
     let now_ms = 1_700_000_000_000_u64;
     let spawner = NoopSpawner;
@@ -454,6 +455,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} clean-repo | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m clean-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -475,6 +477,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 2,
                 behind: 1,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} ab-repo | \u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1 | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m ab-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -495,6 +498,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: true,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} conf-repo | \u{f02a2} main \u{26a0} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m conf-repo\x1b[0;37m | \x1b[0;94m\u{f02a2}\x1b[0;31m main \u{26a0}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -515,6 +519,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} det-repo | \u{f02a2} fb7464b \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m det-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} fb7464b \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -535,6 +540,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} linked_pkg | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m linked_pkg\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -555,6 +561,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} cn-branch-repo | \u{f02a2} feat/中文分支 \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m cn-branch-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feat/中文分支 \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -583,4 +590,109 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     }
 
     let _ = fs::remove_dir_all(&home_dir);
+}
+
+// Screenshot-parity 3-row HUD `Default Line` golden + 74-column narrowing verification:
+// Row 1 italic model + usage bar + ~/dir + per-count git; Row 2 dual Gemini/3P used% bars;
+// Row 3 sandbox off + token breakdown + cache hit rate + elapsed duration; narrow_stress fits <= 74 cols.
+#[test]
+fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
+    let doc = ConfigDoc {
+        color_depth: ColorDepth::TrueColor,
+        ..ConfigDoc::default()
+    };
+    let mut env = BTreeMap::new();
+    env.insert("AGY_THEME".to_string(), "dark".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let config = EffectiveConfig::from_doc(&doc, None, &env, false);
+
+    let now_sec = 1_700_000_000_i64;
+    let payload_bytes = serde_json::to_vec(&serde_json::json!({
+        "session_id": "hud_parity",
+        "agent_state": "working",
+        "execution_mode": "accept-edits",
+        "model": {
+            "display_name": "Gemini 4 Neon",
+            "effort": "xHigh"
+        },
+        "cwd": "/home/dev/projects/antigravity-hud",
+        "sandbox": { "enabled": false },
+        "context_window": {
+            "current_usage": {
+                "input_tokens": 9_600,
+                "cache_read_input_tokens": 187_400,
+                "cache_creation_input_tokens": 0
+            },
+            "total_input_tokens": 4_480_000,
+            "total_output_tokens": 122_000,
+            "context_window_size": 1_000_000,
+            "used_percentage": 19.7
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.927, "reset_in_seconds": 2 * 3600 + 44 * 60 },
+            "gemini-weekly": { "remaining_fraction": 0.797, "reset_in_seconds": 5 * 86_400 + 4 * 3600 },
+            "3p-5h": { "remaining_fraction": 1.0, "reset_in_seconds": 5 * 3600 },
+            "3p-weekly": { "remaining_fraction": 0.48, "reset_in_seconds": 2 * 86_400 + 23 * 3600 }
+        }
+    }))
+    .expect("serialize hud payload");
+    let payload = parse_stdin_payload(&payload_bytes).expect("parse hud payload");
+
+    let frame = FrameData {
+        payload,
+        now_sec,
+        git: Some(GitFrameState {
+            branch: "main".to_string(),
+            dirty: true,
+            modified: 1,
+            untracked: 7,
+            ..GitFrameState::default()
+        }),
+        cache: CacheFrameState {
+            cache_ts: Some(now_sec - 120),
+            relay_touches: 0,
+            relay_status: None,
+        },
+        session_start_sec: Some(now_sec - 58 * 60),
+        user_home: Some(PathBuf::from("/home/dev")),
+        ..FrameData::default()
+    };
+
+    let full = render_lines_with_width(&frame, &config, None);
+    let plain = emit_plain(&full, &config);
+    assert_eq!(
+        plain,
+        concat!(
+            "  \u{2699} WORKING \u{2502} EDITS \u{2502} Gemini 4 Neon (XHigh) \u{2502} ctx \u{2588}\u{2588}         19.7% \u{2502} ~/projects/antigravity-hud \u{2502} main* !1 ?7\n",
+            "  Gemini 5h \u{258a}          7.3% 2h44m / week \u{2588}\u{2588}         20.3% 5d4h \u{2502} 3P 5h            0.0% 5h0m / week \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{258e}     52.0% 2d23h\n",
+            "  sandbox off \u{2502} token 4.6M (4.5M\u{2191} 122k\u{2193}) \u{2502} cache 95.1% \u{2502} 58m\n",
+        )
+    );
+
+    let ansi = emit_ansi(&full, &config);
+    assert!(
+        ansi.contains(";3;") && ansi.contains("Gemini 4 Neon (XHigh)"),
+        "HUD model must emit italic SGR: {ansi:?}"
+    );
+    assert!(
+        ansi.contains(";48;2;59;63;76m"),
+        "HUD solid usage bar must emit #3b3f4c dark track bg: {ansi:?}"
+    );
+    assert!(
+        ansi.contains(";1;") && ansi.contains("4.6M") && ansi.contains("95.1%"),
+        "HUD tokens and cache rate must emit bold numbers: {ansi:?}"
+    );
+
+    // 74-column narrowing must keep every row <= 74 cols and compact items before dropping them.
+    let narrow = render_lines_with_width(&frame, &config, Some(74));
+    let narrow_plain = emit_plain(&narrow, &config);
+    let narrow_lines: Vec<&str> = narrow_plain.lines().collect();
+    assert_eq!(narrow_lines.len(), 3);
+    for (idx, line) in narrow_lines.iter().enumerate() {
+        let w = str_display_width(line);
+        assert!(w <= 74, "HUD line {} width {w} > 74: {line:?}", idx + 1);
+    }
+    assert!(narrow_lines[0].contains("19.7%"));
+    assert!(narrow_lines[1].contains("Gemini 5h 7.3%"));
+    assert!(narrow_lines[2].contains("token 4.6M"));
 }

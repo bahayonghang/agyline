@@ -31,8 +31,8 @@ pub struct DbFingerprint {
 }
 
 /// The persisted per-session render state. `version`/`session_id` are checked on read; the rest
-/// carry the output-rate baseline, cache clock, and last response model across renders.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// carry the output-rate baseline, cache clock, last response model, and bounded transcript stats.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SessionState {
     pub version: u32,
     pub session_id: String,
@@ -44,6 +44,20 @@ pub struct SessionState {
     pub prev_model_key: String,
     pub cache_ts: i64,
     pub db_fingerprint: Option<DbFingerprint>,
+    #[serde(default)]
+    pub first_seen_sec: i64,
+    #[serde(default)]
+    pub transcript_first_ts: Option<i64>,
+    #[serde(default)]
+    pub transcript_fp: Option<DbFileStamp>,
+    #[serde(default)]
+    pub transcript_total_in: Option<i64>,
+    #[serde(default)]
+    pub transcript_total_out: Option<i64>,
+    #[serde(default)]
+    pub transcript_cache_read: Option<i64>,
+    #[serde(default)]
+    pub transcript_cache_valid: bool,
 }
 
 /// File key for a session: a lowercase UUID is used verbatim (safe and unique); any other id
@@ -115,6 +129,12 @@ pub fn read_db_fingerprint(conv_db: &Path) -> Option<DbFingerprint> {
         db: Some(db_stamp),
         wal: wal_stamp,
     })
+}
+
+/// Stamps one file (size + mtime) without reading its contents.
+pub fn read_file_stamp(path: &Path) -> Option<DbFileStamp> {
+    let meta = fs::metadata(path).ok().filter(|m| m.is_file())?;
+    Some(file_stamp(&meta))
 }
 
 fn file_stamp(meta: &fs::Metadata) -> DbFileStamp {

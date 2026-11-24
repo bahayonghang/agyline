@@ -57,11 +57,59 @@ pub struct ItemCatalogEntry {
 
 // These tables declare the per-item TOML option keys. The loader parses the same keys and the
 // configurator inspector edits them through its own `InspectorField` table.
-const CONTEXT_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
-    key: "show_remaining",
-    kind: ItemOptionKind::Bool,
-    summary: "Show remaining % instead of used %",
+const MODEL_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "style",
+    kind: ItemOptionKind::Text,
+    summary: "Display style: default or hud (italic with parenthetical effort)",
 }];
+
+const DIR_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "max_levels",
+    kind: ItemOptionKind::Text,
+    summary: "Trailing path depth (1..=8) with home tildefying",
+}];
+
+const GIT_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "style",
+    kind: ItemOptionKind::Text,
+    summary: "Display style: default or counts (main* !1 ?7)",
+}];
+
+const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
+    ItemOptionSpec {
+        key: "show_remaining",
+        kind: ItemOptionKind::Bool,
+        summary: "Show remaining % instead of used %",
+    },
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or bar",
+    },
+    ItemOptionSpec {
+        key: "bar_style",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar style: solid, block, or ascii",
+    },
+    ItemOptionSpec {
+        key: "bar_width",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar column width (4..=20)",
+    },
+];
+
+const CACHE_OPTS: [ItemOptionSpec; 2] = [
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or hit_rate",
+    },
+    ItemOptionSpec {
+        key: "show_ttl",
+        kind: ItemOptionKind::Bool,
+        summary: "Append 5-minute TTL and relay badge in hit_rate style",
+    },
+];
 
 const BUDGET_OPTS: [ItemOptionSpec; 4] = [
     ItemOptionSpec {
@@ -86,7 +134,7 @@ const BUDGET_OPTS: [ItemOptionSpec; 4] = [
     },
 ];
 
-const MODE_OPTS: [ItemOptionSpec; 2] = [
+const MODE_OPTS: [ItemOptionSpec; 3] = [
     ItemOptionSpec {
         key: "show_default",
         kind: ItemOptionKind::Bool,
@@ -97,6 +145,11 @@ const MODE_OPTS: [ItemOptionSpec; 2] = [
         kind: ItemOptionKind::Bool,
         summary: "Always render compact mode pill",
     },
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or badge (bold uppercase pill + vim tag)",
+    },
 ];
 
 const SUBAGENTS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
@@ -105,7 +158,13 @@ const SUBAGENTS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     summary: "Expand up to two active subagent names and models",
 }];
 
-const QUOTA_OPTS: [ItemOptionSpec; 4] = [
+const SANDBOX_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "show_when_off",
+    kind: ItemOptionKind::Bool,
+    summary: "Display 'sandbox off' when sandbox is disabled",
+}];
+
+const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bucket",
         kind: ItemOptionKind::Text,
@@ -126,6 +185,81 @@ const QUOTA_OPTS: [ItemOptionSpec; 4] = [
         kind: ItemOptionKind::Bool,
         summary: "Show count allowance fallback or note",
     },
+    ItemOptionSpec {
+        key: "show_used",
+        kind: ItemOptionKind::Bool,
+        summary: "Display used % instead of remaining %",
+    },
+    ItemOptionSpec {
+        key: "show_bar",
+        kind: ItemOptionKind::Bool,
+        summary: "Display proportional Usage Bar",
+    },
+    ItemOptionSpec {
+        key: "bar_style",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar style: solid, block, or ascii",
+    },
+    ItemOptionSpec {
+        key: "bar_width",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar column width (4..=20)",
+    },
+];
+
+const STATUS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "show_pending",
+    kind: ItemOptionKind::Bool,
+    summary: "Append (+N) pending input count when non-zero",
+}];
+
+const TOKENS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
+    key: "show_breakdown",
+    kind: ItemOptionKind::Bool,
+    summary: "Append (in↑ out↓) token breakdown",
+}];
+
+const QUOTA_GROUP_OPTS: [ItemOptionSpec; 8] = [
+    ItemOptionSpec {
+        key: "family",
+        kind: ItemOptionKind::Text,
+        summary: "Quota family: gemini, 3p, or @model",
+    },
+    ItemOptionSpec {
+        key: "label",
+        kind: ItemOptionKind::Text,
+        summary: "Group display label (default: family)",
+    },
+    ItemOptionSpec {
+        key: "show_used",
+        kind: ItemOptionKind::Bool,
+        summary: "Display used % instead of remaining %",
+    },
+    ItemOptionSpec {
+        key: "show_bar",
+        kind: ItemOptionKind::Bool,
+        summary: "Display proportional Usage Bar",
+    },
+    ItemOptionSpec {
+        key: "bar_style",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar style: solid, block, or ascii",
+    },
+    ItemOptionSpec {
+        key: "bar_width",
+        kind: ItemOptionKind::Text,
+        summary: "Usage Bar column width (4..=20)",
+    },
+    ItemOptionSpec {
+        key: "show_reset",
+        kind: ItemOptionKind::Bool,
+        summary: "Append compact reset countdown",
+    },
+    ItemOptionSpec {
+        key: "show_amount",
+        kind: ItemOptionKind::Bool,
+        summary: "Show count-only fallback (<N> left)",
+    },
 ];
 
 const COST_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
@@ -134,9 +268,9 @@ const COST_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     summary: "Append subagent USD cost share",
 }];
 
-// All 20 items in `ItemId::ALL` order, which the catalog test pins; the picker groups them by
+// All 24 items in `ItemId::ALL` order, which the catalog test pins; the picker groups them by
 // category. Base colors are the reference segment colors, priorities the narrowing order.
-const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
+const ITEM_CATALOG: [ItemCatalogEntry; 24] = [
     ItemCatalogEntry {
         id: ItemId::Model,
         key: "model",
@@ -145,7 +279,7 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_color: ColorToken::Model,
         allow_multiple: false,
         summary: "Active response/picker model and thinking effort",
-        options: &[],
+        options: &MODEL_OPTS,
     },
     ItemCatalogEntry {
         id: ItemId::Dir,
@@ -154,8 +288,8 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_priority: 3,
         default_color: ColorToken::Dir,
         allow_multiple: false,
-        summary: "Current workspace leaf directory",
-        options: &[],
+        summary: "Current workspace directory (leaf or multi-level)",
+        options: &DIR_OPTS,
     },
     ItemCatalogEntry {
         id: ItemId::Git,
@@ -164,8 +298,8 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_priority: 2,
         default_color: ColorToken::Git,
         allow_multiple: false,
-        summary: "Git branch, clean/dirty/conflict mark, and ahead/behind",
-        options: &[],
+        summary: "Git branch, dirty/conflict/count marks, and ahead/behind",
+        options: &GIT_OPTS,
     },
     ItemCatalogEntry {
         id: ItemId::Context,
@@ -174,7 +308,7 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_priority: 1,
         default_color: ColorToken::Context,
         allow_multiple: false,
-        summary: "Context window usage percentage and compact token count",
+        summary: "Context window usage percentage, Usage Bar, or token count",
         options: &CONTEXT_OPTS,
     },
     ItemCatalogEntry {
@@ -184,8 +318,8 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_priority: 4,
         default_color: ColorToken::Cache,
         allow_multiple: false,
-        summary: "5-minute prompt cache TTL, relay keepalive badge, and hit rate",
-        options: &[],
+        summary: "Prompt cache TTL, keepalive badge, and hit rate",
+        options: &CACHE_OPTS,
     },
     ItemCatalogEntry {
         id: ItemId::Speed,
@@ -214,7 +348,7 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_priority: 1,
         default_color: ColorToken::Auto,
         allow_multiple: false,
-        summary: "Execution mode and pending tool confirmation banner",
+        summary: "Execution mode, badge, and pending tool confirmation banner",
         options: &MODE_OPTS,
     },
     ItemCatalogEntry {
@@ -255,7 +389,7 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         default_color: ColorToken::Model,
         allow_multiple: false,
         summary: "Sandbox isolation and network allowance state",
-        options: &[],
+        options: &SANDBOX_OPTS,
     },
     ItemCatalogEntry {
         id: ItemId::Quota,
@@ -337,6 +471,46 @@ const ITEM_CATALOG: [ItemCatalogEntry; 20] = [
         summary: "In-memory account plan tier",
         options: &[],
     },
+    ItemCatalogEntry {
+        id: ItemId::Status,
+        key: "status",
+        category: ItemCategory::Runtime,
+        default_priority: 1,
+        default_color: ColorToken::Model,
+        allow_multiple: false,
+        summary: "Agent Status Badge (READY/WORKING/TOOL/CONFIRM) and pending inputs",
+        options: &STATUS_OPTS,
+    },
+    ItemCatalogEntry {
+        id: ItemId::Tokens,
+        key: "tokens",
+        category: ItemCategory::Usage,
+        default_priority: 3,
+        default_color: ColorToken::Separator,
+        allow_multiple: false,
+        summary: "Cumulative session token total with input/output breakdown",
+        options: &TOKENS_OPTS,
+    },
+    ItemCatalogEntry {
+        id: ItemId::Duration,
+        key: "duration",
+        category: ItemCategory::Session,
+        default_priority: 4,
+        default_color: ColorToken::Muted,
+        allow_multiple: false,
+        summary: "Elapsed session duration from bounded transcript head or first frame",
+        options: &[],
+    },
+    ItemCatalogEntry {
+        id: ItemId::QuotaGroup,
+        key: "quota_group",
+        category: ItemCategory::Usage,
+        default_priority: 2,
+        default_color: ColorToken::Ok,
+        allow_multiple: true,
+        summary: "Grouped 5h / week Quota Group with Usage Bar (repeatable per family)",
+        options: &QUOTA_GROUP_OPTS,
+    },
 ];
 
 /// The whole catalog in `ItemId::ALL` order, for item pickers and preset defaults.
@@ -389,6 +563,10 @@ pub fn evaluate_slot_dual(
         ItemId::Artifacts => runtime::eval_artifacts(slot, frame, config),
         ItemId::Version => runtime::eval_version(slot, frame, config),
         ItemId::Plan => runtime::eval_plan(slot, frame, config),
+        ItemId::Status => runtime::eval_status(slot, frame, config),
+        ItemId::Tokens => usage::eval_tokens(slot, frame, config),
+        ItemId::Duration => runtime::eval_duration(slot, frame, config),
+        ItemId::QuotaGroup => usage::eval_quota_group(slot, frame, config),
     }
 }
 
