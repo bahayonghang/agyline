@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::render::BarStyle;
 use crate::render::palette::{
     ColorSpec, ColorToken, EffectiveColorDepth, ResolvedColor, ResolvedPalette, parse_color_spec,
     resolve_effective_color_depth, resolve_palette, toml_value_to_color_spec,
@@ -151,6 +152,63 @@ impl OverflowMode {
     }
 }
 
+/// Row-level `Container Style` framing around rendered items: separator-divided `minimal`,
+/// padded surface `badge`, or Powerline-capped `pill`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ItemStyle {
+    #[default]
+    Minimal,
+    Badge,
+    Pill,
+}
+
+impl ItemStyle {
+    pub const ALL: [Self; 3] = [Self::Minimal, Self::Badge, Self::Pill];
+
+    pub const fn as_key(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Badge => "badge",
+            Self::Pill => "pill",
+        }
+    }
+
+    pub fn from_key(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "minimal" => Some(Self::Minimal),
+            "badge" => Some(Self::Badge),
+            "pill" => Some(Self::Pill),
+            _ => None,
+        }
+    }
+}
+
+/// Default `Compact Threshold` in terminal columns; `0` disables automatic single-row collapse.
+pub const DEFAULT_COMPACT_AT: usize = 88;
+/// Maximum configurable `Compact Threshold` in columns.
+pub const MAX_COMPACT_AT: usize = 500;
+/// Semantic separator aliases and their Unicode glyphs, shared by config, CLI, and TUI.
+pub const SEMANTIC_SEPARATORS: [(&str, &str); 5] = [
+    ("pipe", " \u{2502} "),
+    ("dashed", " \u{250a} "),
+    ("dot", " \u{2022} "),
+    ("square", " \u{25aa} "),
+    ("none", "  "),
+];
+
+/// Resolves semantic separator presets (`pipe`, `dashed`, `dot`, `square`, `none`) and strips
+/// control characters from arbitrary raw strings while preserving surrounding spacing.
+pub fn resolve_separator(raw: &str) -> String {
+    let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
+    let key = clean.trim().to_ascii_lowercase();
+    for (alias, rendered) in SEMANTIC_SEPARATORS {
+        if key == alias {
+            return rendered.to_string();
+        }
+    }
+    clean
+}
+
 /// What `presets::apply_preset` replaces: rows only, style only, or both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresetScope {
@@ -159,8 +217,7 @@ pub enum PresetScope {
     Style,
 }
 
-/// The 20-item catalog. `Quota` is the only repeatable id (one slot per bucket); the parser does
-/// not enforce uniqueness, the configurator's catalog does.
+/// The 24-item catalog. `Quota` and `QuotaGroup` are repeatable (one slot per bucket/family).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemId {
     Model,
@@ -183,11 +240,15 @@ pub enum ItemId {
     Artifacts,
     Version,
     Plan,
+    Status,
+    Tokens,
+    Duration,
+    QuotaGroup,
 }
 
 impl ItemId {
     /// Picker order, grouped Workspace, Usage, Runtime, then Session/Identity.
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 24] = [
         Self::Model,
         Self::Dir,
         Self::Git,
@@ -208,6 +269,10 @@ impl ItemId {
         Self::Artifacts,
         Self::Version,
         Self::Plan,
+        Self::Status,
+        Self::Tokens,
+        Self::Duration,
+        Self::QuotaGroup,
     ];
 
     pub const fn as_key(self) -> &'static str {
@@ -232,6 +297,10 @@ impl ItemId {
             Self::Artifacts => "artifacts",
             Self::Version => "version",
             Self::Plan => "plan",
+            Self::Status => "status",
+            Self::Tokens => "tokens",
+            Self::Duration => "duration",
+            Self::QuotaGroup => "quota_group",
         }
     }
 
@@ -257,6 +326,10 @@ impl ItemId {
             "artifacts" => Some(Self::Artifacts),
             "version" => Some(Self::Version),
             "plan" => Some(Self::Plan),
+            "status" => Some(Self::Status),
+            "tokens" => Some(Self::Tokens),
+            "duration" => Some(Self::Duration),
+            "quota_group" | "quota-group" => Some(Self::QuotaGroup),
             _ => None,
         }
     }
@@ -264,10 +337,15 @@ impl ItemId {
     /// Narrowing rank when a slot sets no valid `priority`: 1 survives longest, 5 drops first.
     pub const fn default_priority(self) -> u8 {
         match self {
-            Self::Model | Self::Context | Self::Mode => 1,
-            Self::Git | Self::Subagents | Self::Queue | Self::Vim | Self::Agent => 2,
-            Self::Dir | Self::Budget | Self::Quota | Self::Cost | Self::Tasks => 3,
-            Self::Cache | Self::Sandbox | Self::Title | Self::Artifacts => 4,
+            Self::Status | Self::Model | Self::Context | Self::Mode => 1,
+            Self::Git
+            | Self::QuotaGroup
+            | Self::Subagents
+            | Self::Queue
+            | Self::Vim
+            | Self::Agent => 2,
+            Self::Dir | Self::Budget | Self::Quota | Self::Tokens | Self::Cost | Self::Tasks => 3,
+            Self::Cache | Self::Duration | Self::Sandbox | Self::Title | Self::Artifacts => 4,
             Self::Speed | Self::Version | Self::Plan => 5,
         }
     }
@@ -320,6 +398,30 @@ pub struct ItemSlot {
     pub compact: Option<bool>,
     /// Subagents: expand up to two running names and models.
     pub show_detail: Option<bool>,
+    /// Visual variant (`hud`, `badge`, `bar`, `counts`, `hit_rate`) for HUD-styled items.
+    pub style: Option<String>,
+    /// Dir: max trailing path levels to show (`1..=8`) with home tildefying.
+    pub max_levels: Option<u8>,
+    /// Sandbox: render `sandbox off` even when disabled.
+    pub show_when_off: Option<bool>,
+    /// Quota / QuotaGroup: display used percentage instead of remaining percentage.
+    pub show_used: Option<bool>,
+    /// Context / Quota / QuotaGroup: display proportional `Usage Bar`.
+    pub show_bar: Option<bool>,
+    /// `Usage Bar` style (`cells`, `line`, `parallelogram`, `braille`, `solid`, `block`, `ascii`).
+    pub bar_style: Option<String>,
+    /// `Usage Bar` column width (`4..=20`, default `10`).
+    pub bar_width: Option<u8>,
+    /// QuotaGroup: model family (`gemini`, `3p`, `@model`).
+    pub family: Option<String>,
+    /// Cache (hit_rate): also append 5-minute TTL and relay badge when active.
+    pub show_ttl: Option<bool>,
+    /// Tokens: append `(in↑ out↓)` breakdown after total.
+    pub show_breakdown: Option<bool>,
+    /// Status: append `(+N)` pending input count when non-zero.
+    pub show_pending: Option<bool>,
+    /// Context (bar): append `(used/window)` token counts after percentage.
+    pub show_tokens: Option<bool>,
 }
 
 impl ItemSlot {
@@ -349,6 +451,18 @@ impl ItemSlot {
             show_default: None,
             compact: None,
             show_detail: None,
+            style: None,
+            max_levels: None,
+            show_when_off: None,
+            show_used: None,
+            show_bar: None,
+            bar_style: None,
+            bar_width: None,
+            family: None,
+            show_ttl: None,
+            show_breakdown: None,
+            show_pending: None,
+            show_tokens: None,
         }
     }
 
@@ -367,6 +481,18 @@ impl ItemSlot {
             && self.show_default.is_none()
             && self.compact.is_none()
             && self.show_detail.is_none()
+            && self.style.is_none()
+            && self.max_levels.is_none()
+            && self.show_when_off.is_none()
+            && self.show_used.is_none()
+            && self.show_bar.is_none()
+            && self.bar_style.is_none()
+            && self.bar_width.is_none()
+            && self.family.is_none()
+            && self.show_ttl.is_none()
+            && self.show_breakdown.is_none()
+            && self.show_pending.is_none()
+            && self.show_tokens.is_none()
     }
 
     /// The slot's priority when it is inside 1..=5, else the item default; bad values are ignored,
@@ -423,16 +549,20 @@ impl PaletteOverrides {
     }
 }
 
-/// Coloring thresholds. The pairs run in opposite directions: context counts used percent up,
-/// quota counts remaining percent down.
+/// Coloring thresholds. The triples run in opposite directions: context counts used percent up
+/// (`warn < high < crit`), quota counts remaining percent down (`warn > high > crit`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThresholdsConfig {
-    /// Used percent, 0..=100, where context turns warn; must stay below `context_crit`.
+    /// Used percent, 0..=100, where context turns warn; must stay below `context_high`.
     pub context_warn: f64,
+    /// Used percent, 0..=100, where context turns high; strictly between `context_warn` and `context_crit`.
+    pub context_high: f64,
     /// Used percent, 0..=100, where context turns crit.
     pub context_crit: f64,
-    /// Remaining percent, 0..=100, where quota turns warn; must stay above `quota_crit`.
+    /// Remaining percent, 0..=100, where quota turns warn; must stay above `quota_high`.
     pub quota_warn: i32,
+    /// Remaining percent, 0..=100, where quota turns high; strictly between `quota_crit` and `quota_warn`.
+    pub quota_high: i32,
     /// Remaining percent, 0..=100, where quota turns crit.
     pub quota_crit: i32,
     /// Cache countdown seconds at or below which the TTL turns warn; capped at one day.
@@ -442,11 +572,13 @@ pub struct ThresholdsConfig {
 impl Default for ThresholdsConfig {
     fn default() -> Self {
         Self {
-            // statusline.ps1: used percent >= 80 is crit, >= 50 is warn.
+            // statusline.ps1: used percent >= 80 is crit, >= 50 is warn; 75 splits the high tier.
             context_warn: 50.0,
+            context_high: 75.0,
             context_crit: 80.0,
-            // statusline.ps1: remaining percent < 20 is crit, < 45 is warn.
+            // statusline.ps1: remaining percent < 20 is crit, < 45 is warn; 25 splits the high tier.
             quota_warn: 45,
+            quota_high: 25,
             quota_crit: 20,
             // statusline.py turns the countdown warn inside the last 60 s of the 300 s window.
             cache_warn_secs: 60,
@@ -467,9 +599,16 @@ pub struct ConfigDoc {
     pub theme: ThemeSetting,
     pub glyphs: GlyphSet,
     pub color_depth: ColorDepth,
+    pub item_style: ItemStyle,
+    /// Top-level default `Usage Bar` style, overridable per slot via `bar_style`.
+    pub bar_style: BarStyle,
+    /// Enables per-cell RGB linear gradient interpolation across filled `Usage Bar` cells.
+    pub bar_gradient: bool,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
+    /// `Compact Threshold` in columns (`0` disables automatic single-row collapse).
+    pub compact_at: usize,
     pub overflow: OverflowMode,
     /// Freshness window for the cached git state, in ms. The render reads that cache and never
     /// waits on git; a detached `__refresh-git` worker refills it.
@@ -497,11 +636,15 @@ impl ConfigDoc {
             theme: ThemeSetting::Auto,
             glyphs: GlyphSet::Nerd,
             color_depth: ColorDepth::Auto,
+            item_style: ItemStyle::Minimal,
+            bar_style: BarStyle::Line,
+            bar_gradient: false,
             // statusline.ps1 joins items with $SEP_PIPE = " | ".
             separator: " | ".to_string(),
             // Both reference scripts default the indent to two spaces.
             indent: "  ".to_string(),
             single_line: false,
+            compact_at: 0,
             overflow: OverflowMode::Fit,
             // statusline.py reuses its vcs cache while it is under 2 s old.
             git_cache_ms: 2000,
@@ -515,26 +658,7 @@ impl ConfigDoc {
 
 impl Default for ConfigDoc {
     fn default() -> Self {
-        let mut doc = Self::base(
-            "default",
-            presets::workspace_and_runtime_lines(ItemId::Cost),
-        );
-        doc.lines[1].splice(
-            1..1,
-            [
-                (ModelQuotaPeriod::FiveHours, "5h"),
-                (ModelQuotaPeriod::Weekly, "weekly"),
-            ]
-            .map(|(period, label)| {
-                let mut slot = ItemSlot::new(ItemId::Quota);
-                slot.bucket = Some(period.selector().to_string());
-                slot.label = Some(label.to_string());
-                slot.show_reset = Some(true);
-                slot.priority = Some(2);
-                slot
-            }),
-        );
-        doc
+        presets::default_preset_doc()
     }
 }
 
@@ -714,9 +838,21 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
         "color_depth = {}",
         quote_toml_str(doc.color_depth.as_key())
     );
+    let _ = writeln!(
+        out,
+        "item_style = {}",
+        quote_toml_str(doc.item_style.as_key())
+    );
+    let _ = writeln!(
+        out,
+        "bar_style = {}",
+        quote_toml_str(doc.bar_style.as_key())
+    );
+    let _ = writeln!(out, "bar_gradient = {}", doc.bar_gradient);
     let _ = writeln!(out, "separator = {}", quote_toml_str(&doc.separator));
     let _ = writeln!(out, "indent = {}", quote_toml_str(&doc.indent));
     let _ = writeln!(out, "single_line = {}", doc.single_line);
+    let _ = writeln!(out, "compact_at = {}", doc.compact_at);
     let _ = writeln!(out, "overflow = {}", quote_toml_str(doc.overflow.as_key()));
 
     out.push_str("\n[thresholds]\n");
@@ -727,10 +863,16 @@ pub fn serialize_config_doc(doc: &ConfigDoc) -> String {
     );
     let _ = writeln!(
         out,
+        "context_high = {}",
+        format_toml_num(doc.thresholds.context_high)
+    );
+    let _ = writeln!(
+        out,
         "context_crit = {}",
         format_toml_num(doc.thresholds.context_crit)
     );
     let _ = writeln!(out, "quota_warn = {}", doc.thresholds.quota_warn);
+    let _ = writeln!(out, "quota_high = {}", doc.thresholds.quota_high);
     let _ = writeln!(out, "quota_crit = {}", doc.thresholds.quota_crit);
     let _ = writeln!(out, "cache_warn_secs = {}", doc.thresholds.cache_warn_secs);
 
@@ -784,9 +926,13 @@ pub struct EffectiveConfig {
     pub color_depth: ColorDepth,
     /// What `color_depth` resolved to; the renderer quantizes every color with this.
     pub effective_color_depth: EffectiveColorDepth,
+    pub item_style: ItemStyle,
+    pub bar_style: BarStyle,
+    pub bar_gradient: bool,
     pub separator: String,
     pub indent: String,
     pub single_line: bool,
+    pub compact_at: usize,
     pub overflow: OverflowMode,
     /// True when any mode slot asks for the default pill; the env force below still wins.
     pub show_default_mode: bool,
@@ -906,6 +1052,18 @@ impl EffectiveConfig {
             .any(|slot| slot.id == ItemId::Mode && slot.show_default == Some(true));
         let show_default_mode = force_show_default_mode.unwrap_or(any_slot_shows_default);
 
+        let resolved_sep = resolve_separator(&doc.separator);
+        let separator = if doc.glyphs == GlyphSet::Ascii {
+            match resolved_sep.as_str() {
+                " \u{2502} " | " \u{250a} " => " | ".to_string(),
+                " \u{2022} " => " . ".to_string(),
+                " \u{25aa} " => " - ".to_string(),
+                _ => resolved_sep,
+            }
+        } else {
+            resolved_sep
+        };
+
         Self {
             preset: doc.preset.clone(),
             palette: doc.palette.clone(),
@@ -914,9 +1072,13 @@ impl EffectiveConfig {
             glyphs: doc.glyphs,
             color_depth: doc.color_depth,
             effective_color_depth,
-            separator: doc.separator.clone(),
+            item_style: doc.item_style,
+            bar_style: doc.bar_style,
+            bar_gradient: doc.bar_gradient,
+            separator,
             indent,
             single_line,
+            compact_at: doc.compact_at,
             overflow: doc.overflow,
             show_default_mode,
             force_show_default_mode,
@@ -934,6 +1096,31 @@ impl EffectiveConfig {
     pub fn resolve_span_color(&self, spec: impl Into<ColorSpec>) -> Option<ResolvedColor> {
         let resolved = self.resolved_palette.resolve_spec(spec.into());
         resolved.quantize(self.effective_color_depth)
+    }
+
+    /// Resolves `Container Style` against terminal capabilities: `pill` degrades to `badge`
+    /// without Nerd Font glyphs, and both degrade to `minimal` below 256 colors.
+    pub fn effective_item_style(&self) -> ItemStyle {
+        match self.effective_color_depth {
+            EffectiveColorDepth::Ansi16 | EffectiveColorDepth::None => ItemStyle::Minimal,
+            EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256 => {
+                match self.item_style {
+                    ItemStyle::Pill if self.glyphs != GlyphSet::Nerd => ItemStyle::Badge,
+                    ItemStyle::Minimal => ItemStyle::Minimal,
+                    ItemStyle::Badge => ItemStyle::Badge,
+                    ItemStyle::Pill => ItemStyle::Pill,
+                }
+            }
+        }
+    }
+
+    /// Row separator placed between adjacent items: single space in framed container modes,
+    /// otherwise the resolved `separator` string.
+    pub fn effective_row_separator(&self) -> &str {
+        match self.effective_item_style() {
+            ItemStyle::Minimal => &self.separator,
+            ItemStyle::Badge | ItemStyle::Pill => " ",
+        }
     }
 }
 
@@ -958,12 +1145,15 @@ fn parse_config_overlay_with_home(
     if allow_preset && let Some(preset_val) = tbl.get("preset") {
         if let Some(preset_name) = preset_val.as_str() {
             let trimmed = preset_name.trim();
-            if !trimmed.is_empty()
-                && !presets::apply_preset(doc, trimmed, PresetScope::All, home_dir)
-            {
-                warnings.push(format!(
-                    "unknown preset '{trimmed}', using the default layout"
-                ));
+            if !trimmed.is_empty() {
+                if let Some(built) = presets::build_preset_doc(trimmed, home_dir) {
+                    doc.thresholds = built.thresholds;
+                    let _ = presets::apply_preset(doc, trimmed, PresetScope::All, home_dir);
+                } else {
+                    warnings.push(format!(
+                        "unknown preset '{trimmed}', using the default layout"
+                    ));
+                }
             }
         } else {
             warnings.push("invalid 'preset': expected string".to_string());
@@ -1015,6 +1205,22 @@ fn parse_config_overlay_with_home(
                     "invalid 'color_depth': expected auto, truecolor, 256, 16, or none".to_string(),
                 ),
             },
+            "item_style" => match val.as_str().and_then(ItemStyle::from_key) {
+                Some(style) => doc.item_style = style,
+                None => warnings
+                    .push("invalid 'item_style': expected minimal, badge, or pill".to_string()),
+            },
+            "bar_style" => match val.as_str().and_then(BarStyle::from_key) {
+                Some(bs) => doc.bar_style = bs,
+                None => warnings.push(
+                    "invalid 'bar_style': expected cells, line, parallelogram, braille, solid, block, or ascii"
+                        .to_string(),
+                ),
+            },
+            "bar_gradient" => match val.as_bool() {
+                Some(b) => doc.bar_gradient = b,
+                None => warnings.push("invalid 'bar_gradient': expected boolean".to_string()),
+            },
             "separator" => match val.as_str() {
                 Some(s) => doc.separator = s.to_string(),
                 None => warnings.push("invalid 'separator': expected string".to_string()),
@@ -1026,6 +1232,14 @@ fn parse_config_overlay_with_home(
             "single_line" => match val.as_bool() {
                 Some(b) => doc.single_line = b,
                 None => warnings.push("invalid 'single_line': expected boolean".to_string()),
+            },
+            "compact_at" => match val.as_integer() {
+                Some(v) if (0..=MAX_COMPACT_AT as i64).contains(&v) => {
+                    doc.compact_at = v as usize;
+                }
+                _ => warnings.push(format!(
+                    "invalid 'compact_at': expected integer in 0..={MAX_COMPACT_AT}"
+                )),
             },
             "overflow" => match val.as_str().and_then(OverflowMode::from_key) {
                 Some(om) => doc.overflow = om,
@@ -1103,22 +1317,44 @@ fn parse_config_overlay_with_home(
     }
 }
 
+fn fallback_context_high(default_high: f64, warn: f64, crit: f64) -> f64 {
+    if default_high > warn && default_high < crit {
+        default_high
+    } else {
+        (warn + crit) * 0.5
+    }
+}
+
+fn fallback_quota_high(default_high: i32, crit: i32, warn: i32) -> i32 {
+    if default_high > crit && default_high < warn {
+        default_high
+    } else {
+        (crit + warn) / 2
+    }
+}
+
 fn parse_thresholds_table(
     tbl: &toml::map::Map<String, toml::Value>,
     thresholds: &mut ThresholdsConfig,
     warnings: &mut Vec<String>,
 ) {
-    // Stage each pair and commit it only if both values are valid and ordered, so a half-valid
-    // edit cannot leave warn and crit inverted.
+    // Stage each group and commit only when ordered, so a half-valid edit cannot invert bounds.
+    // Omitting optional `*_high` keys preserves legacy configs by keeping default or midpoint.
     let mut cand_ctx_warn = thresholds.context_warn;
+    let mut cand_ctx_high = thresholds.context_high;
     let mut cand_ctx_crit = thresholds.context_crit;
     let mut ctx_touched = false;
-    let mut ctx_valid = true;
+    let mut ctx_bounds_valid = true;
+    let mut ctx_high_touched = false;
+    let mut ctx_high_valid = true;
 
     let mut cand_q_warn = thresholds.quota_warn;
+    let mut cand_q_high = thresholds.quota_high;
     let mut cand_q_crit = thresholds.quota_crit;
     let mut q_touched = false;
-    let mut q_valid = true;
+    let mut q_bounds_valid = true;
+    let mut q_high_touched = false;
+    let mut q_high_valid = true;
 
     for (k, v) in tbl {
         match k.as_str() {
@@ -1127,8 +1363,18 @@ fn parse_thresholds_table(
                 if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
                     cand_ctx_warn = num;
                 } else {
-                    ctx_valid = false;
+                    ctx_bounds_valid = false;
                     warnings.push("invalid 'thresholds.context_warn'".to_string());
+                }
+            }
+            "context_high" => {
+                ctx_touched = true;
+                ctx_high_touched = true;
+                if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
+                    cand_ctx_high = num;
+                } else {
+                    ctx_high_valid = false;
+                    warnings.push("invalid 'thresholds.context_high'".to_string());
                 }
             }
             "context_crit" => {
@@ -1136,7 +1382,7 @@ fn parse_thresholds_table(
                 if let Some(num) = toml_as_f64(v).filter(|n| (0.0..=100.0).contains(n)) {
                     cand_ctx_crit = num;
                 } else {
-                    ctx_valid = false;
+                    ctx_bounds_valid = false;
                     warnings.push("invalid 'thresholds.context_crit'".to_string());
                 }
             }
@@ -1149,8 +1395,22 @@ fn parse_thresholds_table(
                 {
                     cand_q_warn = num;
                 } else {
-                    q_valid = false;
+                    q_bounds_valid = false;
                     warnings.push("invalid 'thresholds.quota_warn'".to_string());
+                }
+            }
+            "quota_high" => {
+                q_touched = true;
+                q_high_touched = true;
+                if let Some(num) = v
+                    .as_integer()
+                    .and_then(|i| i32::try_from(i).ok())
+                    .filter(|n| (0..=100).contains(n))
+                {
+                    cand_q_high = num;
+                } else {
+                    q_high_valid = false;
+                    warnings.push("invalid 'thresholds.quota_high'".to_string());
                 }
             }
             "quota_crit" => {
@@ -1162,7 +1422,7 @@ fn parse_thresholds_table(
                 {
                     cand_q_crit = num;
                 } else {
-                    q_valid = false;
+                    q_bounds_valid = false;
                     warnings.push("invalid 'thresholds.quota_crit'".to_string());
                 }
             }
@@ -1182,12 +1442,31 @@ fn parse_thresholds_table(
         }
     }
 
-    // Context counts up: warn must stay below crit, else both keep their defaults.
+    // Context counts up: warn < high < crit; inverted outer bounds fall back to defaults.
     if ctx_touched {
-        if ctx_valid && cand_ctx_warn < cand_ctx_crit {
+        if ctx_bounds_valid && cand_ctx_warn < cand_ctx_crit {
+            let default_high = thresholds.context_high;
             thresholds.context_warn = cand_ctx_warn;
             thresholds.context_crit = cand_ctx_crit;
-        } else if ctx_valid {
+            if ctx_high_touched {
+                if ctx_high_valid && cand_ctx_warn < cand_ctx_high && cand_ctx_high < cand_ctx_crit
+                {
+                    thresholds.context_high = cand_ctx_high;
+                } else {
+                    if ctx_high_valid {
+                        warnings.push(
+                            "out-of-order 'thresholds.context_high' (require context_warn < context_high < context_crit); using fallback"
+                                .to_string(),
+                        );
+                    }
+                    thresholds.context_high =
+                        fallback_context_high(default_high, cand_ctx_warn, cand_ctx_crit);
+                }
+            } else {
+                thresholds.context_high =
+                    fallback_context_high(default_high, cand_ctx_warn, cand_ctx_crit);
+            }
+        } else if ctx_bounds_valid {
             warnings.push(
                 "inverted context thresholds (require context_warn < context_crit); using defaults"
                     .to_string(),
@@ -1195,14 +1474,31 @@ fn parse_thresholds_table(
         }
     }
 
-    // Quota counts down: warn must stay above crit, else both keep their defaults.
+    // Quota counts down: require warn >= crit + 2 so an integer `quota_high` fits strictly between.
     if q_touched {
-        if q_valid && cand_q_warn > cand_q_crit {
+        if q_bounds_valid && cand_q_warn >= cand_q_crit + 2 {
+            let default_high = thresholds.quota_high;
             thresholds.quota_warn = cand_q_warn;
             thresholds.quota_crit = cand_q_crit;
-        } else if q_valid {
+            if q_high_touched {
+                if q_high_valid && cand_q_crit < cand_q_high && cand_q_high < cand_q_warn {
+                    thresholds.quota_high = cand_q_high;
+                } else {
+                    if q_high_valid {
+                        warnings.push(
+                            "out-of-order 'thresholds.quota_high' (require quota_crit < quota_high < quota_warn); using fallback"
+                                .to_string(),
+                        );
+                    }
+                    thresholds.quota_high =
+                        fallback_quota_high(default_high, cand_q_crit, cand_q_warn);
+                }
+            } else {
+                thresholds.quota_high = fallback_quota_high(default_high, cand_q_crit, cand_q_warn);
+            }
+        } else if q_bounds_valid {
             warnings.push(
-                "inverted quota thresholds (require quota_warn > quota_crit); using defaults"
+                "inverted or too-narrow quota thresholds (require quota_warn >= quota_crit + 2); using defaults"
                     .to_string(),
             );
         }
@@ -1352,6 +1648,79 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                         Some(b) => slot.show_detail = Some(b),
                         None => warnings.push(format!("invalid '{id_str}.show_detail'")),
                     },
+                    "style" => match v.as_str() {
+                        Some(s) if !s.trim().is_empty() => slot.style = Some(s.trim().to_string()),
+                        _ => warnings.push(format!("invalid '{id_str}.style': expected string")),
+                    },
+                    "max_levels" => {
+                        if let Some(n) = v
+                            .as_integer()
+                            .and_then(|i| u8::try_from(i).ok())
+                            .filter(|n| (1..=8).contains(n))
+                        {
+                            slot.max_levels = Some(n);
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.max_levels': expected integer 1..=8"
+                            ));
+                        }
+                    }
+                    "show_when_off" => match v.as_bool() {
+                        Some(b) => slot.show_when_off = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_when_off'")),
+                    },
+                    "show_used" => match v.as_bool() {
+                        Some(b) => slot.show_used = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_used'")),
+                    },
+                    "show_bar" => match v.as_bool() {
+                        Some(b) => slot.show_bar = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_bar'")),
+                    },
+                    "bar_style" => {
+                        if let Some(bs) = v.as_str().and_then(BarStyle::from_key) {
+                            slot.bar_style = Some(bs.as_key().to_string());
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.bar_style': expected cells, line, parallelogram, braille, solid, block, or ascii"
+                            ));
+                        }
+                    }
+                    "bar_width" => {
+                        if let Some(w) = v
+                            .as_integer()
+                            .and_then(|i| u8::try_from(i).ok())
+                            .filter(|w| (4..=20).contains(w))
+                        {
+                            slot.bar_width = Some(w);
+                        } else {
+                            warnings.push(format!(
+                                "invalid '{id_str}.bar_width': expected integer 4..=20"
+                            ));
+                        }
+                    }
+                    "family" => match v.as_str() {
+                        Some(s) if !s.trim().is_empty() => {
+                            slot.family = Some(s.trim().to_string());
+                        }
+                        _ => warnings.push(format!("invalid '{id_str}.family': expected string")),
+                    },
+                    "show_ttl" => match v.as_bool() {
+                        Some(b) => slot.show_ttl = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_ttl'")),
+                    },
+                    "show_breakdown" => match v.as_bool() {
+                        Some(b) => slot.show_breakdown = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_breakdown'")),
+                    },
+                    "show_pending" => match v.as_bool() {
+                        Some(b) => slot.show_pending = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_pending'")),
+                    },
+                    "show_tokens" => match v.as_bool() {
+                        Some(b) => slot.show_tokens = Some(b),
+                        None => warnings.push(format!("invalid '{id_str}.show_tokens'")),
+                    },
                     other => warnings.push(format!("unknown option '{id_str}.{other}' ignored")),
                 }
             }
@@ -1475,6 +1844,42 @@ fn format_item_slot_toml(slot: &ItemSlot) -> String {
     }
     if let Some(v) = slot.show_detail {
         fields.push(format!("show_detail = {v}"));
+    }
+    if let Some(ref st) = slot.style {
+        fields.push(format!("style = {}", quote_toml_str(st)));
+    }
+    if let Some(ml) = slot.max_levels {
+        fields.push(format!("max_levels = {ml}"));
+    }
+    if let Some(v) = slot.show_when_off {
+        fields.push(format!("show_when_off = {v}"));
+    }
+    if let Some(v) = slot.show_used {
+        fields.push(format!("show_used = {v}"));
+    }
+    if let Some(v) = slot.show_bar {
+        fields.push(format!("show_bar = {v}"));
+    }
+    if let Some(ref bs) = slot.bar_style {
+        fields.push(format!("bar_style = {}", quote_toml_str(bs)));
+    }
+    if let Some(bw) = slot.bar_width {
+        fields.push(format!("bar_width = {bw}"));
+    }
+    if let Some(ref fam) = slot.family {
+        fields.push(format!("family = {}", quote_toml_str(fam)));
+    }
+    if let Some(v) = slot.show_ttl {
+        fields.push(format!("show_ttl = {v}"));
+    }
+    if let Some(v) = slot.show_breakdown {
+        fields.push(format!("show_breakdown = {v}"));
+    }
+    if let Some(v) = slot.show_pending {
+        fields.push(format!("show_pending = {v}"));
+    }
+    if let Some(v) = slot.show_tokens {
+        fields.push(format!("show_tokens = {v}"));
     }
     if let Some(ref ic) = slot.icon {
         fields.push(format!("icon = {}", quote_toml_str(ic)));

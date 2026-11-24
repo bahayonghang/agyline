@@ -30,11 +30,40 @@ pub struct RenderEnv<'a> {
     pub spawner: &'a dyn Spawner,
 }
 
+const RENDER_ENV_KEYS: [&str; 21] = [
+    "AGYLINE_HOME",
+    "AGY_THEME",
+    "AGY_STATUSLINE_LINES",
+    "AGY_STATUSLINE_INDENT",
+    "AGY_SHOW_DEFAULT_MODE",
+    "AGY_CACHE_RELAY",
+    "USERPROFILE",
+    "HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "COLORFGBG",
+    "NO_COLOR",
+    "COLORTERM",
+    "TERM",
+    "TERM_PROGRAM",
+    "ITERM_SESSION_ID",
+    "WT_SESSION",
+    "KITTY_WINDOW_ID",
+    "GHOSTTY_RESOURCES_DIR",
+    "WEZTERM_EXECUTABLE",
+];
+
 impl<'a> RenderEnv<'a> {
-    /// The one place a render touches the process: env, clock and directories. Spawns nothing and
-    /// reads no config or state file; that happens later against the values captured here.
+    /// The one place a render touches the process: targeted env keys, clock and directories.
+    /// Spawns nothing and reads no config or state file; that happens later against this snapshot.
     pub fn from_process(spawner: &'a dyn Spawner) -> Self {
-        let env_vars: BTreeMap<String, String> = std::env::vars().collect();
+        let mut env_vars = BTreeMap::new();
+        for &key in &RENDER_ENV_KEYS {
+            if let Ok(val) = std::env::var(key) {
+                env_vars.insert(key.to_string(), val);
+            }
+        }
         let lookup = |k: &str| env_vars.get(k).cloned();
         let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
         let home_dir = crate::config::resolve_home_dir(&lookup, &user_home);
@@ -98,6 +127,19 @@ pub fn render_lines_with_width(
         config_broken: config.config_broken,
         slot_outcomes,
     }
+}
+
+/// Live-pipe fast entry point: parses stdin, resolves config, collects only demanded sources,
+/// renders, and formats ANSI without allocating an unused plain-text copy.
+pub fn run_live_frame_ansi(raw_stdin: &[u8], env: &RenderEnv<'_>) -> String {
+    let Some(payload) = parse_stdin_payload(raw_stdin) else {
+        // `agy` shows our stdout under the conversation: a bad frame must print nothing at all.
+        return String::new();
+    };
+    let config = EffectiveConfig::resolve(&env.home_dir, &env.env_vars);
+    let frame = collect::collect_frame(payload, &config, env);
+    let rendered = render_lines(&frame, &config);
+    emit_ansi(&rendered, &config)
 }
 
 /// The whole live pipeline for one piped frame: parse -> config -> collect -> render -> emit.

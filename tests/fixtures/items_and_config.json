@@ -3,7 +3,7 @@
     {
       "id": "IC01_six_opt_in_items_nerd",
       "description": "All 6 opt-in items (vim, agent, artifacts, plan, version, title) render with Nerd icons and single-line sanitization",
-      "config_toml": "[[line]]\nitems = [\"vim\", \"agent\", \"artifacts\", \"plan\", \"version\", \"title\"]\n",
+      "config_toml": "palette = \"terminal\"\n[[line]]\nitems = [\"vim\", \"agent\", \"artifacts\", \"plan\", \"version\", \"title\"]\n",
       "payload": {
         "session_id": "ic01",
         "vim": { "mode": "insert" },
@@ -13,13 +13,13 @@
         "version": "v1.5.9",
         "conversation_title": "Fix\n  cache"
       },
-      "expected_plain": "  \ue62b INSERT | \udb81\udea9 ops | \uf1c9 3 artifacts | \udb80\udda5 Ultra | v1.5.9 | \udb82\udf79 Fix cache\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\ue62b INSERT\u001b[0;37m | \u001b[0;96m\udb81\udea9 ops\u001b[0;37m | \u001b[0;94m\uf1c9 3 artifacts\u001b[0;37m | \u001b[0;95m\udb80\udda5 Ultra\u001b[0;37m | \u001b[0;90mv1.5.9\u001b[0;37m | \u001b[0;90m\udb82\udf79 Fix cache\u001b[0m\n"
+      "expected_plain": "  \ue62b INSERT │ \udb81\udea9 ops │ \uf1c9 3 artifacts │ \udb80\udda5 Ultra │ v1.5.9 │ \udb82\udf79 Fix cache\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\ue62b INSERT\u001b[0;37m │ \u001b[0;96m\udb81\udea9 ops\u001b[0;37m │ \u001b[0;94m\uf1c9 3 artifacts\u001b[0;37m │ \u001b[0;95m\udb80\udda5 Ultra\u001b[0;37m │ \u001b[0;90mv1.5.9\u001b[0;37m │ \u001b[0;90m\udb82\udf79 Fix cache\u001b[0m\n"
     },
     {
       "id": "IC02_split_quota_buckets_and_cost_subagent",
       "description": "Multiple atomic quota buckets with reset countdowns and atomic cost with subagent share",
-      "config_toml": "[[line]]\nitems = [\n  { id = \"quota\", bucket = \"gemini-5h\", label = \"gem\", show_reset = true },\n  { id = \"quota\", bucket = \"3p-5h\", label = \"3p\", show_reset = true },\n  { id = \"cost\", show_subagent = true },\n]\n",
+      "config_toml": "palette = \"terminal\"\n[[line]]\nitems = [\n  { id = \"quota\", bucket = \"gemini-5h\", label = \"gem\", show_reset = true },\n  { id = \"quota\", bucket = \"3p-5h\", label = \"3p\", show_reset = true },\n  { id = \"cost\", show_subagent = true },\n]\n",
       "payload": {
         "session_id": "ic02",
         "quota": {
@@ -28,13 +28,13 @@
         },
         "cost": { "total_usd": 1.42, "subagent_usd": 0.64 }
       },
-      "expected_plain": "  \udb80\udc81 72% gem (3h12m) | \udb80\udc7c 30% 3p (48m) | $1.42 (sub $0.64)\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;92m\udb80\udc81 72% gem (3h12m)\u001b[0;37m | \u001b[0;33m\udb80\udc7c 30% 3p (48m)\u001b[0;37m | \u001b[0;33m$1.42 (sub $0.64)\u001b[0m\n"
+      "expected_plain": "  \udb80\udc81 72% gem (3h12m) │ \udb80\udc7c 30% 3p (48m) │ $1.42 (sub $0.64)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;92m\udb80\udc81 72% gem (3h12m)\u001b[0;37m │ \u001b[0;33m\udb80\udc7c 30% 3p (48m)\u001b[0;37m │ \u001b[0;33m$1.42 (sub $0.64)\u001b[0m\n"
     },
     {
       "id": "IC03_extended_item_options",
       "description": "context.show_remaining, mode.show_default + compact, and subagents.show_detail folding top 2 active and ignoring role prompts",
-      "config_toml": "[[line]]\nitems = [\n  { id = \"context\", show_remaining = true },\n  { id = \"mode\", show_default = true, compact = true },\n  { id = \"subagents\", show_detail = true },\n]\n",
+      "config_toml": "palette = \"terminal\"\n[[line]]\nitems = [\n  { id = \"context\", show_remaining = true },\n  { id = \"mode\", show_default = true, compact = true },\n  { id = \"subagents\", show_detail = true },\n]\n",
       "payload": {
         "session_id": "ic03",
         "context_window": {
@@ -47,13 +47,13 @@
           { "status": "thinking", "name": "c", "model": "gpt-5" }
         ]
       },
-      "expected_plain": "  \uf49b 80% left \u00b7 20k tokens | \u25b8\u25b8 ask | \uf0e8 3/3 agents running (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;95m\uf49b\u001b[0;95m 80% left\u001b[0;37m \u00b7 \u001b[0;95m20k tokens\u001b[0;37m | \u001b[0;90m\u25b8\u25b8 ask\u001b[0;37m | \u001b[0;96m\uf0e8 3/3 agents running\u001b[0;90m (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\u001b[0m\n"
+      "expected_plain": "  \uf49b 80% left \u00b7 20k tokens │ \u25b8\u25b8 ask │ \uf0e8 3/3 agents running (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;95m\uf49b\u001b[0;95m 80% left\u001b[0;37m \u00b7 \u001b[0;95m20k tokens\u001b[0;37m │ \u001b[0;90m\u25b8\u25b8 ask\u001b[0;37m │ \u001b[0;96m\uf0e8 3/3 agents running\u001b[0;90m (a \u00b7 Gemini 2.5 Flash, b \u00b7 Opus 4.6, +1)\u001b[0m\n"
     },
     {
       "id": "IC04_glyphs_unicode",
       "description": "Unicode glyph set renders crisp non-PUA symbols",
-      "config_toml": "glyphs = \"unicode\"\n[[line]]\nitems = [\"model\", \"dir\", \"git\", \"vim\", \"plan\"]\n",
+      "config_toml": "palette = \"terminal\"\nglyphs = \"unicode\"\n[[line]]\nitems = [\"model\", \"dir\", \"git\", \"vim\", \"plan\"]\n",
       "payload": {
         "session_id": "ic04",
         "model": { "display_name": "Opus 4.6" },
@@ -62,13 +62,13 @@
         "vim": "NORMAL",
         "plan_tier": "Pro"
       },
-      "expected_plain": "  \u25c6 Opus 4.6 | \u25b8 agyline | \u2387 main \u2713 | V NORMAL | \u2605 Pro\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\u25c6 Opus 4.6\u001b[0;37m | \u001b[0;93m\u25b8\u001b[0;92m agyline\u001b[0;37m | \u001b[0;94m\u2387 main \u2713\u001b[0;37m | \u001b[0;92mV NORMAL\u001b[0;37m | \u001b[0;95m\u2605 Pro\u001b[0m\n"
+      "expected_plain": "  \u25c6 Opus 4.6 │ \u25b8 agyline │ \u2387 main \u2713 │ V NORMAL │ \u2605 Pro\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\u25c6 Opus 4.6\u001b[0;37m │ \u001b[0;93m\u25b8\u001b[0;92m agyline\u001b[0;37m │ \u001b[0;94m\u2387 main \u2713\u001b[0;37m │ \u001b[0;92mV NORMAL\u001b[0;37m │ \u001b[0;95m\u2605 Pro\u001b[0m\n"
     },
     {
       "id": "IC05_glyphs_ascii",
       "description": "ASCII glyph set uses pure 7-bit ASCII prefixes and dot separator",
-      "config_toml": "glyphs = \"ascii\"\n[[line]]\nitems = [\"model\", \"git\", \"vim\"]\n",
+      "config_toml": "palette = \"terminal\"\nglyphs = \"ascii\"\n[[line]]\nitems = [\"model\", \"git\", \"vim\"]\n",
       "payload": {
         "session_id": "ic05",
         "model": { "display_name": "Opus 4.6", "effort": "high" },
@@ -87,8 +87,8 @@
         "model": { "display_name": "Opus 4.6" },
         "cwd": "D:\\agyline"
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \udb80\ude4b agyline\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;38;2;137;220;235m\uef23 Opus 4.6\u001b[0;38;2;108;112;134m | \u001b[0;38;2;249;226;175m\udb80\ude4b\u001b[0;38;2;166;227;161m agyline\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \udb80\ude4b agyline\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;38;2;137;220;235m\uef23 Opus 4.6\u001b[0;38;2;108;112;134m │ \u001b[0;38;2;249;226;175m\udb80\ude4b\u001b[0;38;2;166;227;161m agyline\u001b[0m\n"
     },
     {
       "id": "IC07_palette_polarity_fallback_to_terminal_light",
@@ -99,8 +99,8 @@
         "model": { "display_name": "Opus 4.6" },
         "cwd": "D:\\agyline"
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \udb80\ude4b agyline\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m | \u001b[0;33m\udb80\ude4b\u001b[0;32m agyline\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \udb80\ude4b agyline\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m │ \u001b[0;33m\udb80\ude4b\u001b[0;32m agyline\u001b[0m\n"
     },
     {
       "id": "IC08_color_depth_none",
@@ -110,13 +110,13 @@
         "session_id": "",
         "model": { "display_name": "Opus 4.6" }
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \uf49b 0%\n",
-      "expected_ansi": "  \uef23 Opus 4.6 | \uf49b 0%\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \uf49b 0%\n",
+      "expected_ansi": "  \uef23 Opus 4.6 │ \uf49b 0%\n"
     },
     {
       "id": "IC09_agy_env_precedence_and_colorfgbg_auto",
       "description": "Explicit AGY_* env vars override config.toml while COLORFGBG drives theme = auto",
-      "config_toml": "theme = \"auto\"\nindent = \">>\"\nsingle_line = false\n[[line]]\nitems = [\"model\"]\n[[line]]\nitems = [\"mode\"]\n",
+      "config_toml": "palette = \"terminal\"\ntheme = \"auto\"\nindent = \">>\"\nsingle_line = false\n[[line]]\nitems = [\"model\"]\n[[line]]\nitems = [\"mode\"]\n",
       "env": {
         "COLORFGBG": "0;15",
         "AGY_STATUSLINE_LINES": "1",
@@ -127,8 +127,8 @@
         "model": { "display_name": "Opus 4.6" },
         "execution_mode": "auto"
       },
-      "expected_plain": " \uef23 Opus 4.6 | \u25b8\u25b8 auto\n",
-      "expected_ansi": " \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m | \u001b[0;31m\u25b8\u25b8 auto\u001b[0m\n"
+      "expected_plain": " \uef23 Opus 4.6 │ \u25b8\u25b8 auto\n",
+      "expected_ansi": " \u001b[0m\u001b[0;36m\uef23 Opus 4.6\u001b[0;90m │ \u001b[0;31m\u25b8\u25b8 auto\u001b[0m\n"
     },
     {
       "id": "IC10_broken_toml_fallback_indicator",
@@ -137,13 +137,13 @@
       "payload": {
         "session_id": ""
       },
-      "expected_plain": "  \uef23 Model | \uf49b 0% | \uf1c0 cold ! config\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Model\u001b[0;37m | \u001b[0;95m\uf49b 0%\u001b[0;37m | \u001b[0;34m\uf1c0\u001b[0;90m cold\u001b[0;31m ! config\u001b[0m\n"
+      "expected_plain": "  ✦ Model │ ❚❚❚❚❚❚❚❚❚❚ 0.0% ! config\n  ○ idle\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;1;38;2;203;166;247m✦ Model\u001b[0;38;2;108;112;134m │ \u001b[0;38;2;69;71;90m❚❚❚❚❚❚❚❚❚❚\u001b[0;38;2;166;227;161m 0.0%\u001b[0;38;2;243;139;168m ! config\u001b[0m\n  \u001b[0m\u001b[0;38;2;127;132;156m○ idle\u001b[0m\n"
     },
     {
       "id": "IC11_narrowing_stage1_compact",
       "description": "Stage 1 compacts context token suffix to fit 30 columns without dropping items",
-      "config_toml": "[[line]]\nitems = [\"model\", \"context\"]\n",
+      "config_toml": "palette = \"terminal\"\n[[line]]\nitems = [\"model\", \"context\"]\n",
       "payload": {
         "session_id": "",
         "model": { "display_name": "Opus 4.6" },
@@ -153,13 +153,13 @@
         },
         "terminal_width": 30
       },
-      "expected_plain": "  \uef23 Opus 4.6 | \uf49b 20% \u00b7 20k\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Opus 4.6\u001b[0;37m | \u001b[0;95m\uf49b\u001b[0;95m 20%\u001b[0;37m \u00b7 \u001b[0;95m20k\u001b[0m\n"
+      "expected_plain": "  \uef23 Opus 4.6 │ \uf49b 20% \u00b7 20k\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;96m\uef23 Opus 4.6\u001b[0;37m │ \u001b[0;95m\uf49b\u001b[0;95m 20%\u001b[0;37m \u00b7 \u001b[0;95m20k\u001b[0m\n"
     },
     {
       "id": "IC12_narrowing_stage2_and_stage3_cjk_zwj_pua",
       "description": "Stage 2 drops lower-priority version and Stage 3 grapheme-truncates CJK + ZWJ emoji + Nerd PUA title at 13 cols",
-      "config_toml": "[[line]]\nitems = [\"title\", \"version\"]\n",
+      "config_toml": "palette = \"terminal\"\n[[line]]\nitems = [\"title\", \"version\"]\n",
       "payload": {
         "session_id": "",
         "conversation_title": "\u4e2d\u6587\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\u6807\u9898\u6d4b\u8bd5",

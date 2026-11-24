@@ -6,10 +6,11 @@
 use crate::collect::FrameData;
 use crate::config::{EffectiveConfig, ItemId, ItemSlot};
 use crate::items::{
-    EvaluatedItem, coalesced_icon_body_spans, parse_color_spec, slot_custom_icon_color,
-    slot_fg_color, truncate_chars_with_ellipsis, workspace::format_pretty_model_slug,
+    EvaluatedItem, coalesced_icon_body_spans, labeled_slot_icon, parse_color_spec,
+    slot_custom_icon_color, slot_fg_color, truncate_chars_with_ellipsis,
+    workspace::format_pretty_model_slug,
 };
-use crate::render::{ColorSpec, ColorToken, StyledSpan, glyphs};
+use crate::render::{ColorSpec, ColorToken, StyledSpan, TextStyle, glyphs};
 
 /// Execution-mode pill. A pending tool confirmation outranks every mode, and an unrecognized mode
 /// is suppressed unless `AGY_SHOW_DEFAULT_MODE` or the slot's `show_default` asks for `ask`.
@@ -18,6 +19,13 @@ pub fn eval_mode(
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("badge"))
+    {
+        return eval_mode_badge(slot, frame, config);
+    }
     let payload = &frame.payload;
     let force_compact = slot.compact.unwrap_or(false);
     let custom_fg = slot.fg.as_deref().and_then(parse_color_spec);
@@ -136,6 +144,102 @@ pub fn eval_mode(
     }
 
     None
+}
+
+fn eval_mode_badge(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
+    let payload = &frame.payload;
+    let custom_fg = slot.fg.as_deref().and_then(parse_color_spec);
+    let low_mode = payload.exec_mode.trim().to_ascii_lowercase();
+    let show_default = config
+        .force_show_default_mode
+        .unwrap_or_else(|| slot.show_default.unwrap_or(config.show_default_mode));
+
+    let badge: Option<(String, ColorToken)> = if low_mode.is_empty() {
+        show_default.then(|| ("ASK".to_string(), ColorToken::Muted))
+    } else if low_mode.contains("yolo") {
+        Some(("BYPASS".to_string(), ColorToken::Crit))
+    } else if low_mode.contains("auto") {
+        Some(("AUTO".to_string(), ColorToken::Crit))
+    } else if low_mode.contains("accept-edits") {
+        Some(("EDITS".to_string(), ColorToken::Warn))
+    } else if low_mode.contains("plan") {
+        Some(("PLAN".to_string(), ColorToken::Git))
+    } else if low_mode.contains("best-of-n") || low_mode.contains("bestn") {
+        Some(("BEST-OF-N".to_string(), ColorToken::Git))
+    } else if low_mode == "default" || low_mode == "ask" || low_mode == "request-review" {
+        show_default.then(|| ("ASK".to_string(), ColorToken::Muted))
+    } else {
+        Some((low_mode.to_ascii_uppercase(), ColorToken::Separator))
+    };
+
+    let vim_tag = normalize_vim_tag(&payload.vim_mode);
+    if badge.is_none() && vim_tag.is_none() {
+        return None;
+    }
+
+    let bold = TextStyle::PLAIN.bold();
+    let icon = slot.icon.as_deref().unwrap_or("");
+    let custom_ic = slot_custom_icon_color(slot);
+
+    let mut full_spans = Vec::with_capacity(3);
+    let mut compact_spans = Vec::with_capacity(2);
+    if let Some((label, tok)) = badge {
+        let col = custom_fg.unwrap_or(ColorSpec::Token(tok));
+        let prefix = if icon.is_empty() {
+            String::new()
+        } else {
+            format!("{icon} ")
+        };
+        if let Some(ic) = custom_ic
+            && !icon.is_empty()
+            && ic != col
+        {
+            full_spans.push(StyledSpan::styled(ic, bold, icon));
+            full_spans.push(StyledSpan::styled(col, bold, format!(" {label}")));
+            compact_spans.push(StyledSpan::styled(ic, bold, icon));
+            compact_spans.push(StyledSpan::styled(col, bold, format!(" {label}")));
+        } else {
+            let txt = format!("{prefix}{label}");
+            full_spans.push(StyledSpan::styled(col, bold, txt.clone()));
+            compact_spans.push(StyledSpan::styled(col, bold, txt));
+        }
+        if let Some(tag) = vim_tag {
+            full_spans.push(StyledSpan::new(ColorToken::Model, format!(" [{tag}]")));
+        }
+    } else if let Some(tag) = vim_tag {
+        let s = StyledSpan::new(ColorToken::Model, format!("[{tag}]"));
+        full_spans.push(s.clone());
+        compact_spans.push(s);
+    }
+
+    Some(EvaluatedItem {
+        id: ItemId::Mode,
+        priority: slot.effective_priority(),
+        full_spans,
+        compact_spans,
+    })
+}
+
+fn normalize_vim_tag(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let upper = trimmed.to_ascii_uppercase();
+    match upper.as_str() {
+        "OFF" | "NONE" | "FALSE" | "DISABLED" => None,
+        "NORMAL" => Some("N"),
+        "INSERT" => Some("I"),
+        "VISUAL" => Some("V"),
+        "VISUAL LINE" | "V-LINE" => Some("VL"),
+        "VISUAL BLOCK" | "V-BLOCK" => Some("VB"),
+        "REPLACE" => Some("R"),
+        _ => Some("VIM"),
+    }
 }
 
 /// Mode pill for `AGY_STATUSLINE_LINES=1`, where line 2 collapses into line 1. Layout adds it only
@@ -323,22 +427,69 @@ pub fn eval_queue(
     })
 }
 
-/// Sandbox state; `None` unless the sandbox is enabled. `sandbox+net` when network is allowed,
-/// both tags from the reference.
+/// Sandbox state; `None` unless the sandbox is enabled or `show_when_off = true`.
 pub fn eval_sandbox(
     slot: &ItemSlot,
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
-    if !frame.payload.sandbox_enabled {
+    let show_when_off = slot.show_when_off.unwrap_or(false);
+    if !frame.payload.sandbox_enabled && !show_when_off {
         return None;
     }
+    let custom_ic = slot_custom_icon_color(slot);
+
+    if show_when_off {
+        let icon = labeled_slot_icon(slot, config.glyphs, glyphs::sandbox_icon);
+        if frame.payload.sandbox_enabled {
+            let val_col = slot_fg_color(slot, ColorToken::Ok);
+            let on_txt = if frame.payload.sandbox_allow_network {
+                "ON+net"
+            } else {
+                "ON"
+            };
+            let bold = TextStyle::PLAIN.bold();
+            let mut full_spans = Vec::with_capacity(3);
+            let mut compact_spans = Vec::with_capacity(3);
+            if !icon.is_empty() {
+                let ic_col = custom_ic.unwrap_or(val_col);
+                full_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
+                compact_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
+            }
+            full_spans.push(StyledSpan::new(ColorToken::Muted, "sandbox "));
+            compact_spans.push(StyledSpan::new(ColorToken::Muted, "sbx "));
+            full_spans.push(StyledSpan::styled(val_col, bold, on_txt));
+            compact_spans.push(StyledSpan::styled(val_col, bold, on_txt));
+            return Some(EvaluatedItem {
+                id: ItemId::Sandbox,
+                priority: slot.effective_priority(),
+                full_spans,
+                compact_spans,
+            });
+        }
+        return Some(EvaluatedItem {
+            id: ItemId::Sandbox,
+            priority: slot.effective_priority(),
+            full_spans: coalesced_icon_body_spans(
+                icon,
+                custom_ic,
+                ColorToken::Muted.into(),
+                "sandbox off".to_string(),
+            ),
+            compact_spans: coalesced_icon_body_spans(
+                icon,
+                custom_ic,
+                ColorToken::Muted.into(),
+                "sbx off".to_string(),
+            ),
+        });
+    }
+
     let icon = slot
         .icon
         .as_deref()
         .unwrap_or_else(|| glyphs::sandbox_icon(config.glyphs));
     let body_col = slot_fg_color(slot, ColorToken::Model);
-    let custom_ic = slot_custom_icon_color(slot);
     let tag = if frame.payload.sandbox_allow_network {
         "sandbox+net"
     } else {
@@ -543,6 +694,225 @@ pub fn eval_plan(
         priority: slot.effective_priority(),
         full_spans: coalesced_icon_body_spans(icon, custom_ic, body_col, cleaned),
         compact_spans: coalesced_icon_body_spans(icon, custom_ic, body_col, comp_txt),
+    })
+}
+
+/// Compact agent `Status Badge` (`READY`, `WORKING`, `TOOL`, `CONFIRM`, plus pending input `(+N)`).
+pub fn eval_status(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
+    let payload = &frame.payload;
+    let bold = TextStyle::PLAIN.bold();
+    let custom_ic = slot_custom_icon_color(slot);
+
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("dot"))
+    {
+        if payload.tool_confirmation_pending {
+            let ic = slot
+                .icon
+                .as_deref()
+                .unwrap_or_else(|| glyphs::warn_mark(config.glyphs));
+            let text = if ic.is_empty() {
+                "CONFIRM".to_string()
+            } else {
+                format!("{ic} CONFIRM")
+            };
+            let spans = vec![StyledSpan::styled(ColorToken::Warn, bold, text)];
+            return Some(EvaluatedItem {
+                id: ItemId::Status,
+                priority: slot.effective_priority(),
+                full_spans: spans.clone(),
+                compact_spans: spans,
+            });
+        }
+        let state_low = payload.agent_state.trim().to_ascii_lowercase();
+        let (lbl, tok) = match state_low.as_str() {
+            "" | "idle" => ("idle".to_string(), ColorToken::Muted),
+            "thinking" => ("thinking".to_string(), ColorToken::Model),
+            "working" => ("working".to_string(), ColorToken::Ok),
+            "tool_use" => ("tool_use".to_string(), ColorToken::Cache),
+            "error" => ("error".to_string(), ColorToken::Crit),
+            "reviewing" => ("reviewing".to_string(), ColorToken::Warn),
+            "authenticating" => ("auth".to_string(), ColorToken::Muted),
+            "initializing" => ("init".to_string(), ColorToken::Muted),
+            other => {
+                let clean = sanitize_single_line(other);
+                if clean.is_empty() {
+                    ("idle".to_string(), ColorToken::Muted)
+                } else {
+                    (clean, ColorToken::Muted)
+                }
+            }
+        };
+        let default_ic = glyphs::status_dot_icon(config.glyphs, state_low.as_str());
+        let icon = slot.icon.as_deref().unwrap_or(default_ic);
+        let body_col = slot_fg_color(slot, tok);
+        let mut full_spans = coalesced_icon_body_spans(icon, custom_ic, body_col, lbl.clone());
+        if slot.show_pending.unwrap_or(true) && payload.pending_input_count > 0 {
+            full_spans.push(StyledSpan::new(
+                ColorToken::Warn,
+                format!(" (+{})", payload.pending_input_count),
+            ));
+        }
+        let compact_spans = if icon.is_empty() {
+            vec![StyledSpan::new(body_col, lbl)]
+        } else {
+            vec![StyledSpan::new(custom_ic.unwrap_or(body_col), icon)]
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Status,
+            priority: slot.effective_priority(),
+            full_spans,
+            compact_spans,
+        });
+    }
+
+    let (default_icon, full_lbl, comp_lbl, body_col): (&str, String, String, ColorSpec) =
+        if payload.tool_confirmation_pending {
+            (
+                glyphs::warn_mark(config.glyphs),
+                "CONFIRM".to_string(),
+                "CONF".to_string(),
+                ColorToken::Warn.into(),
+            )
+        } else {
+            let state_low = payload.agent_state.trim().to_ascii_lowercase();
+            let (ic, full, comp, tok) = match state_low.as_str() {
+                "" | "idle" => (
+                    glyphs::status_ready_icon(config.glyphs),
+                    "READY".to_string(),
+                    "READY".to_string(),
+                    ColorToken::Ok,
+                ),
+                "working" => (
+                    glyphs::status_working_icon(config.glyphs),
+                    "WORKING".to_string(),
+                    "WORK".to_string(),
+                    ColorToken::Model,
+                ),
+                "tool_use" => (
+                    glyphs::status_tool_icon(config.glyphs),
+                    "TOOL".to_string(),
+                    "TOOL".to_string(),
+                    ColorToken::Context,
+                ),
+                "reviewing" => (
+                    glyphs::status_review_icon(config.glyphs),
+                    "REVIEW".to_string(),
+                    "REVIEW".to_string(),
+                    ColorToken::Warn,
+                ),
+                "error" => (
+                    glyphs::status_error_icon(config.glyphs),
+                    "ERROR".to_string(),
+                    "ERROR".to_string(),
+                    ColorToken::Crit,
+                ),
+                "thinking" => (
+                    glyphs::status_thinking_icon(config.glyphs),
+                    "THINKING".to_string(),
+                    "THINK".to_string(),
+                    ColorToken::Warn,
+                ),
+                "authenticating" => (
+                    glyphs::status_wait_icon(config.glyphs),
+                    "AUTH".to_string(),
+                    "AUTH".to_string(),
+                    ColorToken::Separator,
+                ),
+                "initializing" => (
+                    glyphs::status_wait_icon(config.glyphs),
+                    "INIT".to_string(),
+                    "INIT".to_string(),
+                    ColorToken::Separator,
+                ),
+                other => {
+                    let up = sanitize_single_line(other).to_ascii_uppercase();
+                    let label = if up.is_empty() {
+                        "READY".to_string()
+                    } else {
+                        up
+                    };
+                    (
+                        glyphs::status_wait_icon(config.glyphs),
+                        label.clone(),
+                        label,
+                        ColorToken::Separator,
+                    )
+                }
+            };
+            (ic, full, comp, slot_fg_color(slot, tok))
+        };
+
+    let icon = slot.icon.as_deref().unwrap_or(default_icon);
+    let build_badge = |lbl: String| -> Vec<StyledSpan> {
+        if icon.is_empty() {
+            vec![StyledSpan::styled(body_col, bold, lbl)]
+        } else if let Some(ic) = custom_ic
+            && ic != body_col
+        {
+            vec![
+                StyledSpan::styled(ic, bold, icon),
+                StyledSpan::styled(body_col, bold, format!(" {lbl}")),
+            ]
+        } else {
+            vec![StyledSpan::styled(body_col, bold, format!("{icon} {lbl}"))]
+        }
+    };
+
+    let mut full_spans = build_badge(full_lbl);
+    let compact_spans = build_badge(comp_lbl);
+
+    if slot.show_pending.unwrap_or(true) && payload.pending_input_count > 0 {
+        full_spans.push(StyledSpan::new(
+            ColorToken::Warn,
+            format!(" (+{})", payload.pending_input_count),
+        ));
+    }
+
+    Some(EvaluatedItem {
+        id: ItemId::Status,
+        priority: slot.effective_priority(),
+        full_spans,
+        compact_spans,
+    })
+}
+
+/// Elapsed session duration from bounded transcript start time or `first_seen_sec`.
+pub fn eval_duration(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
+    let elapsed_secs = frame
+        .session_start_sec
+        .filter(|&s| s > 0 && frame.now_sec >= s)
+        .map_or(0, |s| frame.now_sec - s);
+    let mins = elapsed_secs / 60;
+    let body = if mins >= 1440 {
+        format!("{}d{}h", mins / 1440, (mins % 1440) / 60)
+    } else if mins >= 60 {
+        format!("{}h{}m", mins / 60, mins % 60)
+    } else {
+        format!("{mins}m")
+    };
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::duration_icon(config.glyphs));
+    let body_col = slot_fg_color(slot, ColorToken::Muted);
+    let custom_ic = slot_custom_icon_color(slot);
+    let spans = coalesced_icon_body_spans(icon, custom_ic, body_col, body);
+    Some(EvaluatedItem {
+        id: ItemId::Duration,
+        priority: slot.effective_priority(),
+        full_spans: spans.clone(),
+        compact_spans: spans,
     })
 }
 

@@ -10,12 +10,13 @@ pub use self::git::{
     ParsedGitStatus, parse_porcelain_v2, refresh_git_at, resolve_git_frame, run_hidden_refresh_git,
 };
 use self::sqlite::{SqliteLookup, lookup_response_model_bounded};
-use crate::config::EffectiveConfig;
+pub use self::transcript::{read_transcript_start_sec_bounded, run_hidden_refresh_transcript};
+use crate::config::{EffectiveConfig, ItemId};
 use crate::input::Payload;
 use crate::platform;
 use crate::state::relay::read_relay_state;
 use crate::state::session::{
-    SESSION_STATE_VERSION, SessionState, read_db_fingerprint, read_session_state,
+    SESSION_STATE_VERSION, SessionState, read_db_fingerprint, read_file_stamp, read_session_state,
     write_session_state,
 };
 use crate::statusline::RenderEnv;
@@ -23,12 +24,15 @@ use crate::statusline::RenderEnv;
 pub mod git;
 pub mod sqlite;
 pub mod touch;
+pub mod transcript;
 
 /// Seam that keeps the printing path from spawning anything: the render calls these and the real
-/// work runs in detached `__refresh-git` / `__touch` workers, never inside the render itself.
+/// work runs in detached `__refresh-git` / `__touch` / `__refresh-transcript` workers.
 pub trait Spawner: Send + Sync {
     fn spawn_refresh_git(&self, cwd: &str);
     fn spawn_touch(&self, session_id: &str, relay_url: &str);
+    /// Optional detached worker that summarizes session transcript totals off the print path.
+    fn spawn_refresh_transcript(&self, _session_id: &str, _transcript_path: &str) {}
     /// Observability hook fired just before a bounded SQLite open; a no-op by default.
     fn on_sqlite_open(&self, _db_path: &Path) {}
 }
@@ -44,8 +48,8 @@ impl Spawner for NoopSpawner {
     fn spawn_touch(&self, _session_id: &str, _relay_url: &str) {}
 }
 
-/// Production spawner: launches detached `__refresh-git` / `__touch` workers via the platform
-/// seam and returns immediately, so the render never blocks on git or the relay HTTP call.
+/// Production spawner: launches detached `__refresh-git` / `__touch` / `__refresh-transcript`
+/// workers via the platform seam and returns immediately.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemSpawner;
 
@@ -67,6 +71,16 @@ impl Spawner for SystemSpawner {
             OsStr::new(relay_url),
         ]);
     }
+
+    fn spawn_refresh_transcript(&self, session_id: &str, transcript_path: &str) {
+        let _ = platform::spawn_detached_self(&[
+            OsStr::new("__refresh-transcript"),
+            OsStr::new("--session"),
+            OsStr::new(session_id),
+            OsStr::new("--path"),
+            OsStr::new(transcript_path),
+        ]);
+    }
 }
 
 /// Relay liveness from the third field of the relay `.dat`; only `Live` permits a touch.
@@ -76,13 +90,29 @@ pub enum RelayStatus {
     Fail,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GitFrameState {
     pub branch: String,
     pub dirty: bool,
     pub has_conflict: bool,
     pub ahead: i64,
     pub behind: i64,
+    pub conflicted: u32,
+    pub staged: u32,
+    pub modified: u32,
+    pub deleted: u32,
+    pub renamed: u32,
+    pub untracked: u32,
+    pub stashed: u32,
+}
+
+/// Cached session totals computed off the render path by `__refresh-transcript`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TranscriptTotals {
+    pub total_in: i64,
+    pub total_out: i64,
+    pub cache_read: i64,
+    pub cache_valid: bool,
 }
 
 /// Prompt-cache segment state: `cache_ts` is the unix-second anchor of the last accepted turn
@@ -96,7 +126,7 @@ pub struct CacheFrameState {
 
 /// Everything the renderer needs for one frame: the payload plus resolved git, cache, speed, and
 /// response-model side data. `last_tps`/`response_model` are `None` when not yet measured/known.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FrameData {
     pub payload: Payload,
     pub now_sec: i64,
@@ -104,6 +134,92 @@ pub struct FrameData {
     pub cache: CacheFrameState,
     pub last_tps: Option<String>,
     pub response_model: Option<String>,
+    pub session_start_sec: Option<i64>,
+    pub user_home: Option<PathBuf>,
+    pub transcript_totals: Option<TranscriptTotals>,
+}
+
+/// Data sources required by the active statusline slots; drives conditional collection so unused
+/// Git, SQLite, relay, transcript, and session state I/O are skipped on the render path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CollectionNeeds {
+    pub need_git: bool,
+    pub need_sqlite: bool,
+    pub need_relay: bool,
+    pub need_speed: bool,
+    pub need_cache_clock: bool,
+    pub need_duration: bool,
+    pub need_transcript_totals: bool,
+}
+
+impl CollectionNeeds {
+    pub fn from_config(config: &EffectiveConfig) -> Self {
+        let mut needs = Self::default();
+        let relay_enabled = config
+            .cache_relay_url
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|s| !s.is_empty() && !s.eq_ignore_ascii_case("off"));
+
+        let active_rows: usize = if config.single_line {
+            1.min(config.lines.len())
+        } else {
+            config.lines.len()
+        };
+
+        for row in &config.lines[..active_rows] {
+            for slot in row {
+                match slot.id {
+                    ItemId::Git => needs.need_git = true,
+                    ItemId::Model => needs.need_sqlite = true,
+                    ItemId::Speed => needs.need_speed = true,
+                    ItemId::Duration => needs.need_duration = true,
+                    ItemId::Tokens => needs.need_transcript_totals = true,
+                    ItemId::Cache => {
+                        needs.need_cache_clock = true;
+                        if relay_enabled {
+                            needs.need_relay = true;
+                        }
+                        if slot
+                            .style
+                            .as_deref()
+                            .is_some_and(|s| s.eq_ignore_ascii_case("hit_rate"))
+                        {
+                            needs.need_transcript_totals = true;
+                        }
+                    }
+                    ItemId::Dir
+                    | ItemId::Context
+                    | ItemId::Budget
+                    | ItemId::Quota
+                    | ItemId::QuotaGroup
+                    | ItemId::Cost
+                    | ItemId::Status
+                    | ItemId::Mode
+                    | ItemId::Subagents
+                    | ItemId::Tasks
+                    | ItemId::Queue
+                    | ItemId::Sandbox
+                    | ItemId::Vim
+                    | ItemId::Title
+                    | ItemId::Agent
+                    | ItemId::Artifacts
+                    | ItemId::Version
+                    | ItemId::Plan => {}
+                }
+            }
+        }
+        needs
+    }
+
+    pub fn needs_session_state(self) -> bool {
+        self.need_speed
+            || self.need_cache_clock
+            || self.need_relay
+            || self.need_sqlite
+            || self.need_duration
+            || self.need_transcript_totals
+    }
 }
 
 /// Collects one frame: reads/rewrites per-session state, resolves git from a stale cache (never
@@ -111,10 +227,16 @@ pub struct FrameData {
 /// call serves the live render and `preview` (which passes a `NoopSpawner` so nothing spawns).
 pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv<'_>) -> FrameData {
     let now_sec = (env.now_ms / 1000) as i64;
+    let user_home = platform::user_home_dir(&|k| env.env_vars.get(k).cloned());
+    let needs = CollectionNeeds::from_config(config);
 
-    // Before a session exists there is no telemetry or cache clock; only git can resolve.
-    if payload.is_pre_session() {
-        let git = git::resolve_git_frame(&payload, config, env, 0);
+    // Before a session exists or when no slot uses session telemetry, skip session/SQLite/relay.
+    if payload.is_pre_session() || !needs.needs_session_state() {
+        let git = if needs.need_git {
+            git::resolve_git_frame(&payload, config, env, 0)
+        } else {
+            None
+        };
         return FrameData {
             payload,
             now_sec,
@@ -122,6 +244,9 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
             cache: CacheFrameState::default(),
             last_tps: None,
             response_model: None,
+            session_start_sec: None,
+            user_home,
+            transcript_totals: None,
         };
     }
 
@@ -147,6 +272,13 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
     let mut resp_model = String::new();
     let mut cache_ts: i64 = 0;
     let mut db_fingerprint = None;
+    let mut first_seen_sec = now_sec;
+    let mut transcript_first_ts: Option<i64> = None;
+    let mut transcript_fp = None;
+    let mut transcript_total_in = None;
+    let mut transcript_total_out = None;
+    let mut transcript_cache_read = None;
+    let mut transcript_cache_valid = false;
 
     if let Some(ref s) = loaded {
         prev_state = s.prev_state.clone();
@@ -156,6 +288,15 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         resp_model = s.resp_model.clone();
         cache_ts = s.cache_ts;
         db_fingerprint = s.db_fingerprint.clone();
+        if s.first_seen_sec > 0 {
+            first_seen_sec = s.first_seen_sec;
+        }
+        transcript_first_ts = s.transcript_first_ts;
+        transcript_fp = s.transcript_fp.clone();
+        transcript_total_in = s.transcript_total_in;
+        transcript_total_out = s.transcript_total_out;
+        transcript_cache_read = s.transcript_cache_read;
+        transcript_cache_valid = s.transcript_cache_valid;
         // Switching the picker model invalidates the cached response model from the old model.
         if !s.prev_model_key.is_empty() && s.prev_model_key != cur_model_key {
             resp_model.clear();
@@ -205,14 +346,22 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         cache_ts = now_sec;
     }
 
-    let git = git::resolve_git_frame(&payload, config, env, delta_out);
+    let git = if needs.need_git {
+        git::resolve_git_frame(&payload, config, env, delta_out)
+    } else {
+        None
+    };
 
-    let conv_db = session_db_path(&env.conversations_dir, &session_id);
+    let conv_db = if needs.need_sqlite || (needs.need_cache_clock && cache_ts == 0 && tot_out > 0) {
+        session_db_path(&env.conversations_dir, &session_id)
+    } else {
+        None
+    };
     let current_fp = conv_db.as_deref().and_then(read_db_fingerprint);
 
     // No turn stamped cache_ts yet: fall back to the conversation DB mtime, else now. The relay
     // anchor below wins: cache_relay.py knows the true last-touch time.
-    if cache_ts == 0 && tot_out > 0 {
+    if needs.need_cache_clock && cache_ts == 0 && tot_out > 0 {
         if let Some(ref fp) = current_fp
             && let Some(ref db_stamp) = fp.db
         {
@@ -226,11 +375,15 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         }
     }
 
-    let relay_url = config
-        .cache_relay_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("off"));
+    let relay_url = if needs.need_relay {
+        config
+            .cache_relay_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("off"))
+    } else {
+        None
+    };
 
     let mut relay_touches: u32 = 0;
     let mut relay_status: Option<RelayStatus> = None;
@@ -245,10 +398,10 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         relay_status = relay_state.status;
     }
 
-    // Query the response model only on new output, or when it is unknown and the DB changed.
+    // Query the response model only when model is on the line and output changed or DB changed.
     let db_fingerprint_changed = db_fingerprint != current_fp;
-    let should_query_sqlite =
-        delta_out > 0 || (resp_model.is_empty() && tot_out > 0 && db_fingerprint_changed);
+    let should_query_sqlite = needs.need_sqlite
+        && (delta_out > 0 || (resp_model.is_empty() && tot_out > 0 && db_fingerprint_changed));
 
     if should_query_sqlite
         && current_fp.is_some()
@@ -269,6 +422,28 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         }
     }
 
+    let resolved_tpath = if needs.need_duration || needs.need_transcript_totals {
+        transcript::resolve_transcript_path(&payload, user_home.as_deref())
+    } else {
+        None
+    };
+    if needs.need_duration
+        && transcript_first_ts.is_none()
+        && let Some(ref tp) = resolved_tpath
+    {
+        transcript_first_ts = transcript::read_transcript_start_sec_bounded(tp);
+    }
+
+    if needs.need_transcript_totals
+        && payload.total_input_tokens == 0
+        && let Some(ref tp) = resolved_tpath
+        && let Some(cur_tp_fp) = read_file_stamp(tp)
+        && transcript_fp.as_ref() != Some(&cur_tp_fp)
+        && let Some(tp_str) = tp.to_str()
+    {
+        env.spawner.spawn_refresh_transcript(&session_id, tp_str);
+    }
+
     let next_state = SessionState {
         version: SESSION_STATE_VERSION,
         session_id: session_id.clone(),
@@ -280,6 +455,13 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         prev_model_key: cur_model_key,
         cache_ts,
         db_fingerprint,
+        first_seen_sec,
+        transcript_first_ts,
+        transcript_fp,
+        transcript_total_in,
+        transcript_total_out,
+        transcript_cache_read,
+        transcript_cache_valid,
     };
 
     // Skip the write when nothing changed: avoids needless disk I/O on every idle frame.
@@ -310,6 +492,20 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         relay_status,
     };
 
+    let session_start_sec =
+        transcript_first_ts.or_else(|| (first_seen_sec > 0).then_some(first_seen_sec));
+    let transcript_totals =
+        if let (Some(total_in), Some(total_out)) = (transcript_total_in, transcript_total_out) {
+            Some(TranscriptTotals {
+                total_in,
+                total_out,
+                cache_read: transcript_cache_read.unwrap_or(0),
+                cache_valid: transcript_cache_valid,
+            })
+        } else {
+            None
+        };
+
     FrameData {
         payload,
         now_sec,
@@ -317,6 +513,9 @@ pub fn collect_frame(payload: Payload, config: &EffectiveConfig, env: &RenderEnv
         cache,
         last_tps: (!last_tps.is_empty() && last_tps != "--").then_some(last_tps),
         response_model: (!resp_model.is_empty()).then_some(resp_model),
+        session_start_sec,
+        user_home,
+        transcript_totals,
     }
 }
 

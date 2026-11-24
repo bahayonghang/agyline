@@ -34,6 +34,13 @@ pub struct ParsedGitStatus {
     pub has_conflict: bool,
     pub ahead: i64,
     pub behind: i64,
+    pub conflicted: u32,
+    pub staged: u32,
+    pub modified: u32,
+    pub deleted: u32,
+    pub renamed: u32,
+    pub untracked: u32,
+    pub stashed: u32,
 }
 
 /// Resolves the git segment without running git: prefers the payload's branch/dirty, else a
@@ -45,6 +52,10 @@ pub fn resolve_git_frame(
     env: &RenderEnv<'_>,
     delta_out: i64,
 ) -> Option<GitFrameState> {
+    if !payload.vcs_type.trim().is_empty() && !payload.vcs_type.trim().eq_ignore_ascii_case("git") {
+        return None;
+    }
+
     let fresh_ttl_ms = config.git_cache_ms;
     let stale_max_ms = GIT_STALE_MAX_MS.max(fresh_ttl_ms);
 
@@ -97,6 +108,13 @@ pub fn resolve_git_frame(
         has_conflict,
         ahead,
         behind,
+        conflicted: valid_cache.map_or(0, |c| c.conflicted),
+        staged: valid_cache.map_or(0, |c| c.staged),
+        modified: valid_cache.map_or(0, |c| c.modified),
+        deleted: valid_cache.map_or(0, |c| c.deleted),
+        renamed: valid_cache.map_or(0, |c| c.renamed),
+        untracked: valid_cache.map_or(0, |c| c.untracked),
+        stashed: valid_cache.map_or(0, |c| c.stashed),
     })
 }
 
@@ -148,11 +166,7 @@ pub fn refresh_git_at(home_dir: &Path, cwd: &OsStr, now_ms: u64, git_timeout: Du
                 cwd: norm_cwd,
                 updated_at_ms: now_ms,
                 is_repo: false,
-                branch: String::new(),
-                dirty: false,
-                has_conflict: false,
-                ahead: 0,
-                behind: 0,
+                ..GitCacheEntry::default()
             },
         );
     } else if let Some(stdout_bytes) = run_git_porcelain_bounded(cwd, git_timeout) {
@@ -169,6 +183,13 @@ pub fn refresh_git_at(home_dir: &Path, cwd: &OsStr, now_ms: u64, git_timeout: Du
                 has_conflict: parsed.has_conflict,
                 ahead: parsed.ahead,
                 behind: parsed.behind,
+                conflicted: parsed.conflicted,
+                staged: parsed.staged,
+                modified: parsed.modified,
+                deleted: parsed.deleted,
+                renamed: parsed.renamed,
+                untracked: parsed.untracked,
+                stashed: parsed.stashed,
             },
         );
     }
@@ -235,6 +256,7 @@ fn run_git_porcelain_bounded(cwd: &OsStr, timeout: Duration) -> Option<Vec<u8>> 
             "status",
             "--porcelain=v2",
             "--branch",
+            "--show-stash",
             "--ignore-submodules=dirty",
         ])
         .env("GIT_OPTIONAL_LOCKS", "0")
@@ -299,6 +321,13 @@ pub fn parse_porcelain_v2(raw: &[u8]) -> ParsedGitStatus {
     let mut has_conflict = false;
     let mut ahead = 0_i64;
     let mut behind = 0_i64;
+    let mut conflicted = 0_u32;
+    let mut staged = 0_u32;
+    let mut modified = 0_u32;
+    let mut deleted = 0_u32;
+    let mut renamed = 0_u32;
+    let mut untracked = 0_u32;
+    let mut stashed = 0_u32;
 
     for raw_line in text.split('\n') {
         let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
@@ -329,9 +358,48 @@ pub fn parse_porcelain_v2(raw: &[u8]) -> ParsedGitStatus {
                 ahead = a;
                 behind = b;
             }
+        } else if let Some(rest) = line.strip_prefix("# stash ") {
+            if let Ok(n) = rest.trim().parse::<u32>() {
+                stashed = n;
+            }
         } else if line.starts_with("u ") {
             has_conflict = true;
             dirty = true;
+            conflicted = conflicted.saturating_add(1);
+        } else if line.starts_with("? ") {
+            dirty = true;
+            untracked = untracked.saturating_add(1);
+        } else if line.starts_with("1 ") {
+            dirty = true;
+            let bytes = line.as_bytes();
+            if bytes.len() >= 4 {
+                match bytes[2] {
+                    b'A' | b'M' | b'T' | b'C' => staged = staged.saturating_add(1),
+                    b'D' => deleted = deleted.saturating_add(1),
+                    _ => {}
+                }
+                match bytes[3] {
+                    b'A' | b'M' | b'T' => modified = modified.saturating_add(1),
+                    b'D' => deleted = deleted.saturating_add(1),
+                    _ => {}
+                }
+            }
+        } else if line.starts_with("2 ") {
+            dirty = true;
+            let bytes = line.as_bytes();
+            if bytes.len() >= 4 {
+                match bytes[2] {
+                    b'R' => renamed = renamed.saturating_add(1),
+                    b'C' => staged = staged.saturating_add(1),
+                    b'D' => deleted = deleted.saturating_add(1),
+                    _ => {}
+                }
+                match bytes[3] {
+                    b'M' | b'T' => modified = modified.saturating_add(1),
+                    b'D' => deleted = deleted.saturating_add(1),
+                    _ => {}
+                }
+            }
         } else if !line.starts_with('#') && !line.starts_with('!') {
             // `!` lines are ignored files (porcelain v2), so they do not make the tree dirty.
             dirty = true;
@@ -349,6 +417,13 @@ pub fn parse_porcelain_v2(raw: &[u8]) -> ParsedGitStatus {
         has_conflict,
         ahead,
         behind,
+        conflicted,
+        staged,
+        modified,
+        deleted,
+        renamed,
+        untracked,
+        stashed,
     }
 }
 

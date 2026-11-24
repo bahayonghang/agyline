@@ -39,6 +39,7 @@ fn run_with_stdin_and_env(args: &[&str], stdin_bytes: &[u8], envs: &[(&str, &str
         .env_remove("AGY_STATUSLINE_INDENT")
         .env_remove("AGY_SHOW_DEFAULT_MODE")
         .env_remove("AGY_CACHE_RELAY")
+        .env_remove("AGYLINE_DEBUG")
         .env_remove("COLORFGBG")
         .env_remove("NO_COLOR")
         .env_remove("COLORTERM")
@@ -72,9 +73,11 @@ fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "stderr must be 0 B");
     assert_eq!(
-        output.stdout,
-        "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n"
-            .as_bytes()
+        String::from_utf8_lossy(&output.stdout),
+        concat!(
+            "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} \x1b[0;38;2;69;71;90m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
+            "  \x1b[0m\x1b[0;38;2;127;132;156m\u{25cb} idle\x1b[0m\n",
+        )
     );
 }
 
@@ -118,13 +121,19 @@ fn pipe_malformed_utf8_and_oversized_inputs_exit_zero_with_empty_streams() {
 // Version/help are user surface: stdout, exit 0, and must not leak the internal worker modes.
 #[test]
 fn cli_version_and_help_print_to_stdout_and_omit_hidden_workers() {
-    for flag in ["-V", "--version"] {
-        let out = run_with_stdin(&[flag], b"");
-        assert_eq!(out.status.code(), Some(0));
-        assert!(out.stderr.is_empty());
+    let expected_ver = format!("agyline {}\n", env!("CARGO_PKG_VERSION"));
+    for arg in ["-V", "--version", "version"] {
+        let out = run_with_stdin(&[arg], b"");
+        assert_eq!(out.status.code(), Some(0), "arg {arg:?}");
+        assert!(out.stderr.is_empty(), "arg {arg:?}");
         let text = String::from_utf8(out.stdout).expect("utf8");
-        assert_eq!(text, format!("agyline {}\n", env!("CARGO_PKG_VERSION")));
+        assert_eq!(text, expected_ver, "arg {arg:?}");
     }
+
+    let bad_ver = run_with_stdin(&["version", "extra"], b"");
+    assert_eq!(bad_ver.status.code(), Some(2));
+    assert!(bad_ver.stdout.is_empty());
+    assert!(!bad_ver.stderr.is_empty());
 
     for flag in ["-h", "--help"] {
         let out = run_with_stdin(&[flag], b"");
@@ -132,11 +141,15 @@ fn cli_version_and_help_print_to_stdout_and_omit_hidden_workers() {
         assert!(out.stderr.is_empty());
         let text = String::from_utf8(out.stdout).expect("utf8");
         assert!(text.contains("agyline"));
+        assert!(text.contains("config"));
+        assert!(text.contains("set"));
+        assert!(text.contains("version"));
         assert!(text.contains("preview"));
         assert!(text.contains("install"));
         assert!(text.contains("uninstall"));
         assert!(!text.contains("__refresh-git"));
         assert!(!text.contains("__touch"));
+        assert!(!text.contains("__refresh-transcript"));
     }
 }
 
@@ -239,9 +252,10 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     assert!(out.stderr.is_empty());
     let text = String::from_utf8(out.stdout).expect("utf8 stdout");
     assert!(!text.contains("secret@example.com"));
+    assert!(!text.contains(";48;2;"));
     assert_eq!(
         text,
-        "    \x1b[0m\x1b[0;36m\u{ef23} Gemini 4 Carbon\x1b[0;90m \u{00b7} \x1b[0;36mHigh\x1b[0;90m | \x1b[0;35m\u{f49b} 0%\x1b[0;90m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0;90m | \x1b[0;31m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
+        "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;188;192;204m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
     );
 }
 
@@ -311,4 +325,435 @@ fn cli_tty_stdin_with_redirected_non_tty_stdout_exits_one_with_zero_stdout() {
         !stderr.is_empty(),
         "stderr must explain terminal requirement"
     );
+}
+
+// `agyline config` prints active effective settings, resolved config.toml path, and existence
+// without opening the TUI or writing files; `-c`/`--config` remains the TUI trigger.
+#[test]
+fn cli_config_subcommand_prints_effective_settings_and_path() {
+    let home = std::env::temp_dir().join(format!(
+        "agyline_cli_config_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let home_str = home.to_str().expect("utf8 home");
+    let expected_cfg = home.join("config.toml");
+
+    // 1. Missing config.toml -> prints defaults, reports not found, creates nothing.
+    let out = run_with_stdin_and_env(&["config"], b"", &[("AGYLINE_HOME", home_str)]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stderr.is_empty());
+    assert!(
+        !home.exists(),
+        "agyline config must never create AGYLINE_HOME"
+    );
+    let text = String::from_utf8(out.stdout).expect("utf8");
+    assert!(
+        text.contains(&expected_cfg.display().to_string()),
+        "missing resolved config.toml path:\n{text}"
+    );
+    for needle in [
+        "preset",
+        "default",
+        "palette",
+        "catppuccin",
+        "theme",
+        "auto",
+        "item_style",
+        "minimal",
+        "bar_style",
+        "cells",
+        "bar_gradient",
+        "true",
+        "separator",
+        "compact_at",
+        "88",
+        "single_line",
+        "false",
+        "overflow",
+        "fit",
+    ] {
+        assert!(text.contains(needle), "missing '{needle}' in:\n{text}");
+    }
+    assert!(
+        text.contains("not found") || text.contains("false"),
+        "must report that config.toml does not exist on disk:\n{text}"
+    );
+
+    // 2. Existing config.toml + env overrides are reflected.
+    fs::create_dir_all(&home).expect("mkdir");
+    fs::write(
+        &expected_cfg,
+        "palette = \"nord\"\nitem_style = \"badge\"\ncompact_at = 72\noverflow = \"none\"\n",
+    )
+    .expect("write config.toml");
+    let out2 = run_with_stdin_and_env(
+        &["config"],
+        b"",
+        &[
+            ("AGYLINE_HOME", home_str),
+            ("AGY_THEME", "light"),
+            ("AGY_STATUSLINE_LINES", "1"),
+        ],
+    );
+    assert_eq!(out2.status.code(), Some(0));
+    assert!(out2.stderr.is_empty());
+    let text2 = String::from_utf8(out2.stdout).expect("utf8");
+    assert!(
+        text2.contains("exists"),
+        "must report config exists:\n{text2}"
+    );
+    assert!(text2.contains("nord"));
+    assert!(text2.contains("badge"));
+    assert!(text2.contains("72"));
+    assert!(text2.contains("none"));
+    assert!(text2.contains("light"));
+    assert!(text2.contains("single_line") && text2.contains("true"));
+
+    // 2b. Capability degradation on `item_style` (`pill` + `unicode` -> effective `badge`) is shown.
+    fs::write(
+        &expected_cfg,
+        "item_style = \"pill\"\nglyphs = \"unicode\"\n",
+    )
+    .expect("write pill+unicode");
+    let degraded_out = run_with_stdin_and_env(
+        &["config"],
+        b"",
+        &[("AGYLINE_HOME", home_str), ("COLORTERM", "truecolor")],
+    );
+    assert_eq!(degraded_out.status.code(), Some(0));
+    let degraded_txt = String::from_utf8(degraded_out.stdout).expect("utf8");
+    assert!(
+        degraded_txt.contains("item_style: pill (effective: badge)"),
+        "config output must surface degraded item_style:\n{degraded_txt}"
+    );
+
+    // 3. Broken config.toml -> warns on stderr with line/col and still exits 0 with defaults.
+    fs::write(&expected_cfg, "version = 1\nbroken == 123\n").expect("write broken");
+    let broken_cfg = run_with_stdin_and_env(&["config"], b"", &[("AGYLINE_HOME", home_str)]);
+    assert_eq!(broken_cfg.status.code(), Some(0));
+    let broken_err = String::from_utf8(broken_cfg.stderr).expect("utf8");
+    assert!(broken_err.contains("line 2") && broken_err.contains("column"));
+    let broken_out = String::from_utf8(broken_cfg.stdout).expect("utf8");
+    assert!(broken_out.contains("syntax error") && broken_out.contains("default"));
+
+    // 4. Help and extra-arg rejection.
+    let help = run_with_stdin_and_env(&["config", "--help"], b"", &[("AGYLINE_HOME", home_str)]);
+    assert_eq!(help.status.code(), Some(0));
+    assert!(help.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: agyline config"));
+
+    for bad in [&["config", "extra"][..], &["config", "--bogus"][..]] {
+        let res = run_with_stdin_and_env(bad, b"", &[("AGYLINE_HOME", home_str)]);
+        assert_eq!(res.status.code(), Some(2), "args {bad:?}");
+        assert!(res.stdout.is_empty());
+        assert!(!res.stderr.is_empty());
+    }
+
+    let _ = fs::remove_dir_all(&home);
+}
+
+// `agyline set <key> [value]` lists valid choices when value is omitted, atomically updates
+// config.toml while preserving unrelated keys when valid, refuses to overwrite broken TOML with
+// exit 1, and rejects invalid keys/values with exit 2 and clear stderr diagnostics.
+#[test]
+fn cli_set_subcommand_lists_updates_atomically_and_validates() {
+    let home = std::env::temp_dir().join(format!(
+        "agyline_cli_set_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let home_str = home.to_str().expect("utf8 home");
+    let cfg_path = home.join("config.toml");
+
+    // 1. Help prints supported keys and creates nothing.
+    let help = run_with_stdin_and_env(&["set", "--help"], b"", &[("AGYLINE_HOME", home_str)]);
+    assert_eq!(help.status.code(), Some(0));
+    assert!(help.stderr.is_empty());
+    let help_txt = String::from_utf8(help.stdout).expect("utf8");
+    for k in [
+        "preset",
+        "palette",
+        "theme",
+        "style",
+        "bar",
+        "bar-gradient",
+        "sep",
+        "compact-at",
+    ] {
+        assert!(
+            help_txt.contains(k),
+            "set --help missing '{k}':\n{help_txt}"
+        );
+    }
+    assert!(!home.exists());
+
+    // 2. Omitting <value> lists options for each key without touching disk.
+    for (key, expected_tokens) in [
+        ("preset", &["default", "hud", "classic", "cometix"][..]),
+        (
+            "palette",
+            &["catppuccin", "tokyo-night", "nord", "mono"][..],
+        ),
+        ("theme", &["auto", "dark", "light"][..]),
+        ("style", &["minimal", "badge", "pill"][..]),
+        (
+            "bar",
+            &["cells", "line", "parallelogram", "braille", "ascii"][..],
+        ),
+        ("bar-gradient", &["true", "false"][..]),
+        ("sep", &["pipe", "dashed", "dot", "square", "none"][..]),
+        ("compact-at", &["0", "500"][..]),
+    ] {
+        let out = run_with_stdin_and_env(&["set", key], b"", &[("AGYLINE_HOME", home_str)]);
+        assert_eq!(out.status.code(), Some(0), "set {key}");
+        assert!(out.stderr.is_empty(), "set {key}");
+        let txt = String::from_utf8(out.stdout).expect("utf8");
+        for tok in expected_tokens {
+            assert!(txt.contains(tok), "set {key} missing '{tok}':\n{txt}");
+        }
+    }
+    assert!(
+        !cfg_path.exists(),
+        "listing options must never create config.toml"
+    );
+
+    // 3. Seed unrelated settings and update each key sequentially.
+    fs::create_dir_all(&home).expect("mkdir");
+    fs::write(
+        &cfg_path,
+        concat!(
+            "indent = \"    \"\n",
+            "overflow = \"none\"\n",
+            "\n[git]\n",
+            "cache_ms = 5555\n",
+            "\n[cache_relay]\n",
+            "url = \"http://127.0.0.1:9999\"\n",
+        ),
+    )
+    .expect("seed config.toml");
+
+    let updates: &[(&str, &str, &str)] = &[
+        ("palette", "TOKYO-NIGHT", "palette = \"tokyo-night\""),
+        ("theme", "light", "theme = \"light\""),
+        ("style", "pill", "item_style = \"pill\""),
+        ("bar", "blocks", "bar_style = \"parallelogram\""),
+        ("bar-gradient", "off", "bar_gradient = false"),
+        ("bar-gradient", "1", "bar_gradient = true"),
+        ("sep", "DASHED", "separator = \"dashed\""),
+        ("sep", " :: ", "separator = \" :: \""),
+        ("sep", "-", "separator = \"-\""),
+        ("compact-at", "0", "compact_at = 0"),
+        ("compact-at", "120", "compact_at = 120"),
+    ];
+    for &(key, val, expected_line) in updates {
+        let out = run_with_stdin_and_env(&["set", key, val], b"", &[("AGYLINE_HOME", home_str)]);
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "set {key} {val} failed: {:?}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(out.stderr.is_empty());
+        assert!(!out.stdout.is_empty());
+        let saved = fs::read_to_string(&cfg_path).expect("read config.toml");
+        assert!(
+            saved.contains(expected_line),
+            "expected '{expected_line}' in config.toml after set {key} {val}:\n{saved}"
+        );
+        assert!(saved.contains("indent = \"    \""));
+        assert!(saved.contains("overflow = \"none\""));
+        assert!(saved.contains("cache_ms = 5555"));
+        assert!(saved.contains("url = \"http://127.0.0.1:9999\""));
+    }
+
+    // Applying preset updates layout/style/thresholds while keeping git/relay/overflow.
+    let preset_out = run_with_stdin_and_env(
+        &["set", "preset", "HUD"],
+        b"",
+        &[("AGYLINE_HOME", home_str)],
+    );
+    assert_eq!(preset_out.status.code(), Some(0));
+    let saved_hud = fs::read_to_string(&cfg_path).expect("read hud config.toml");
+    assert!(saved_hud.contains("preset = \"hud\""));
+    assert!(saved_hud.contains("palette = \"terminal\""));
+    assert!(saved_hud.contains("bar_style = \"line\""));
+    assert!(saved_hud.contains("overflow = \"none\""));
+    assert!(saved_hud.contains("cache_ms = 5555"));
+    assert!(saved_hud.contains("url = \"http://127.0.0.1:9999\""));
+
+    // Round-trip via `agyline config` reflects the persisted hud preset.
+    let cfg_after = run_with_stdin_and_env(&["config"], b"", &[("AGYLINE_HOME", home_str)]);
+    assert_eq!(cfg_after.status.code(), Some(0));
+    let cfg_after_txt = String::from_utf8(cfg_after.stdout).expect("utf8");
+    assert!(cfg_after_txt.contains("preset: hud") && cfg_after_txt.contains("palette: terminal"));
+
+    // Fresh AGYLINE_HOME creation on first `agyline set` works without pre-existing directory.
+    let fresh_home = std::env::temp_dir().join(format!(
+        "agyline_cli_set_fresh_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let fresh_str = fresh_home.to_str().expect("utf8 fresh");
+    let fresh_res = run_with_stdin_and_env(
+        &["set", "palette", "mono"],
+        b"",
+        &[("AGYLINE_HOME", fresh_str)],
+    );
+    assert_eq!(fresh_res.status.code(), Some(0));
+    assert!(
+        fs::read_to_string(fresh_home.join("config.toml"))
+            .expect("read fresh config")
+            .contains("palette = \"mono\"")
+    );
+    let _ = fs::remove_dir_all(&fresh_home);
+
+    // No stray temp files left behind in AGYLINE_HOME.
+    let entries: Vec<String> = fs::read_dir(&home)
+        .expect("read_dir")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(entries, vec!["config.toml".to_string()]);
+
+    // 4. Invalid invocations exit 2, emit 0 B stdout, clear stderr, and leave config untouched.
+    let before_invalid = fs::read(&cfg_path).expect("read before invalid");
+    let invalid_cases: &[&[&str]] = &[
+        &["set"],
+        &["set", "--bogus"],
+        &["set", "unknown-key"],
+        &["set", "unknown-key", "val"],
+        &["set", "theme", "dark", "extra"],
+        &["set", "preset", "nonexistent_preset"],
+        &["set", "palette", "nonexistent_palette"],
+        &["set", "theme", "neon"],
+        &["set", "style", "box"],
+        &["set", "bar", "waves"],
+        &["set", "bar-gradient", "maybe"],
+        &["set", "sep", ""],
+        &["set", "sep", "a\nb"],
+        &["set", "compact-at", "-1"],
+        &["set", "compact-at", "501"],
+        &["set", "compact-at", "abc"],
+    ];
+    for args in invalid_cases {
+        let res = run_with_stdin_and_env(args, b"", &[("AGYLINE_HOME", home_str)]);
+        assert_eq!(
+            res.status.code(),
+            Some(2),
+            "args {args:?} must exit 2, stderr: {:?}",
+            String::from_utf8_lossy(&res.stderr)
+        );
+        assert!(res.stdout.is_empty(), "args {args:?} must emit 0 B stdout");
+        assert!(!res.stderr.is_empty(), "args {args:?} must emit stderr");
+    }
+    assert_eq!(
+        fs::read(&cfg_path).expect("read after invalid"),
+        before_invalid,
+        "invalid set calls must not modify config.toml"
+    );
+
+    // 5. Existing broken TOML refuses overwrite and exits 1 without modifying the file.
+    let broken_bytes = b"version = 1\nbroken == 123\n";
+    fs::write(&cfg_path, broken_bytes).expect("write broken");
+    let broken_res = run_with_stdin_and_env(
+        &["set", "theme", "dark"],
+        b"",
+        &[("AGYLINE_HOME", home_str)],
+    );
+    assert_eq!(broken_res.status.code(), Some(1));
+    assert!(broken_res.stdout.is_empty());
+    assert!(!broken_res.stderr.is_empty());
+    assert_eq!(
+        fs::read(&cfg_path).expect("read broken after set"),
+        broken_bytes,
+        "broken config.toml must not be overwritten"
+    );
+
+    let _ = fs::remove_dir_all(&home);
+}
+
+// Opt-in `AGYLINE_DEBUG=1` writes raw stdin bytes to `<AGYLINE_HOME>/state/last_payload.json`
+// best-effort without affecting stdout/stderr/exit-0; when unset or != "1", zero debug I/O runs.
+#[test]
+fn pipe_agyline_debug_captures_raw_payload_only_when_one_and_never_fails_render() {
+    // Omit `cwd` so the default line's `git` slot does not spawn an async `__refresh-git` worker
+    // that could race with the zero-directory assertion below.
+    let payload = br#"{"model":{"display_name":"Claude Opus 4.6"}}"#;
+
+    // 1. Unset and non-"1" values produce zero debug files and do not create AGYLINE_HOME.
+    let run_stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    for val in [None, Some("0"), Some("false"), Some("true"), Some("2")] {
+        let home = std::env::temp_dir().join(format!(
+            "agyline_debug_off_{}_{run_stamp}_{}",
+            std::process::id(),
+            SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let home_str = home.to_str().expect("utf8 home");
+        let mut envs = vec![("AGYLINE_HOME", home_str)];
+        if let Some(v) = val {
+            envs.push(("AGYLINE_DEBUG", v));
+        }
+        let out = run_with_stdin_and_env(&[], payload, &envs);
+        assert_eq!(out.status.code(), Some(0));
+        assert!(out.stderr.is_empty());
+        assert!(!out.stdout.is_empty());
+        assert!(
+            !home.join("state").join("last_payload.json").exists(),
+            "AGYLINE_DEBUG={val:?} must not write last_payload.json"
+        );
+        assert!(
+            !home.exists(),
+            "AGYLINE_DEBUG={val:?} on pre-session payload must not create AGYLINE_HOME"
+        );
+    }
+
+    // 2. AGYLINE_DEBUG=1 captures raw stdin verbatim without altering stdout or exit code.
+    let home_on = std::env::temp_dir().join(format!(
+        "agyline_debug_on_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let home_on_str = home_on.to_str().expect("utf8 home");
+    let baseline = run_with_stdin_and_env(&[], payload, &[]);
+    let debug_out = run_with_stdin_and_env(
+        &[],
+        payload,
+        &[("AGYLINE_HOME", home_on_str), ("AGYLINE_DEBUG", "1")],
+    );
+    assert_eq!(debug_out.status.code(), Some(0));
+    assert!(debug_out.stderr.is_empty());
+    assert_eq!(debug_out.stdout, baseline.stdout);
+    let captured =
+        fs::read(home_on.join("state").join("last_payload.json")).expect("read last_payload.json");
+    assert_eq!(captured, payload);
+    let _ = fs::remove_dir_all(&home_on);
+
+    // 3. Unwritable AGYLINE_HOME (a regular file) must still render cleanly and exit 0.
+    let blocking_file = std::env::temp_dir().join(format!(
+        "agyline_debug_blocked_{}_{}",
+        std::process::id(),
+        SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::write(&blocking_file, b"not a directory").expect("write blocking file");
+    let blocked_out = run_with_stdin_and_env(
+        &[],
+        payload,
+        &[
+            ("AGYLINE_HOME", blocking_file.to_str().expect("utf8")),
+            ("AGYLINE_DEBUG", "1"),
+        ],
+    );
+    assert_eq!(blocked_out.status.code(), Some(0));
+    assert!(blocked_out.stderr.is_empty());
+    assert_eq!(blocked_out.stdout, baseline.stdout);
+    let _ = fs::remove_file(&blocking_file);
 }

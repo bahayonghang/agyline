@@ -124,6 +124,24 @@ pub fn plan_icon(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+/// Returns empty under `Ascii` because `eval_tokens` already prints the `token` label.
+pub fn tokens_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{e26b}",
+        GlyphSet::Unicode => "\u{25c8}",
+        GlyphSet::Ascii => "",
+    }
+}
+
+/// Returns empty under `Ascii` because duration values (`58m`, `1h5m`) are self-labeled.
+pub fn duration_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f43a}",
+        GlyphSet::Unicode => "\u{25f7}",
+        GlyphSet::Ascii => "",
+    }
+}
+
 /// Battery glyph for remaining quota percent. The 90/70/45/20 steps and their Nerd codepoints
 /// reproduce `statusline.py`; only the `nerd` set varies by level.
 pub fn quota_icon(glyphs: GlyphSet, quota_pct: i32) -> &'static str {
@@ -217,5 +235,121 @@ pub fn ellipsis(glyphs: GlyphSet) -> &'static str {
     match glyphs {
         GlyphSet::Nerd | GlyphSet::Unicode => "\u{2026}",
         GlyphSet::Ascii => "...",
+    }
+}
+
+pub fn status_ready_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25cf}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn status_working_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2699}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn status_tool_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{1f527}",
+        GlyphSet::Ascii => ">",
+    }
+}
+
+pub fn status_review_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25c8}",
+        GlyphSet::Ascii => "~",
+    }
+}
+
+pub fn status_error_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2716}",
+        GlyphSet::Ascii => "x",
+    }
+}
+
+pub fn status_thinking_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{25c6}",
+        GlyphSet::Ascii => "?",
+    }
+}
+
+pub fn status_wait_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{23f3}",
+        GlyphSet::Ascii => "...",
+    }
+}
+
+pub fn git_deleted_mark(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2718}",
+        GlyphSet::Ascii => "-",
+    }
+}
+
+pub fn git_renamed_mark(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{00bb}",
+        GlyphSet::Ascii => ">",
+    }
+}
+
+pub fn token_in_arrow(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2191}",
+        GlyphSet::Ascii => "^",
+    }
+}
+
+pub fn token_out_arrow(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2193}",
+        GlyphSet::Ascii => "v",
+    }
+}
+
+pub fn agybar_model_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2726}",
+        GlyphSet::Ascii => "*",
+    }
+}
+
+pub fn agybar_git_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{2387}",
+        GlyphSet::Ascii => "git:",
+    }
+}
+
+pub fn agybar_quota_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd | GlyphSet::Unicode => "\u{26a1}",
+        GlyphSet::Ascii => "q:",
+    }
+}
+
+pub fn status_dot_icon(glyphs: GlyphSet, state: &str) -> &'static str {
+    match (glyphs, state) {
+        (GlyphSet::Nerd | GlyphSet::Unicode, "thinking") => "\u{25c9}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "working") => "\u{25cf}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "tool_use") => "\u{2699}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "error") => "\u{2716}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "" | "idle") => "\u{25cb}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, "reviewing") => "\u{25c9}",
+        (GlyphSet::Nerd | GlyphSet::Unicode, _) => "\u{25cc}",
+        (GlyphSet::Ascii, "thinking" | "working") => "*",
+        (GlyphSet::Ascii, "tool_use") => "#",
+        (GlyphSet::Ascii, "error") => "x",
+        (GlyphSet::Ascii, "" | "idle") => "o",
+        (GlyphSet::Ascii, "reviewing") => "?",
+        (GlyphSet::Ascii, _) => ".",
     }
 }

@@ -7,13 +7,15 @@ use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 
-use crate::config::{ItemSlot, PresetScope};
-use crate::render::ColorToken;
+use crate::config::{
+    ConfigDoc, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, PresetScope, presets::build_preset_doc,
+};
+use crate::render::{BarStyle, ColorToken};
 use crate::tui::state::{
     ActiveModal, ConfiguratorApp, ConfiguratorExit, HookAction, InspectorField, LayoutPane,
-    RuntimePane, RuntimeSubField, StyleField, StylePane, TextEditTarget, ThresholdField, TuiTab,
-    inspector_fields_for_item, ordered_catalog_entries, preset_scope_label, preset_scope_next,
-    preset_scope_prev,
+    MAX_LAYOUT_ROWS, RuntimePane, RuntimeSubField, StyleField, StylePane, TextEditTarget,
+    ThresholdField, TuiTab, inspector_bool_default, inspector_fields_for_item,
+    ordered_catalog_entries, preset_scope_label, preset_scope_next, preset_scope_prev,
 };
 
 impl ConfiguratorApp {
@@ -541,7 +543,15 @@ impl ConfiguratorApp {
                 self.move_selected_slot_other_row();
                 true
             }
-            // Delete removes the slot here; in the Inspector the same key resets one field.
+            KeyCode::Char('a') | KeyCode::Char('+') => {
+                self.add_layout_row();
+                true
+            }
+            // Delete removes the slot here; Shift+X removes an empty trailing/extra row when > 2 rows.
+            KeyCode::Char('X') => {
+                self.remove_empty_selected_row();
+                true
+            }
             KeyCode::Char('x') | KeyCode::Delete | KeyCode::Backspace => {
                 self.remove_selected_slot();
                 true
@@ -586,10 +596,14 @@ impl ConfiguratorApp {
             // append a new instance; singletons move from the other row instead of doubling.
             KeyCode::Char(' ') | KeyCode::Enter => {
                 let entry = entries[self.catalog_idx.min(count - 1)];
-                let target_row = self.selected_row.min(1);
+                let max_row = self.doc.lines.len().max(2) - 1;
+                let target_row = self.selected_row.min(max_row);
                 let mut added_slot_idx: Option<usize> = None;
                 self.mutate_doc(|doc| {
                     Self::ensure_two_rows(doc);
+                    while doc.lines.len() <= target_row {
+                        doc.lines.push(Vec::new());
+                    }
                     if entry.allow_multiple {
                         doc.lines[target_row].push(ItemSlot::new(entry.id));
                         added_slot_idx = Some(doc.lines[target_row].len() - 1);
@@ -598,8 +612,11 @@ impl ConfiguratorApp {
                     {
                         doc.lines[target_row].remove(pos);
                     } else {
-                        let other_row = 1 - target_row;
-                        doc.lines[other_row].retain(|s| s.id != entry.id);
+                        for (r_idx, row) in doc.lines.iter_mut().enumerate() {
+                            if r_idx != target_row {
+                                row.retain(|s| s.id != entry.id);
+                            }
+                        }
                         doc.lines[target_row].push(ItemSlot::new(entry.id));
                         added_slot_idx = Some(doc.lines[target_row].len() - 1);
                     }
@@ -693,13 +710,122 @@ impl ConfiguratorApp {
                 self.set_selected_slot_priority(next);
                 true
             }
+            InspectorField::Style => {
+                let options: &[&str] = match slot_snapshot.id {
+                    ItemId::Model => &["", "agybar", "hud"],
+                    ItemId::Mode => &["", "badge"],
+                    ItemId::Git => &["", "branch", "counts"],
+                    ItemId::Status => &["", "dot"],
+                    ItemId::Tokens => &["", "arrows"],
+                    ItemId::QuotaGroup => &["", "inline"],
+                    ItemId::Context => &["", "bar"],
+                    ItemId::Cache => &["", "hit_rate"],
+                    _ => return false,
+                };
+                let cur = slot_snapshot.style.as_deref().unwrap_or("");
+                let idx = options
+                    .iter()
+                    .position(|o| o.eq_ignore_ascii_case(cur))
+                    .unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % options.len()
+                } else if idx == 0 {
+                    options.len() - 1
+                } else {
+                    idx - 1
+                };
+                let chosen = options[next_idx];
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.style = (!chosen.is_empty()).then(|| chosen.to_string());
+                    }
+                });
+                true
+            }
+            InspectorField::MaxLevels => {
+                let cur = i32::from(slot_snapshot.max_levels.unwrap_or(2));
+                let next = (cur + if forward { 1 } else { -1 }).clamp(1, 8) as u8;
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.max_levels = Some(next);
+                    }
+                });
+                true
+            }
+            InspectorField::BarStyle => {
+                let styles = BarStyle::ALL;
+                // Unset slots inherit the top-level `doc.bar_style`, not always `BarStyle::Line`.
+                let cur = slot_snapshot
+                    .bar_style
+                    .as_deref()
+                    .and_then(BarStyle::from_key)
+                    .unwrap_or(self.doc.bar_style);
+                let idx = styles.iter().position(|&s| s == cur).unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % styles.len()
+                } else if idx == 0 {
+                    styles.len() - 1
+                } else {
+                    idx - 1
+                };
+                let next_style = styles[next_idx];
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.bar_style = if next_style == doc.bar_style {
+                            None
+                        } else {
+                            Some(next_style.as_key().to_string())
+                        };
+                    }
+                });
+                true
+            }
+            InspectorField::BarWidth => {
+                let cur = i32::from(slot_snapshot.bar_width.unwrap_or(10));
+                let next = (cur + if forward { 1 } else { -1 }).clamp(4, 20) as u8;
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.bar_width = (next != 10).then_some(next);
+                    }
+                });
+                true
+            }
+            InspectorField::Family => {
+                let fams = ["gemini", "3p", "@model"];
+                let cur = slot_snapshot.family.as_deref().unwrap_or("gemini");
+                let idx = fams
+                    .iter()
+                    .position(|f| f.eq_ignore_ascii_case(cur))
+                    .unwrap_or(0);
+                let next_idx = if forward {
+                    (idx + 1) % fams.len()
+                } else if idx == 0 {
+                    fams.len() - 1
+                } else {
+                    idx - 1
+                };
+                let next = fams[next_idx].to_string();
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
+                        s.family = Some(next);
+                    }
+                });
+                true
+            }
             InspectorField::ShowRemaining
+            | InspectorField::ShowUsed
+            | InspectorField::ShowBar
             | InspectorField::ShowReset
             | InspectorField::ShowAmount
             | InspectorField::ShowSubagent
             | InspectorField::ShowDefault
             | InspectorField::Compact
-            | InspectorField::ShowDetail => {
+            | InspectorField::ShowDetail
+            | InspectorField::ShowWhenOff
+            | InspectorField::ShowTtl
+            | InspectorField::ShowBreakdown
+            | InspectorField::ShowPending
+            | InspectorField::ShowTokens => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -760,10 +886,46 @@ impl ConfiguratorApp {
                 );
                 true
             }
+            InspectorField::Style => {
+                let init = slot_snapshot.style.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorStyle {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::MaxLevels => {
+                let init = slot_snapshot
+                    .max_levels
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorMaxLevels {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
             InspectorField::Bucket => {
                 let init = slot_snapshot.bucket.clone().unwrap_or_default();
                 self.start_text_edit(
                     TextEditTarget::InspectorBucket {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::Family => {
+                let init = slot_snapshot.family.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorFamily {
                         row,
                         slot: slot_idx,
                     },
@@ -782,13 +944,45 @@ impl ConfiguratorApp {
                 );
                 true
             }
+            InspectorField::BarStyle => {
+                let init = slot_snapshot.bar_style.clone().unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorBarStyle {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
+            InspectorField::BarWidth => {
+                let init = slot_snapshot
+                    .bar_width
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                self.start_text_edit(
+                    TextEditTarget::InspectorBarWidth {
+                        row,
+                        slot: slot_idx,
+                    },
+                    init,
+                );
+                true
+            }
             InspectorField::ShowRemaining
+            | InspectorField::ShowUsed
+            | InspectorField::ShowBar
             | InspectorField::ShowReset
             | InspectorField::ShowAmount
             | InspectorField::ShowSubagent
             | InspectorField::ShowDefault
             | InspectorField::Compact
-            | InspectorField::ShowDetail => {
+            | InspectorField::ShowDetail
+            | InspectorField::ShowWhenOff
+            | InspectorField::ShowTtl
+            | InspectorField::ShowBreakdown
+            | InspectorField::ShowPending
+            | InspectorField::ShowTokens => {
                 self.toggle_inspector_bool(row, slot_idx, field);
                 true
             }
@@ -800,29 +994,66 @@ impl ConfiguratorApp {
             let Some(slot) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) else {
                 return;
             };
-            // Tri-state: true goes back to None (inherit) rather than Some(false), so the TOML
-            // never carries a key that restates the default.
-            let flip = |opt: &mut Option<bool>| {
-                *opt = if opt.unwrap_or(false) {
-                    None
-                } else {
-                    Some(true)
-                };
+            let id = slot.id;
+            // Inheriting `None` yields `def`; toggling sets `Some(!def)`, toggling again clears to `None`.
+            let flip = |opt: &mut Option<bool>, def: bool| {
+                let next = !opt.unwrap_or(def);
+                *opt = if next == def { None } else { Some(next) };
             };
             match field {
-                InspectorField::ShowRemaining => flip(&mut slot.show_remaining),
-                InspectorField::ShowReset => flip(&mut slot.show_reset),
-                InspectorField::ShowAmount => flip(&mut slot.show_amount),
-                InspectorField::ShowSubagent => flip(&mut slot.show_subagent),
-                InspectorField::ShowDefault => flip(&mut slot.show_default),
-                InspectorField::Compact => flip(&mut slot.compact),
-                InspectorField::ShowDetail => flip(&mut slot.show_detail),
+                InspectorField::ShowRemaining => {
+                    flip(&mut slot.show_remaining, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowUsed => {
+                    flip(&mut slot.show_used, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowBar => {
+                    flip(&mut slot.show_bar, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowReset => {
+                    flip(&mut slot.show_reset, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowAmount => {
+                    flip(&mut slot.show_amount, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowSubagent => {
+                    flip(&mut slot.show_subagent, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowDefault => {
+                    flip(&mut slot.show_default, inspector_bool_default(id, field));
+                }
+                InspectorField::Compact => {
+                    flip(&mut slot.compact, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowDetail => {
+                    flip(&mut slot.show_detail, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowWhenOff => {
+                    flip(&mut slot.show_when_off, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowTtl => {
+                    flip(&mut slot.show_ttl, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowBreakdown => {
+                    flip(&mut slot.show_breakdown, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowPending => {
+                    flip(&mut slot.show_pending, inspector_bool_default(id, field));
+                }
+                InspectorField::ShowTokens => {
+                    flip(&mut slot.show_tokens, inspector_bool_default(id, field));
+                }
                 InspectorField::Priority
                 | InspectorField::Icon
                 | InspectorField::Fg
                 | InspectorField::IconColor
+                | InspectorField::Style
+                | InspectorField::MaxLevels
                 | InspectorField::Bucket
-                | InspectorField::Label => {}
+                | InspectorField::Family
+                | InspectorField::Label
+                | InspectorField::BarStyle
+                | InspectorField::BarWidth => {}
             }
         });
     }
@@ -837,15 +1068,27 @@ impl ConfiguratorApp {
                 InspectorField::Icon => slot.icon = None,
                 InspectorField::Fg => slot.fg = None,
                 InspectorField::IconColor => slot.icon_color = None,
+                InspectorField::Style => slot.style = None,
+                InspectorField::MaxLevels => slot.max_levels = None,
                 InspectorField::ShowRemaining => slot.show_remaining = None,
                 InspectorField::Bucket => slot.bucket = None,
+                InspectorField::Family => slot.family = None,
                 InspectorField::Label => slot.label = None,
+                InspectorField::ShowUsed => slot.show_used = None,
+                InspectorField::ShowBar => slot.show_bar = None,
+                InspectorField::BarStyle => slot.bar_style = None,
+                InspectorField::BarWidth => slot.bar_width = None,
                 InspectorField::ShowReset => slot.show_reset = None,
                 InspectorField::ShowAmount => slot.show_amount = None,
                 InspectorField::ShowSubagent => slot.show_subagent = None,
                 InspectorField::ShowDefault => slot.show_default = None,
                 InspectorField::Compact => slot.compact = None,
                 InspectorField::ShowDetail => slot.show_detail = None,
+                InspectorField::ShowWhenOff => slot.show_when_off = None,
+                InspectorField::ShowTtl => slot.show_ttl = None,
+                InspectorField::ShowBreakdown => slot.show_breakdown = None,
+                InspectorField::ShowPending => slot.show_pending = None,
+                InspectorField::ShowTokens => slot.show_tokens = None,
             }
         });
     }
@@ -916,7 +1159,7 @@ impl ConfiguratorApp {
                         self.style_field_idx = (self.style_field_idx + 1) % fields.len();
                         true
                     }
-                    // Only the four enum fields cycle; separator and indent are text (Enter).
+                    // Enum/bool fields and separator presets cycle with Left/Right; Enter edits raw text on separator/indent.
                     KeyCode::Left | KeyCode::Char('h') => match field {
                         StyleField::Palette => {
                             self.cycle_palette(false);
@@ -934,7 +1177,23 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(false);
                             true
                         }
-                        StyleField::Separator | StyleField::Indent => false,
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(false);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(false);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
+                        StyleField::Separator => {
+                            self.cycle_separator_preset(false);
+                            true
+                        }
+                        StyleField::Indent => false,
                     },
                     KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => match field {
                         StyleField::Palette => {
@@ -953,7 +1212,23 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(true);
                             true
                         }
-                        StyleField::Separator | StyleField::Indent => false,
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(true);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(true);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
+                        StyleField::Separator => {
+                            self.cycle_separator_preset(true);
+                            true
+                        }
+                        StyleField::Indent => false,
                     },
                     KeyCode::Enter => match field {
                         StyleField::Palette => {
@@ -972,6 +1247,18 @@ impl ConfiguratorApp {
                             self.cycle_color_depth(true);
                             true
                         }
+                        StyleField::ItemStyle => {
+                            self.cycle_item_style(true);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            self.cycle_bar_style(true);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            self.toggle_bar_gradient();
+                            true
+                        }
                         StyleField::Separator => {
                             let init = self.doc.separator.clone();
                             self.start_text_edit(TextEditTarget::StyleSeparator, init);
@@ -983,10 +1270,24 @@ impl ConfiguratorApp {
                             true
                         }
                     },
-                    // Reference defaults: " | " between items and a two-space indent.
                     KeyCode::Delete | KeyCode::Backspace => match field {
+                        StyleField::ItemStyle => {
+                            self.mutate_doc(|doc| doc.item_style = ItemStyle::Minimal);
+                            true
+                        }
+                        StyleField::BarStyle => {
+                            let def = ConfigDoc::default().bar_style;
+                            self.mutate_doc(|doc| doc.bar_style = def);
+                            true
+                        }
+                        StyleField::BarGradient => {
+                            let def = ConfigDoc::default().bar_gradient;
+                            self.mutate_doc(|doc| doc.bar_gradient = def);
+                            true
+                        }
                         StyleField::Separator => {
-                            self.mutate_doc(|doc| doc.separator = " | ".to_string());
+                            let def = ConfigDoc::default().separator;
+                            self.mutate_doc(|doc| doc.separator = def);
                             true
                         }
                         StyleField::Indent => {
@@ -1078,9 +1379,12 @@ impl ConfiguratorApp {
                             self.step_threshold_field(field, 1);
                             true
                         }
-                        ThresholdField::ContextWarn
+                        ThresholdField::CompactAt
+                        | ThresholdField::ContextWarn
+                        | ThresholdField::ContextHigh
                         | ThresholdField::ContextCrit
                         | ThresholdField::QuotaWarn
+                        | ThresholdField::QuotaHigh
                         | ThresholdField::QuotaCrit
                         | ThresholdField::CacheWarnSecs => false,
                     },
@@ -1157,35 +1461,109 @@ impl ConfiguratorApp {
         }
     }
 
-    /// One Left/Right step. Each warn/crit pair is clamped against its partner so they can never
-    /// cross or tie: context warn stays below crit, quota warn (remaining %) stays above crit.
+    /// One Left/Right step. Context (`warn < high < crit`) and quota (`warn > high > crit`)
+    /// triples are strictly clamped against adjacent neighbors so bounds can never cross or tie.
     fn step_threshold_field(&mut self, field: ThresholdField, dir: i32) {
         match field {
             ThresholdField::SingleLine => {
                 let next = !self.doc.single_line;
                 self.mutate_doc(|doc| doc.single_line = next);
             }
+            ThresholdField::CompactAt => {
+                let next = if dir >= 0 {
+                    self.doc.compact_at.saturating_add(4).min(MAX_COMPACT_AT)
+                } else {
+                    self.doc.compact_at.saturating_sub(4)
+                };
+                self.mutate_doc(|doc| doc.compact_at = next);
+            }
             ThresholdField::Overflow => self.toggle_overflow(),
             ThresholdField::ContextWarn => {
-                let max_val = (self.doc.thresholds.context_crit - 1.0).max(0.0);
-                let next = (self.doc.thresholds.context_warn + f64::from(dir)).clamp(0.0, max_val);
-                self.mutate_doc(|doc| doc.thresholds.context_warn = next);
+                let cur = self.doc.thresholds.context_warn;
+                let high = self.doc.thresholds.context_high;
+                let next = if dir >= 0 {
+                    let cand = cur + 1.0;
+                    if cand < high {
+                        cand
+                    } else if high - 1.0 > cur {
+                        high - 1.0
+                    } else {
+                        cur
+                    }
+                } else {
+                    (cur - 1.0).max(0.0)
+                };
+                if next < high {
+                    self.mutate_doc(|doc| doc.thresholds.context_warn = next);
+                }
+            }
+            ThresholdField::ContextHigh => {
+                let cur = self.doc.thresholds.context_high;
+                let warn = self.doc.thresholds.context_warn;
+                let crit = self.doc.thresholds.context_crit;
+                let next = if dir >= 0 {
+                    let cand = cur + 1.0;
+                    if cand < crit {
+                        cand
+                    } else if crit - 1.0 > cur {
+                        crit - 1.0
+                    } else {
+                        cur
+                    }
+                } else {
+                    let cand = cur - 1.0;
+                    if cand > warn {
+                        cand
+                    } else if warn + 1.0 < cur {
+                        warn + 1.0
+                    } else {
+                        cur
+                    }
+                };
+                if next > warn && next < crit {
+                    self.mutate_doc(|doc| doc.thresholds.context_high = next);
+                }
             }
             ThresholdField::ContextCrit => {
-                let min_val = (self.doc.thresholds.context_warn + 1.0).min(100.0);
-                let next =
-                    (self.doc.thresholds.context_crit + f64::from(dir)).clamp(min_val, 100.0);
-                self.mutate_doc(|doc| doc.thresholds.context_crit = next);
+                let cur = self.doc.thresholds.context_crit;
+                let high = self.doc.thresholds.context_high;
+                let next = if dir >= 0 {
+                    (cur + 1.0).min(100.0)
+                } else {
+                    let cand = cur - 1.0;
+                    if cand > high {
+                        cand
+                    } else if high + 1.0 < cur {
+                        high + 1.0
+                    } else {
+                        cur
+                    }
+                };
+                if next > high {
+                    self.mutate_doc(|doc| doc.thresholds.context_crit = next);
+                }
             }
             ThresholdField::QuotaWarn => {
-                let min_val = (self.doc.thresholds.quota_crit + 1).min(100);
+                let min_val = (self.doc.thresholds.quota_high + 1).min(100);
                 let next = (self.doc.thresholds.quota_warn + dir).clamp(min_val, 100);
-                self.mutate_doc(|doc| doc.thresholds.quota_warn = next);
+                if next > self.doc.thresholds.quota_high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_warn = next);
+                }
+            }
+            ThresholdField::QuotaHigh => {
+                let min_val = self.doc.thresholds.quota_crit + 1;
+                let max_val = self.doc.thresholds.quota_warn - 1;
+                if min_val <= max_val {
+                    let next = (self.doc.thresholds.quota_high + dir).clamp(min_val, max_val);
+                    self.mutate_doc(|doc| doc.thresholds.quota_high = next);
+                }
             }
             ThresholdField::QuotaCrit => {
-                let max_val = (self.doc.thresholds.quota_warn - 1).max(0);
+                let max_val = (self.doc.thresholds.quota_high - 1).max(0);
                 let next = (self.doc.thresholds.quota_crit + dir).clamp(0, max_val);
-                self.mutate_doc(|doc| doc.thresholds.quota_crit = next);
+                if next < self.doc.thresholds.quota_high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_crit = next);
+                }
             }
             // 5 s steps inside 0..=86400 (one day), the range the numeric editor also enforces.
             ThresholdField::CacheWarnSecs => {
@@ -1205,10 +1583,18 @@ impl ConfiguratorApp {
                 let next = !self.doc.single_line;
                 self.mutate_doc(|doc| doc.single_line = next);
             }
+            ThresholdField::CompactAt => {
+                let init = self.doc.compact_at.to_string();
+                self.start_text_edit(TextEditTarget::ThresholdCompactAt, init);
+            }
             ThresholdField::Overflow => self.toggle_overflow(),
             ThresholdField::ContextWarn => {
                 let init = format!("{}", self.doc.thresholds.context_warn);
                 self.start_text_edit(TextEditTarget::ThresholdContextWarn, init);
+            }
+            ThresholdField::ContextHigh => {
+                let init = format!("{}", self.doc.thresholds.context_high);
+                self.start_text_edit(TextEditTarget::ThresholdContextHigh, init);
             }
             ThresholdField::ContextCrit => {
                 let init = format!("{}", self.doc.thresholds.context_crit);
@@ -1217,6 +1603,10 @@ impl ConfiguratorApp {
             ThresholdField::QuotaWarn => {
                 let init = self.doc.thresholds.quota_warn.to_string();
                 self.start_text_edit(TextEditTarget::ThresholdQuotaWarn, init);
+            }
+            ThresholdField::QuotaHigh => {
+                let init = self.doc.thresholds.quota_high.to_string();
+                self.start_text_edit(TextEditTarget::ThresholdQuotaHigh, init);
             }
             ThresholdField::QuotaCrit => {
                 let init = self.doc.thresholds.quota_crit.to_string();
@@ -1229,41 +1619,103 @@ impl ConfiguratorApp {
         }
     }
 
-    /// Delete/Backspace: the reference defaults (context 50/80, quota 45/20, cache 60 s), each
-    /// re-clamped against its partner so a reset cannot invert the pair.
+    /// Delete/Backspace: resets to the active preset's canonical defaults (e.g. `default`:
+    /// `compact_at` 88, context 60/75/90, quota 40/25/10, cache 60 s; `cometix`: 0, 50/75/80,
+    /// 45/25/20), clamped against neighbors so a reset never inverts bounds.
     fn reset_threshold_field(&mut self, field: ThresholdField) {
+        let base = build_preset_doc(&self.doc.preset, Some(&self.env.home_dir)).unwrap_or_default();
         match field {
-            ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = false),
+            ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = base.single_line),
+            ThresholdField::CompactAt => {
+                self.mutate_doc(|doc| doc.compact_at = base.compact_at);
+            }
             ThresholdField::Overflow => {
-                self.mutate_doc(|doc| doc.overflow = crate::config::OverflowMode::Fit)
+                self.mutate_doc(|doc| doc.overflow = base.overflow);
             }
             ThresholdField::ContextWarn => {
-                let def = 50.0_f64.min((self.doc.thresholds.context_crit - 1.0).max(0.0));
-                self.mutate_doc(|doc| doc.thresholds.context_warn = def);
+                let target = base.thresholds.context_warn;
+                let high = self.doc.thresholds.context_high;
+                let def = if target < high {
+                    target
+                } else if high >= 1.0 {
+                    high - 1.0
+                } else {
+                    high * 0.5
+                };
+                if def < high {
+                    self.mutate_doc(|doc| doc.thresholds.context_warn = def);
+                }
+            }
+            ThresholdField::ContextHigh => {
+                let target = base.thresholds.context_high;
+                let warn = self.doc.thresholds.context_warn;
+                let crit = self.doc.thresholds.context_crit;
+                let def = if target > warn && target < crit {
+                    target
+                } else {
+                    (warn + crit) * 0.5
+                };
+                if def > warn && def < crit {
+                    self.mutate_doc(|doc| doc.thresholds.context_high = def);
+                }
             }
             ThresholdField::ContextCrit => {
-                let def = 80.0_f64.max((self.doc.thresholds.context_warn + 1.0).min(100.0));
-                self.mutate_doc(|doc| doc.thresholds.context_crit = def);
+                let target = base.thresholds.context_crit;
+                let high = self.doc.thresholds.context_high;
+                let def = if target > high {
+                    target
+                } else if high <= 99.0 {
+                    high + 1.0
+                } else {
+                    (high + 100.0) * 0.5
+                };
+                if def > high {
+                    self.mutate_doc(|doc| doc.thresholds.context_crit = def);
+                }
             }
             ThresholdField::QuotaWarn => {
-                let def = 45.max((self.doc.thresholds.quota_crit + 1).min(100));
-                self.mutate_doc(|doc| doc.thresholds.quota_warn = def);
+                let target = base.thresholds.quota_warn;
+                let high = self.doc.thresholds.quota_high;
+                let def = target.max((high + 1).min(100));
+                if def > high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_warn = def);
+                }
+            }
+            ThresholdField::QuotaHigh => {
+                let target = base.thresholds.quota_high;
+                let crit = self.doc.thresholds.quota_crit;
+                let warn = self.doc.thresholds.quota_warn;
+                if warn - crit >= 2 {
+                    let def = if target > crit && target < warn {
+                        target
+                    } else {
+                        (crit + warn) / 2
+                    };
+                    self.mutate_doc(|doc| doc.thresholds.quota_high = def);
+                }
             }
             ThresholdField::QuotaCrit => {
-                let def = 20.min((self.doc.thresholds.quota_warn - 1).max(0));
-                self.mutate_doc(|doc| doc.thresholds.quota_crit = def);
+                let target = base.thresholds.quota_crit;
+                let high = self.doc.thresholds.quota_high;
+                let def = target.min((high - 1).max(0));
+                if def < high {
+                    self.mutate_doc(|doc| doc.thresholds.quota_crit = def);
+                }
             }
             ThresholdField::CacheWarnSecs => {
-                self.mutate_doc(|doc| doc.thresholds.cache_warn_secs = 60);
+                self.mutate_doc(|doc| {
+                    doc.thresholds.cache_warn_secs = base.thresholds.cache_warn_secs
+                });
             }
         }
     }
 
-    /// Moves the selection over both rows flattened into one list, wrapping at the ends. An empty
-    /// row contributes one position so it stays selectable; the Inspector index resets each move.
+    /// Moves the selection over all configured rows flattened into one list, wrapping at the ends.
+    /// An empty row contributes one position so it stays selectable; Inspector index resets each move.
     fn move_active_rows_cursor(&mut self, delta: isize) {
         let mut positions: Vec<(usize, usize)> = Vec::new();
-        for r in 0..2 {
+        let row_count = self.doc.lines.len().max(2);
+        for r in 0..row_count {
             let n = self.doc.lines.get(r).map_or(0, Vec::len);
             if n == 0 {
                 positions.push((r, 0));
@@ -1310,11 +1762,12 @@ impl ConfiguratorApp {
         self.selected_slot = target_idx;
     }
 
-    /// 'm': appends the slot to the end of the other row and follows it there. A no-op on an empty
-    /// row, which has no slot to move.
+    /// 'm': appends the slot to the end of the next row (`(from_row + 1) % row_count`) and follows
+    /// it there. A no-op on an empty row, which has no slot to move.
     fn move_selected_slot_other_row(&mut self) {
-        let from_row = self.selected_row.min(1);
-        let to_row = 1 - from_row;
+        let row_count = self.doc.lines.len().max(2);
+        let from_row = self.selected_row.min(row_count - 1);
+        let to_row = (from_row + 1) % row_count;
         let slot_idx = self.selected_slot;
         let has_slot = self
             .doc
@@ -1333,6 +1786,41 @@ impl ConfiguratorApp {
         });
         self.selected_row = to_row;
         self.selected_slot = new_slot_idx;
+    }
+
+    fn add_layout_row(&mut self) {
+        if self.doc.lines.len().max(2) >= MAX_LAYOUT_ROWS {
+            self.status_toast = Some(format!("Maximum {MAX_LAYOUT_ROWS} rows reached"));
+            return;
+        }
+        let mut new_row = 0usize;
+        self.mutate_doc(|doc| {
+            Self::ensure_two_rows(doc);
+            if doc.lines.len() < MAX_LAYOUT_ROWS {
+                doc.lines.push(Vec::new());
+            }
+            new_row = doc.lines.len() - 1;
+        });
+        self.selected_row = new_row;
+        self.selected_slot = 0;
+        self.inspector_idx = 0;
+    }
+
+    fn remove_empty_selected_row(&mut self) {
+        if self.doc.lines.len() <= 2 {
+            return;
+        }
+        let row_idx = self.selected_row;
+        let is_empty = self.doc.lines.get(row_idx).is_some_and(Vec::is_empty);
+        if !is_empty {
+            self.status_toast = Some("Clear items from row before removing it with X".to_string());
+            return;
+        }
+        self.mutate_doc(|doc| {
+            if doc.lines.len() > 2 && row_idx < doc.lines.len() && doc.lines[row_idx].is_empty() {
+                doc.lines.remove(row_idx);
+            }
+        });
     }
 
     fn remove_selected_slot(&mut self) {
@@ -1516,9 +2004,10 @@ impl ConfiguratorApp {
     /// second copy of that layout, so chrome heights, pane percentages and scroll offsets must
     /// stay in sync with `draw_workbench` and the tab drawers.
     fn handle_left_click(&mut self, col: u16, row: u16) {
-        // Chrome rows: top bar 1, optional broken banner 1, preview 5, tab bar 1, then the body.
+        // Chrome rows: top bar 1, optional broken banner 1, dynamic preview_h, tab bar 1, then body.
         let preview_y: u16 = if self.loaded_from_broken_toml { 2 } else { 1 };
-        let tabs_y: u16 = preview_y + 5;
+        let preview_h = self.preview_box_height();
+        let tabs_y: u16 = preview_y + preview_h;
         let body_y: u16 = tabs_y + 1;
         let footer_y: u16 = self.term_size.1.saturating_sub(1);
 
@@ -1561,15 +2050,16 @@ impl ConfiguratorApp {
 
         // +1 skips the pane's top border, so inner_row indexes the lines the pane drew.
         let inner_row = row.saturating_sub(body_y + 1) as usize;
+        let visible_rows = footer_y.saturating_sub(body_y + 2) as usize;
         match self.active_tab {
             TuiTab::Layout => {
                 // The body's own top and bottom border rows are not list items.
                 if row == body_y || row == footer_y.saturating_sub(1) {
                     return;
                 }
-                // Both lists are scrolled by these offsets, so screen row -> index + offset.
-                let (rows_offset, catalog_offset) =
-                    self.layout_list_offsets(footer_y.saturating_sub(body_y + 2) as usize);
+                // All three lists scroll by these offsets, so screen row -> index + offset.
+                let (rows_offset, catalog_offset) = self.layout_list_offsets(visible_rows);
+                let insp_offset = self.inspector_list_offset(visible_rows);
                 let c0 = (main_w * 34) / 100;
                 let c1 = c0 + (main_w * 33) / 100;
                 if col < c0 {
@@ -1581,34 +2071,50 @@ impl ConfiguratorApp {
                 } else {
                     self.layout_pane = LayoutPane::Inspector;
                     if inner_row >= 1 {
-                        self.inspector_idx = inner_row - 1;
+                        self.inspector_idx = (inner_row - 1) + insp_offset;
                         self.clamp_layout_selection();
                     }
                 }
             }
             TuiTab::StylePresets => {
+                if row == body_y || row == footer_y.saturating_sub(1) {
+                    return;
+                }
                 let c0 = (main_w * 26) / 100;
                 let c1 = c0 + (main_w * 40) / 100;
                 if col < c0 {
                     self.style_pane = StylePane::Presets;
-                    // Row 0 is the scope header, so preset indices start at inner_row 1.
+                    // Row 0 is the scope header, so scrolled preset indices start at inner_row 1.
+                    let preset_offset = self.style_preset_offset(visible_rows);
                     if inner_row >= 1 && !self.available_presets.is_empty() {
                         self.style_preset_idx =
-                            (inner_row - 1).min(self.available_presets.len() - 1);
+                            ((inner_row - 1) + preset_offset).min(self.available_presets.len() - 1);
                     }
                 } else if col < c1 {
                     self.style_pane = StylePane::GlobalStyle;
-                    self.style_field_idx = inner_row.min(StyleField::ALL.len() - 1);
+                    let row_map = self.style_global_row_map();
+                    let global_offset = self.style_global_offset(visible_rows);
+                    self.style_field_idx = row_map
+                        .get(inner_row + global_offset)
+                        .copied()
+                        .unwrap_or(StyleField::ALL.len() - 1);
                 } else {
                     self.style_pane = StylePane::PaletteOverrides;
-                    self.palette_override_idx = inner_row.min(ColorToken::ALL.len() - 1);
+                    let ov_offset = self.palette_override_offset(visible_rows);
+                    self.palette_override_idx =
+                        (inner_row + ov_offset).min(ColorToken::ALL.len() - 1);
                 }
             }
             TuiTab::ThresholdsRuntime => {
+                if row == body_y || row == footer_y.saturating_sub(1) {
+                    return;
+                }
                 let c0 = (main_w * 52) / 100;
                 if col < c0 {
                     self.runtime_pane = RuntimePane::Thresholds;
-                    self.threshold_field_idx = inner_row.min(ThresholdField::ALL.len() - 1);
+                    let th_offset = self.threshold_list_offset(visible_rows);
+                    self.threshold_field_idx =
+                        (inner_row + th_offset).min(ThresholdField::ALL.len() - 1);
                 } else {
                     self.runtime_pane = RuntimePane::Runtime;
                     self.runtime_field_idx = inner_row.min(RuntimeSubField::ALL.len() - 1);
@@ -1636,7 +2142,8 @@ impl ConfiguratorApp {
     /// empty-row lines `draw_layout_tab` emits. Clicking a line header selects that row's slot 0.
     fn click_active_rows_item(&mut self, inner_row: usize) {
         let mut line_cursor = 0usize;
-        for r_idx in 0..2 {
+        let row_count = self.doc.lines.len().max(2);
+        for r_idx in 0..row_count {
             if inner_row == line_cursor {
                 self.selected_row = r_idx;
                 self.selected_slot = 0;

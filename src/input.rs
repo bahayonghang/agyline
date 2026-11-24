@@ -1,8 +1,11 @@
-//! One untrusted `agy` stdin frame -> a normalized `Payload`, in a single pass with no I/O and no
-//! panics. Every field is optional; defaults and fallback chains mirror `ref/agy-patch`, so a
-//! partial frame still renders. Absent strings become "", numbers 0, and only JSON `true` is true.
+//! One untrusted `agy` stdin frame -> a normalized `Payload`, via typed streaming serde
+//! deserialization with zero intermediate `Value` tree allocations. Every field is optional and
+//! lenient against unexpected JSON types; defaults and fallback chains mirror `ref/agy-patch`.
 
-use serde_json::{Map, Value};
+use std::borrow::Cow;
+use std::fmt;
+
+use serde::de::{self, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor};
 
 /// Hard cap on piped stdin (4 MiB). The reference scripts read stdin unbounded; this bound stops a
 /// hostile or runaway frame from being buffered and parsed. Over-limit input is rejected, not cut.
@@ -29,7 +32,7 @@ pub struct SubagentSummary {
 
 /// The normalized frame every later stage reads. Missing data becomes "" / 0 / false, never an
 /// error; `Option` marks fields whose absence changes the line, not merely the JSON shape.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Payload {
     /// `session_id`, else `conversation_id`; `None` when both are missing or blank (pre-session).
     pub session_id: Option<String>,
@@ -43,6 +46,7 @@ pub struct Payload {
     pub model_effort: String,
     /// `cwd`, else `workspace.current_dir`, else `workspace.project_dir`, kept verbatim.
     pub cwd: String,
+    pub vcs_type: String,
     pub vcs_branch: String,
     pub vcs_dirty: bool,
     pub sandbox_enabled: bool,
@@ -50,6 +54,8 @@ pub struct Payload {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cache_read_input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub total_input_tokens: i64,
     pub total_output_tokens: i64,
     /// Window size in tokens; f64 because agy may send the number as a float.
     pub context_window_size: f64,
@@ -61,6 +67,7 @@ pub struct Payload {
     pub cost_usd: f64,
     /// USD attributed to subagents; 0 unless `cost` is an object that carries it.
     pub subagent_cost_usd: f64,
+    pub cost_estimated: bool,
     /// One entry per `quota.<name>` object; empty when `quota` is absent or not an object.
     pub quota_buckets: Vec<QuotaBucketData>,
     pub subagents_total: usize,
@@ -72,6 +79,7 @@ pub struct Payload {
     pub tool_confirmation_pending: bool,
     /// Columns agy reports; `None` when absent or non-positive, which leaves the line un-narrowed.
     pub terminal_width: Option<usize>,
+    pub transcript_path: String,
     // Session/identity extras: the reference scripts never read these, agyline's catalog does.
     pub vim_mode: String,
     pub conversation_title: String,
@@ -79,6 +87,8 @@ pub struct Payload {
     pub artifact_count: i64,
     pub version: String,
     pub plan_tier: String,
+    /// Optional credit balance used as `cr:<n>` fallback in inline quota display.
+    pub ai_credits: Option<f64>,
 }
 
 impl Payload {
@@ -96,318 +106,1164 @@ pub fn parse_stdin_payload(raw: &[u8]) -> Option<Payload> {
         return None;
     }
     let text = std::str::from_utf8(raw).ok()?;
-    if text.trim().is_empty() {
+    let without_bom = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let trimmed = without_bom.trim_start();
+    if trimmed.is_empty() || !trimmed.starts_with('{') {
         return None;
     }
-    let value: Value = serde_json::from_str(text).ok()?;
-    let Value::Object(obj) = value else {
-        return None;
-    };
-    Some(extract_from_object(&obj))
+    serde_json::from_str::<RawRoot>(trimmed)
+        .ok()
+        .map(RawRoot::into_payload)
 }
 
-fn extract_from_object(obj: &Map<String, Value>) -> Payload {
-    // Reference fallback order; a blank id stays absent, so the frame is treated as pre-session.
-    let session_id = first_non_blank_trimmed(&[obj.get("session_id"), obj.get("conversation_id")]);
-    let agent_state =
-        first_non_blank_trimmed(&[obj.get("agent_state")]).unwrap_or_else(|| "idle".to_string());
-    let exec_mode = first_non_blank_trimmed(&[obj.get("execution_mode"), obj.get("cycle_mode")])
-        .unwrap_or_default();
+/// Zero-copy JSON object key: borrows unescaped keys directly from input without allocating.
+struct JsonKey<'de>(Cow<'de, str>);
 
-    let model_obj = obj.get("model").and_then(Value::as_object);
-    let model_display_name = model_obj
-        .and_then(|m| non_blank_raw_str(m.get("display_name")))
-        .unwrap_or_default();
-    let model_id = model_obj
-        .and_then(|m| non_blank_raw_str(m.get("id")))
-        .unwrap_or_default();
-    let model_effort = first_non_blank_trimmed(&[
-        model_obj.and_then(|m| m.get("effort")),
-        obj.get("thinkingLevel"),
-    ])
-    .unwrap_or_default();
+impl<'de> de::Deserialize<'de> for JsonKey<'de> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct KeyVisitor;
+        impl<'de> Visitor<'de> for KeyVisitor {
+            type Value = JsonKey<'de>;
 
-    let ws_obj = obj.get("workspace").and_then(Value::as_object);
-    let cwd = first_non_blank_raw(&[
-        obj.get("cwd"),
-        ws_obj.and_then(|w| w.get("current_dir")),
-        ws_obj.and_then(|w| w.get("project_dir")),
-    ])
-    .unwrap_or_default();
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("JSON string key")
+            }
 
-    let vcs_obj = obj.get("vcs").and_then(Value::as_object);
-    let vcs_branch = vcs_obj
-        .and_then(|v| first_non_blank_trimmed(&[v.get("branch")]))
-        .unwrap_or_default();
-    let vcs_dirty = strict_bool(vcs_obj.and_then(|v| v.get("dirty")));
+            fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<Self::Value, E> {
+                Ok(JsonKey(Cow::Borrowed(v)))
+            }
 
-    let sbx_obj = obj.get("sandbox").and_then(Value::as_object);
-    let sandbox_enabled = strict_bool(sbx_obj.and_then(|s| s.get("enabled")));
-    let sandbox_allow_network = strict_bool(sbx_obj.and_then(|s| s.get("allow_network")));
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(JsonKey(Cow::Owned(v.to_string())))
+            }
 
-    let ctx_obj = obj.get("context_window").and_then(Value::as_object);
-    let cur_u = ctx_obj
-        .and_then(|c| c.get("current_usage"))
-        .and_then(Value::as_object);
-    let input_tokens = finite_i64(cur_u.and_then(|u| u.get("input_tokens")), 0);
-    let output_tokens = finite_i64(cur_u.and_then(|u| u.get("output_tokens")), 0);
-    let cache_read_input_tokens =
-        finite_i64(cur_u.and_then(|u| u.get("cache_read_input_tokens")), 0);
-    let total_output_tokens = finite_i64(ctx_obj.and_then(|c| c.get("total_output_tokens")), 0);
-    let context_window_size =
-        finite_f64(ctx_obj.and_then(|c| c.get("context_window_size"))).unwrap_or(0.0);
-    let used_percentage = finite_f64(ctx_obj.and_then(|c| c.get("used_percentage"))).unwrap_or(0.0);
-    let remaining_percentage = finite_f64(ctx_obj.and_then(|c| c.get("remaining_percentage")));
-
-    // `cost` is an object or a bare number; both `*_usd` and `*_cost_usd` spellings are accepted.
-    let (cost_usd, subagent_cost_usd) = if let Some(Value::Object(cost_map)) = obj.get("cost") {
-        (
-            finite_f64(
-                cost_map
-                    .get("total_usd")
-                    .or_else(|| cost_map.get("total_cost_usd")),
-            )
-            .unwrap_or(0.0),
-            finite_f64(
-                cost_map
-                    .get("subagent_usd")
-                    .or_else(|| cost_map.get("subagent_cost_usd")),
-            )
-            .unwrap_or(0.0),
-        )
-    } else if let Some(v @ Value::Number(_)) = obj.get("cost") {
-        (finite_f64(Some(v)).unwrap_or(0.0), 0.0)
-    } else {
-        (0.0, 0.0)
-    };
-
-    let mut quota_buckets = Vec::new();
-    if let Some(Value::Object(q_map)) = obj.get("quota") {
-        quota_buckets.reserve(q_map.len());
-        for (name, qv) in q_map {
-            let Some(q_obj) = qv.as_object() else {
-                continue;
-            };
-            let disabled = strict_bool(q_obj.get("disabled"));
-            // Only 0.0..=1.0 is usable; statusline.ps1 skips out-of-range buckets in the minimum.
-            let remaining_fraction =
-                finite_f64(q_obj.get("remaining_fraction")).filter(|rf| (0.0..=1.0).contains(rf));
-            let remaining_amount = q_obj
-                .get("remaining_amount")
-                .filter(|v| v.is_number())
-                .map(|v| finite_i64(Some(v), 0));
-            let reset_in_seconds = q_obj
-                .get("reset_in_seconds")
-                .filter(|v| v.is_number())
-                .map(|v| finite_i64(Some(v), 0));
-            let reset_time =
-                first_non_blank_trimmed(&[q_obj.get("reset_time"), q_obj.get("reset_at")]);
-            quota_buckets.push(QuotaBucketData {
-                name: name.clone(),
-                disabled,
-                remaining_fraction,
-                remaining_amount,
-                reset_in_seconds,
-                reset_time,
-            });
+            fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+                Ok(JsonKey(Cow::Owned(v)))
+            }
         }
+        deserializer.deserialize_str(KeyVisitor)
     }
+}
 
-    let mut subagents_total = 0usize;
-    let mut subagents_running = 0usize;
-    let mut subagents = Vec::new();
-    if let Some(Value::Array(arr)) = obj.get("subagents") {
-        subagents_total = arr.len();
-        subagents.reserve(arr.len());
-        for entry in arr {
-            if let Some(s_obj) = entry.as_object() {
-                let status = first_non_blank_trimmed(&[s_obj.get("status")]).unwrap_or_default();
-                // Exactly the three statuses the reference counts as running; no others qualify.
-                let is_running = status.eq_ignore_ascii_case("running")
-                    || status.eq_ignore_ascii_case("working")
-                    || status.eq_ignore_ascii_case("thinking");
-                if is_running {
-                    subagents_running += 1;
+fn drain_seq<'de, A: SeqAccess<'de>>(mut seq: A) -> Result<(), A::Error> {
+    while seq.next_element::<IgnoredAny>()?.is_some() {}
+    Ok(())
+}
+
+fn drain_map<'de, A: MapAccess<'de>>(mut map: A) -> Result<(), A::Error> {
+    while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+    Ok(())
+}
+
+macro_rules! ignore_non_primitive {
+    ($ret:expr) => {
+        fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok($ret)
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+            drain_seq(seq)?;
+            Ok($ret)
+        }
+    };
+}
+
+struct LenientTrimmed(Option<String>);
+
+impl<'de> de::Deserialize<'de> for LenientTrimmed {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = LenientTrimmed;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("optional trimmed string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let t = v.trim();
+                Ok(LenientTrimmed((!t.is_empty()).then(|| t.to_string())))
+            }
+
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(LenientTrimmed(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(LenientTrimmed(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+struct LenientRawStr(Option<String>);
+
+impl<'de> de::Deserialize<'de> for LenientRawStr {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = LenientRawStr;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("optional raw string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(LenientRawStr((!v.trim().is_empty()).then(|| v.to_string())))
+            }
+
+            fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+                Ok(LenientRawStr((!v.trim().is_empty()).then_some(v)))
+            }
+
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(LenientRawStr(None))
+            }
+            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(LenientRawStr(None))
+            }
+            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(LenientRawStr(None))
+            }
+            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(LenientRawStr(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(LenientRawStr(None))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(LenientRawStr(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(LenientRawStr(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+struct LenientBool(Option<bool>);
+
+impl<'de> de::Deserialize<'de> for LenientBool {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = LenientBool;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("strict JSON boolean")
+            }
+
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(LenientBool(Some(v)))
+            }
+
+            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(LenientBool(None))
+            }
+            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(LenientBool(None))
+            }
+            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(LenientBool(None))
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(LenientBool(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(LenientBool(None))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(LenientBool(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(LenientBool(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+fn norm_finite_f64(v: f64) -> Option<f64> {
+    if !v.is_finite() {
+        return None;
+    }
+    Some(if v == 0.0 { 0.0 } else { v })
+}
+
+struct LenientF64(Option<f64>);
+
+impl<'de> de::Deserialize<'de> for LenientF64 {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = LenientF64;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("finite JSON number")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(LenientF64(norm_finite_f64(v as f64)))
+            }
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(LenientF64(norm_finite_f64(v as f64)))
+            }
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(LenientF64(norm_finite_f64(v)))
+            }
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(LenientF64(None))
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(LenientF64(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(LenientF64(None))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(LenientF64(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(LenientF64(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+struct LenientI64(Option<i64>);
+
+impl<'de> de::Deserialize<'de> for LenientI64 {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = LenientI64;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("finite JSON integer or truncatable float")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(LenientI64(Some(v)))
+            }
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(LenientI64(Some(i64::try_from(v).unwrap_or(0))))
+            }
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(LenientI64(v.is_finite().then_some(v.trunc() as i64)))
+            }
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(LenientI64(None))
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(LenientI64(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(LenientI64(None))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(LenientI64(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(LenientI64(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+struct LenientObject<T>(Option<T>);
+
+impl<'de, T: Default + VisitObject<'de>> de::Deserialize<'de> for LenientObject<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ObjVisitor<T>(std::marker::PhantomData<T>);
+        impl<'de, T: Default + VisitObject<'de>> Visitor<'de> for ObjVisitor<T> {
+            type Value = LenientObject<T>;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("optional JSON object")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                Ok(LenientObject(Some(T::visit_object(map)?)))
+            }
+
+            ignore_non_primitive!(LenientObject(None));
+        }
+        deserializer.deserialize_any(ObjVisitor(std::marker::PhantomData))
+    }
+}
+
+trait VisitObject<'de>: Sized {
+    fn visit_object<A: MapAccess<'de>>(map: A) -> Result<Self, A::Error>;
+}
+
+#[derive(Default)]
+struct RawModel {
+    display_name: Option<String>,
+    id: Option<String>,
+    effort: Option<String>,
+}
+
+impl<'de> VisitObject<'de> for RawModel {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "display_name" => out.display_name = map.next_value::<LenientRawStr>()?.0,
+                "id" => out.id = map.next_value::<LenientRawStr>()?.0,
+                "effort" => out.effort = map.next_value::<LenientTrimmed>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
                 }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawVcs {
+    vcs_type: Option<String>,
+    branch: Option<String>,
+    dirty: Option<bool>,
+}
+
+impl<'de> VisitObject<'de> for RawVcs {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "type" => out.vcs_type = map.next_value::<LenientTrimmed>()?.0,
+                "branch" => out.branch = map.next_value::<LenientTrimmed>()?.0,
+                "dirty" => out.dirty = map.next_value::<LenientBool>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawSandbox {
+    enabled: Option<bool>,
+    allow_network: Option<bool>,
+}
+
+impl<'de> VisitObject<'de> for RawSandbox {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "enabled" => out.enabled = map.next_value::<LenientBool>()?.0,
+                "allow_network" => out.allow_network = map.next_value::<LenientBool>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawWorkspace {
+    current_dir: Option<String>,
+    project_dir: Option<String>,
+    vcs: Option<RawVcs>,
+    sandbox: Option<RawSandbox>,
+}
+
+impl<'de> VisitObject<'de> for RawWorkspace {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "current_dir" => out.current_dir = map.next_value::<LenientRawStr>()?.0,
+                "project_dir" => out.project_dir = map.next_value::<LenientRawStr>()?.0,
+                "vcs" => out.vcs = map.next_value::<LenientObject<RawVcs>>()?.0,
+                "sandbox" => out.sandbox = map.next_value::<LenientObject<RawSandbox>>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawCurrentUsage {
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_read_input_tokens: i64,
+    cache_creation_input_tokens: Option<i64>,
+    cache_creation_tokens: Option<i64>,
+}
+
+impl<'de> VisitObject<'de> for RawCurrentUsage {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "input_tokens" => out.input_tokens = map.next_value::<LenientI64>()?.0.unwrap_or(0),
+                "output_tokens" => {
+                    out.output_tokens = map.next_value::<LenientI64>()?.0.unwrap_or(0)
+                }
+                "cache_read_input_tokens" => {
+                    out.cache_read_input_tokens = map.next_value::<LenientI64>()?.0.unwrap_or(0);
+                }
+                "cache_creation_input_tokens" => {
+                    out.cache_creation_input_tokens = map.next_value::<LenientI64>()?.0;
+                }
+                "cache_creation_tokens" => {
+                    out.cache_creation_tokens = map.next_value::<LenientI64>()?.0;
+                }
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawContextWindow {
+    current_usage: Option<RawCurrentUsage>,
+    total_input_tokens: i64,
+    total_output_tokens: i64,
+    context_window_size: f64,
+    used_percentage: f64,
+    remaining_percentage: Option<f64>,
+}
+
+impl<'de> VisitObject<'de> for RawContextWindow {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "current_usage" => {
+                    out.current_usage = map.next_value::<LenientObject<RawCurrentUsage>>()?.0;
+                }
+                "total_input_tokens" => {
+                    out.total_input_tokens = map.next_value::<LenientI64>()?.0.unwrap_or(0);
+                }
+                "total_output_tokens" => {
+                    out.total_output_tokens = map.next_value::<LenientI64>()?.0.unwrap_or(0);
+                }
+                "context_window_size" => {
+                    out.context_window_size = map.next_value::<LenientF64>()?.0.unwrap_or(0.0);
+                }
+                "used_percentage" => {
+                    out.used_percentage = map.next_value::<LenientF64>()?.0.unwrap_or(0.0);
+                }
+                "remaining_percentage" => {
+                    out.remaining_percentage = map.next_value::<LenientF64>()?.0;
+                }
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawCost(f64, f64, bool);
+
+impl<'de> de::Deserialize<'de> for RawCost {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawCost;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("cost number or object")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(RawCost(
+                    norm_finite_f64(v as f64).unwrap_or(0.0),
+                    0.0,
+                    false,
+                ))
+            }
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(RawCost(
+                    norm_finite_f64(v as f64).unwrap_or(0.0),
+                    0.0,
+                    false,
+                ))
+            }
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(RawCost(norm_finite_f64(v).unwrap_or(0.0), 0.0, false))
+            }
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(RawCost::default())
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(RawCost::default())
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(RawCost::default())
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(RawCost::default())
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut total_usd = None;
+                let mut total_cost_usd = None;
+                let mut sub_usd = None;
+                let mut sub_cost_usd = None;
+                let mut estimated = false;
+                while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+                    match k.0.as_ref() {
+                        "total_usd" => total_usd = map.next_value::<LenientF64>()?.0,
+                        "total_cost_usd" => total_cost_usd = map.next_value::<LenientF64>()?.0,
+                        "subagent_usd" => sub_usd = map.next_value::<LenientF64>()?.0,
+                        "subagent_cost_usd" => sub_cost_usd = map.next_value::<LenientF64>()?.0,
+                        "estimated" => estimated = map.next_value::<LenientBool>()?.0 == Some(true),
+                        _ => {
+                            let _ = map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(RawCost(
+                    total_usd.or(total_cost_usd).unwrap_or(0.0),
+                    sub_usd.or(sub_cost_usd).unwrap_or(0.0),
+                    estimated,
+                ))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+#[derive(Default)]
+struct RawQuotaBucket {
+    disabled: bool,
+    remaining_fraction: Option<f64>,
+    remaining_amount: Option<i64>,
+    reset_in_seconds: Option<i64>,
+    reset_time: Option<String>,
+    reset_at: Option<String>,
+}
+
+impl<'de> VisitObject<'de> for RawQuotaBucket {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "disabled" => out.disabled = map.next_value::<LenientBool>()?.0 == Some(true),
+                "remaining_fraction" => {
+                    // Only 0.0..=1.0 is usable; statusline.ps1 skips out-of-range buckets in the minimum.
+                    out.remaining_fraction = map
+                        .next_value::<LenientF64>()?
+                        .0
+                        .filter(|rf| (0.0..=1.0).contains(rf));
+                }
+                "remaining_amount" => out.remaining_amount = map.next_value::<LenientI64>()?.0,
+                "reset_in_seconds" => out.reset_in_seconds = map.next_value::<LenientI64>()?.0,
+                "reset_time" => out.reset_time = map.next_value::<LenientTrimmed>()?.0,
+                "reset_at" => out.reset_at = map.next_value::<LenientTrimmed>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+struct RawQuotaList(Vec<QuotaBucketData>);
+
+impl<'de> de::Deserialize<'de> for RawQuotaList {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawQuotaList;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("quota object map")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut out = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some((name, q_opt)) =
+                    map.next_entry::<String, LenientObject<RawQuotaBucket>>()?
+                {
+                    if let Some(q) = q_opt.0 {
+                        out.push(QuotaBucketData {
+                            name,
+                            disabled: q.disabled,
+                            remaining_fraction: q.remaining_fraction,
+                            remaining_amount: q.remaining_amount,
+                            reset_in_seconds: q.reset_in_seconds,
+                            reset_time: q.reset_time.or(q.reset_at),
+                        });
+                    }
+                }
+                Ok(RawQuotaList(out))
+            }
+
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(RawQuotaList(Vec::new()))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                drain_seq(seq)?;
+                Ok(RawQuotaList(Vec::new()))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+#[derive(Default)]
+struct RawSubagentEntry {
+    status: String,
+    name: String,
+    model: String,
+}
+
+impl<'de> VisitObject<'de> for RawSubagentEntry {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "status" => out.status = map.next_value::<LenientTrimmed>()?.0.unwrap_or_default(),
                 // Never fall back to `role`: in agy 1.5.9 `role` holds the full multi-line prompt.
-                let name = first_non_blank_trimmed(&[s_obj.get("name")]).unwrap_or_default();
-                let model = first_non_blank_trimmed(&[s_obj.get("model")]).unwrap_or_default();
-                subagents.push(SubagentSummary {
-                    status,
-                    name,
-                    model,
-                });
+                "name" => out.name = map.next_value::<LenientTrimmed>()?.0.unwrap_or_default(),
+                "model" => out.model = map.next_value::<LenientTrimmed>()?.0.unwrap_or_default(),
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
             }
         }
-    }
-
-    let task_count = finite_i64(obj.get("task_count"), 0);
-    let pending_input_count = finite_i64(obj.get("pending_input_count"), 0);
-    let tool_confirmation_pending = strict_bool(obj.get("tool_confirmation_pending"));
-
-    // agy omits the key when unknown; a non-positive width must not become a 0-column budget.
-    let terminal_width = obj
-        .get("terminal_width")
-        .filter(|v| v.is_number())
-        .map(|v| finite_i64(Some(v), 0))
-        .filter(|&w| w > 0)
-        .map(|w| w as usize);
-
-    // Both shapes occur: an object (`vim.mode`, `agent.name`) or a bare string, plus flat aliases.
-    let vim_mode = if let Some(Value::Object(vim_map)) = obj.get("vim") {
-        first_non_blank_trimmed(&[vim_map.get("mode"), obj.get("vim_mode")]).unwrap_or_default()
-    } else {
-        first_non_blank_trimmed(&[obj.get("vim"), obj.get("vim_mode")]).unwrap_or_default()
-    };
-
-    let conversation_title = first_non_blank_trimmed(&[
-        obj.get("conversation_title"),
-        obj.get("title"),
-        obj.get("session_title"),
-    ])
-    .unwrap_or_default();
-
-    let agent_name = if let Some(Value::Object(a_map)) = obj.get("agent") {
-        first_non_blank_trimmed(&[a_map.get("name"), obj.get("agent_name")]).unwrap_or_default()
-    } else {
-        first_non_blank_trimmed(&[obj.get("agent"), obj.get("agent_name")]).unwrap_or_default()
-    };
-
-    // `artifacts` may be a count or the array itself; an array is counted, never summed.
-    let artifact_count = if obj.get("artifact_count").is_some_and(Value::is_number) {
-        finite_i64(obj.get("artifact_count"), 0)
-    } else if let Some(art_val) = obj.get("artifacts") {
-        if art_val.is_number() {
-            finite_i64(Some(art_val), 0)
-        } else if let Some(arr) = art_val.as_array() {
-            arr.len() as i64
-        } else {
-            0
-        }
-    } else {
-        0
-    };
-
-    let version = first_non_blank_trimmed(&[
-        obj.get("version"),
-        obj.get("agy_version"),
-        obj.get("cli_version"),
-    ])
-    .unwrap_or_default();
-
-    let account_obj = obj.get("account").and_then(Value::as_object);
-    let plan_tier = first_non_blank_trimmed(&[
-        obj.get("plan_tier"),
-        obj.get("plan"),
-        obj.get("tier"),
-        account_obj.and_then(|a| a.get("plan_tier")),
-        account_obj.and_then(|a| a.get("plan")),
-        account_obj.and_then(|a| a.get("tier")),
-    ])
-    .unwrap_or_default();
-
-    // Note: `email` (`obj.email`, `account.email`) and `battle.*` are intentionally ignored.
-    Payload {
-        session_id,
-        agent_state,
-        exec_mode,
-        model_display_name,
-        model_id,
-        model_effort,
-        cwd,
-        vcs_branch,
-        vcs_dirty,
-        sandbox_enabled,
-        sandbox_allow_network,
-        input_tokens,
-        output_tokens,
-        cache_read_input_tokens,
-        total_output_tokens,
-        context_window_size,
-        used_percentage,
-        remaining_percentage,
-        cost_usd,
-        subagent_cost_usd,
-        quota_buckets,
-        subagents_total,
-        subagents_running,
-        subagents,
-        task_count,
-        pending_input_count,
-        tool_confirmation_pending,
-        terminal_width,
-        vim_mode,
-        conversation_title,
-        agent_name,
-        artifact_count,
-        version,
-        plan_tier,
+        Ok(out)
     }
 }
 
-/// The string verbatim, or `None` when absent, non-string or blank. Used for cwd and model names,
-/// which are passed on exactly as agy sent them rather than trimmed.
-fn non_blank_raw_str(val: Option<&Value>) -> Option<String> {
-    let s = val?.as_str()?;
-    if s.trim().is_empty() {
-        None
-    } else {
-        Some(s.to_string())
-    }
+struct RawSubagentList {
+    total: usize,
+    running: usize,
+    entries: Vec<SubagentSummary>,
 }
 
-/// First non-blank string candidate, verbatim; `None` when every candidate is absent or blank.
-fn first_non_blank_raw(candidates: &[Option<&Value>]) -> Option<String> {
-    for &candidate in candidates {
-        if let Some(s) = non_blank_raw_str(candidate) {
-            return Some(s);
-        }
-    }
-    None
-}
+impl<'de> de::Deserialize<'de> for RawSubagentList {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawSubagentList;
 
-/// First non-blank string candidate, trimmed; `None` when all are absent, non-string or blank.
-/// Candidate order is the reference's fallback order, so it must not be reshuffled.
-fn first_non_blank_trimmed(candidates: &[Option<&Value>]) -> Option<String> {
-    for &candidate in candidates {
-        if let Some(s) = candidate.and_then(Value::as_str) {
-            let trimmed = s.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("subagents array")
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut total = 0usize;
+                let mut running = 0usize;
+                let mut entries = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(entry_opt) = seq.next_element::<LenientObject<RawSubagentEntry>>()? {
+                    total += 1;
+                    if let Some(entry) = entry_opt.0 {
+                        // Exactly the three statuses the reference counts as running; no others qualify.
+                        if entry.status.eq_ignore_ascii_case("running")
+                            || entry.status.eq_ignore_ascii_case("working")
+                            || entry.status.eq_ignore_ascii_case("thinking")
+                        {
+                            running += 1;
+                        }
+                        entries.push(SubagentSummary {
+                            status: entry.status,
+                            name: entry.name,
+                            model: entry.model,
+                        });
+                    }
+                }
+                Ok(RawSubagentList {
+                    total,
+                    running,
+                    entries,
+                })
+            }
+
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(RawSubagentList {
+                    total: 0,
+                    running: 0,
+                    entries: Vec::new(),
+                })
             }
         }
+        deserializer.deserialize_any(V)
     }
-    None
 }
 
-/// Only a real JSON `true` counts (reference: `-eq $true` / `is True`); 1 and "true" do not.
-fn strict_bool(val: Option<&Value>) -> bool {
-    matches!(val, Some(Value::Bool(true)))
-}
+struct RawStrOrField(Option<String>);
 
-/// A finite JSON number as f64, else `None`; non-numeric and non-finite values are dropped.
-fn finite_f64(val: Option<&Value>) -> Option<f64> {
-    let num = val?.as_number()?;
-    let f = num.as_f64()?;
-    if !f.is_finite() {
-        return None;
+fn deserialize_str_or_object_field<'de, D: Deserializer<'de>>(
+    deserializer: D,
+    field_name: &'static str,
+) -> Result<RawStrOrField, D::Error> {
+    struct V(&'static str);
+    impl<'de> Visitor<'de> for V {
+        type Value = RawStrOrField;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("string or object")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let t = v.trim();
+            Ok(RawStrOrField((!t.is_empty()).then(|| t.to_string())))
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let mut found = None;
+            while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+                if k.0.as_ref() == self.0 {
+                    found = map.next_value::<LenientTrimmed>()?.0;
+                } else {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+            Ok(RawStrOrField(found))
+        }
+
+        fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+            Ok(RawStrOrField(None))
+        }
+        fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+            Ok(RawStrOrField(None))
+        }
+        fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+            Ok(RawStrOrField(None))
+        }
+        fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+            Ok(RawStrOrField(None))
+        }
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(RawStrOrField(None))
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+            drain_seq(seq)?;
+            Ok(RawStrOrField(None))
+        }
     }
-    // Collapse -0.0: it equals 0.0 but would otherwise reach the line as a negative zero.
-    if f == 0.0 { Some(0.0) } else { Some(f) }
+    deserializer.deserialize_any(V(field_name))
 }
 
-/// A JSON number as i64, or `default` when absent, non-numeric or out of range; floats truncate.
-fn finite_i64(val: Option<&Value>, default: i64) -> i64 {
-    let Some(num) = val.and_then(Value::as_number) else {
-        return default;
-    };
-    if let Some(i) = num.as_i64() {
-        i
-    } else if let Some(u) = num.as_u64() {
-        i64::try_from(u).unwrap_or(default)
-    } else if let Some(f) = num.as_f64().filter(|v| v.is_finite()) {
-        f.trunc() as i64
-    } else {
-        default
+struct RawVimField(Option<String>);
+impl<'de> de::Deserialize<'de> for RawVimField {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserialize_str_or_object_field(deserializer, "mode").map(|r| Self(r.0))
+    }
+}
+
+struct RawAgentField(Option<String>);
+impl<'de> de::Deserialize<'de> for RawAgentField {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserialize_str_or_object_field(deserializer, "name").map(|r| Self(r.0))
+    }
+}
+
+struct RawArtifactsCount(Option<i64>);
+
+impl<'de> de::Deserialize<'de> for RawArtifactsCount {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawArtifactsCount;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("artifact count or array")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(Some(v)))
+            }
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(Some(i64::try_from(v).unwrap_or(0))))
+            }
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(v.is_finite().then_some(v.trunc() as i64)))
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut count = 0_i64;
+                while seq.next_element::<IgnoredAny>()?.is_some() {
+                    count += 1;
+                }
+                Ok(RawArtifactsCount(Some(count)))
+            }
+            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(None))
+            }
+            fn visit_str<E: de::Error>(self, _: &str) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(None))
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(RawArtifactsCount(None))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                drain_map(map)?;
+                Ok(RawArtifactsCount(None))
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+#[derive(Default)]
+struct RawAccount {
+    plan_tier: Option<String>,
+    plan: Option<String>,
+    tier: Option<String>,
+}
+
+impl<'de> VisitObject<'de> for RawAccount {
+    fn visit_object<A: MapAccess<'de>>(mut map: A) -> Result<Self, A::Error> {
+        let mut out = Self::default();
+        while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+            match k.0.as_ref() {
+                "plan_tier" => out.plan_tier = map.next_value::<LenientTrimmed>()?.0,
+                "plan" => out.plan = map.next_value::<LenientTrimmed>()?.0,
+                "tier" => out.tier = map.next_value::<LenientTrimmed>()?.0,
+                _ => {
+                    let _ = map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct RawRoot {
+    session_id: Option<String>,
+    conversation_id: Option<String>,
+    agent_state: Option<String>,
+    execution_mode: Option<String>,
+    cycle_mode: Option<String>,
+    model: Option<RawModel>,
+    thinking_level: Option<String>,
+    cwd: Option<String>,
+    workspace: Option<RawWorkspace>,
+    vcs: Option<RawVcs>,
+    sandbox: Option<RawSandbox>,
+    context_window: Option<RawContextWindow>,
+    cost: RawCost,
+    quota_buckets: Vec<QuotaBucketData>,
+    subagents: Option<RawSubagentList>,
+    task_count: i64,
+    pending_input_count: i64,
+    tool_confirmation_pending: bool,
+    terminal_width: Option<usize>,
+    transcript_path: Option<String>,
+    vim: Option<String>,
+    vim_mode: Option<String>,
+    conversation_title: Option<String>,
+    title: Option<String>,
+    session_title: Option<String>,
+    agent: Option<String>,
+    agent_name: Option<String>,
+    artifact_count: Option<i64>,
+    artifacts: Option<i64>,
+    version: Option<String>,
+    agy_version: Option<String>,
+    cli_version: Option<String>,
+    plan_tier: Option<String>,
+    plan: Option<String>,
+    tier: Option<String>,
+    account: Option<RawAccount>,
+    ai_credits: Option<f64>,
+}
+
+impl<'de> de::Deserialize<'de> for RawRoot {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct RootVisitor;
+        impl<'de> Visitor<'de> for RootVisitor {
+            type Value = RawRoot;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("top-level agy JSON object")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut root = RawRoot::default();
+                while let Some(k) = map.next_key::<JsonKey<'de>>()? {
+                    match k.0.as_ref() {
+                        "session_id" => root.session_id = map.next_value::<LenientTrimmed>()?.0,
+                        "conversation_id" => {
+                            root.conversation_id = map.next_value::<LenientTrimmed>()?.0;
+                        }
+                        "agent_state" => root.agent_state = map.next_value::<LenientTrimmed>()?.0,
+                        "execution_mode" => {
+                            root.execution_mode = map.next_value::<LenientTrimmed>()?.0;
+                        }
+                        "cycle_mode" => root.cycle_mode = map.next_value::<LenientTrimmed>()?.0,
+                        "model" => root.model = map.next_value::<LenientObject<RawModel>>()?.0,
+                        "thinkingLevel" => {
+                            root.thinking_level = map.next_value::<LenientTrimmed>()?.0;
+                        }
+                        "cwd" => root.cwd = map.next_value::<LenientRawStr>()?.0,
+                        "workspace" => {
+                            root.workspace = map.next_value::<LenientObject<RawWorkspace>>()?.0;
+                        }
+                        "vcs" => root.vcs = map.next_value::<LenientObject<RawVcs>>()?.0,
+                        "sandbox" => {
+                            root.sandbox = map.next_value::<LenientObject<RawSandbox>>()?.0;
+                        }
+                        "context_window" => {
+                            root.context_window =
+                                map.next_value::<LenientObject<RawContextWindow>>()?.0;
+                        }
+                        "cost" => root.cost = map.next_value::<RawCost>()?,
+                        "quota" => root.quota_buckets = map.next_value::<RawQuotaList>()?.0,
+                        "subagents" => root.subagents = Some(map.next_value::<RawSubagentList>()?),
+                        "task_count" => {
+                            root.task_count = map.next_value::<LenientI64>()?.0.unwrap_or(0);
+                        }
+                        "pending_input_count" => {
+                            root.pending_input_count =
+                                map.next_value::<LenientI64>()?.0.unwrap_or(0);
+                        }
+                        "tool_confirmation_pending" => {
+                            root.tool_confirmation_pending =
+                                map.next_value::<LenientBool>()?.0 == Some(true);
+                        }
+                        "terminal_width" => {
+                            root.terminal_width = map
+                                .next_value::<LenientI64>()?
+                                .0
+                                .filter(|&w| w > 0)
+                                .map(|w| w as usize);
+                        }
+                        "transcript_path" => {
+                            root.transcript_path = map.next_value::<LenientRawStr>()?.0;
+                        }
+                        "vim" => root.vim = map.next_value::<RawVimField>()?.0,
+                        "vim_mode" => root.vim_mode = map.next_value::<LenientTrimmed>()?.0,
+                        "conversation_title" => {
+                            root.conversation_title = map.next_value::<LenientTrimmed>()?.0;
+                        }
+                        "title" => root.title = map.next_value::<LenientTrimmed>()?.0,
+                        "session_title" => {
+                            root.session_title = map.next_value::<LenientTrimmed>()?.0;
+                        }
+                        "agent" => root.agent = map.next_value::<RawAgentField>()?.0,
+                        "agent_name" => root.agent_name = map.next_value::<LenientTrimmed>()?.0,
+                        "artifact_count" => {
+                            root.artifact_count = map.next_value::<LenientI64>()?.0;
+                        }
+                        "artifacts" => root.artifacts = map.next_value::<RawArtifactsCount>()?.0,
+                        "version" => root.version = map.next_value::<LenientTrimmed>()?.0,
+                        "agy_version" => root.agy_version = map.next_value::<LenientTrimmed>()?.0,
+                        "cli_version" => root.cli_version = map.next_value::<LenientTrimmed>()?.0,
+                        "plan_tier" => root.plan_tier = map.next_value::<LenientTrimmed>()?.0,
+                        "plan" => root.plan = map.next_value::<LenientTrimmed>()?.0,
+                        "tier" => root.tier = map.next_value::<LenientTrimmed>()?.0,
+                        "account" => {
+                            root.account = map.next_value::<LenientObject<RawAccount>>()?.0;
+                        }
+                        "ai_credits" => {
+                            root.ai_credits = map.next_value::<LenientF64>()?.0;
+                        }
+                        // Note: `email`, `account.email`, `battle.*`, etc. are ignored in-place.
+                        _ => {
+                            let _ = map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(root)
+            }
+        }
+        deserializer.deserialize_map(RootVisitor)
+    }
+}
+
+impl RawRoot {
+    fn into_payload(self) -> Payload {
+        let model = self.model.unwrap_or_default();
+        let ws = self.workspace.unwrap_or_default();
+        let vcs = self.vcs.unwrap_or_default();
+        let ws_vcs = ws.vcs.unwrap_or_default();
+        let sbx = self.sandbox.unwrap_or_default();
+        let ws_sbx = ws.sandbox.unwrap_or_default();
+        let ctx = self.context_window.unwrap_or_default();
+        let cur_u = ctx.current_usage.unwrap_or_default();
+        let subs = self.subagents.unwrap_or(RawSubagentList {
+            total: 0,
+            running: 0,
+            entries: Vec::new(),
+        });
+        let acc = self.account.unwrap_or_default();
+
+        Payload {
+            session_id: self.session_id.or(self.conversation_id),
+            agent_state: self.agent_state.unwrap_or_else(|| "idle".to_string()),
+            exec_mode: self.execution_mode.or(self.cycle_mode).unwrap_or_default(),
+            model_display_name: model.display_name.unwrap_or_default(),
+            model_id: model.id.unwrap_or_default(),
+            model_effort: model.effort.or(self.thinking_level).unwrap_or_default(),
+            cwd: self
+                .cwd
+                .or(ws.current_dir)
+                .or(ws.project_dir)
+                .unwrap_or_default(),
+            vcs_type: vcs.vcs_type.or(ws_vcs.vcs_type).unwrap_or_default(),
+            vcs_branch: vcs.branch.or(ws_vcs.branch).unwrap_or_default(),
+            vcs_dirty: vcs.dirty.or(ws_vcs.dirty).unwrap_or(false),
+            sandbox_enabled: sbx.enabled.or(ws_sbx.enabled).unwrap_or(false),
+            sandbox_allow_network: sbx.allow_network.or(ws_sbx.allow_network).unwrap_or(false),
+            input_tokens: cur_u.input_tokens,
+            output_tokens: cur_u.output_tokens,
+            cache_read_input_tokens: cur_u.cache_read_input_tokens,
+            cache_creation_input_tokens: cur_u
+                .cache_creation_input_tokens
+                .or(cur_u.cache_creation_tokens)
+                .unwrap_or(0),
+            total_input_tokens: ctx.total_input_tokens,
+            total_output_tokens: ctx.total_output_tokens,
+            context_window_size: ctx.context_window_size,
+            used_percentage: ctx.used_percentage,
+            remaining_percentage: ctx.remaining_percentage,
+            cost_usd: self.cost.0,
+            subagent_cost_usd: self.cost.1,
+            cost_estimated: self.cost.2,
+            quota_buckets: self.quota_buckets,
+            subagents_total: subs.total,
+            subagents_running: subs.running,
+            subagents: subs.entries,
+            task_count: self.task_count,
+            pending_input_count: self.pending_input_count,
+            tool_confirmation_pending: self.tool_confirmation_pending,
+            terminal_width: self.terminal_width,
+            transcript_path: self.transcript_path.unwrap_or_default(),
+            vim_mode: self.vim.or(self.vim_mode).unwrap_or_default(),
+            conversation_title: self
+                .conversation_title
+                .or(self.title)
+                .or(self.session_title)
+                .unwrap_or_default(),
+            agent_name: self.agent.or(self.agent_name).unwrap_or_default(),
+            artifact_count: self.artifact_count.or(self.artifacts).unwrap_or(0),
+            version: self
+                .version
+                .or(self.agy_version)
+                .or(self.cli_version)
+                .unwrap_or_default(),
+            plan_tier: self
+                .plan_tier
+                .or(self.plan)
+                .or(self.tier)
+                .or(acc.plan_tier)
+                .or(acc.plan)
+                .or(acc.tier)
+                .unwrap_or_default(),
+            ai_credits: self.ai_credits,
+        }
     }
 }

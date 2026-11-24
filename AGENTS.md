@@ -36,11 +36,11 @@ The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-C
 
 ## Default line
 
-The default layout shows the selected model group's 5-hour and weekly quotas with reset countdowns on the second row. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
+The `default` layout uses the 2-row Catppuccin gradient preset (`palette = "catppuccin"`, `bar_style = "cells"`, `bar_gradient = true`, `item_style = "minimal"`, `separator = " │ "`, `compact_at = 88`): row 1 renders bold `model` (`style = "agybar"` with deduplicated short effort), full-height segmented gradient `context` bar (`style = "bar"`, `show_tokens = true`, `→ /compact` alert at `>= context_crit`), compact `tokens` (`style = "arrows"`), and urgency-sorted inline `quota_group` (`style = "inline"`, `family = "@model"` with `ai_credits` fallback); row 2 renders lowercase `status` (`style = "dot"`), `git` (`style = "branch"`), home-tildefied middle-ellipsized `dir` (`max_levels = 2`), and non-zero `subagents`, `tasks`, `artifacts`, and `sandbox`. Below `compact_at` (`88` cols), multi-row layouts auto-collapse to one compact row before `overflow = "fit"` priority narrowing runs. The prior 3-row pure-foreground `line` (`━╸─`) HUD is preserved as the `hud` preset, and the prior 2-row `@model` layout is preserved as the `classic` preset. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
 
-Stdin fields the scripts already read:
+Stdin fields read by agyline include:
 
-`session_id`, `conversation_id`, `agent_state`, `execution_mode`, `cycle_mode`, `model.display_name`, `model.id`, `model.effort`, `thinkingLevel`, `cwd`, `workspace.current_dir`, `workspace.project_dir`, `vcs.branch`, `vcs.dirty`, `sandbox.enabled`, `sandbox.allow_network`, `context_window` (input, output, cache read, total output, window size, used percentage), `cost`, `quota.*.remaining_fraction`, `subagents`, `task_count`, `pending_input_count`, `tool_confirmation_pending`.
+`session_id`, `conversation_id`, `agent_state`, `execution_mode`, `cycle_mode`, `model.display_name`, `model.id`, `model.effort`, `thinkingLevel`, `cwd`, `workspace.current_dir`, `workspace.project_dir`, `workspace.vcs`, `workspace.sandbox`, `vcs.type`, `vcs.branch`, `vcs.dirty`, `sandbox.enabled`, `sandbox.allow_network`, `context_window` (`current_usage.input_tokens`, `current_usage.output_tokens`, `current_usage.cache_read_input_tokens`, `current_usage.cache_creation_input_tokens`, `total_input_tokens`, `total_output_tokens`, `context_window_size`, `used_percentage`, `remaining_percentage`), `cost`, `quota.*.remaining_fraction`, `ai_credits`, `subagents`, `task_count`, `pending_input_count`, `tool_confirmation_pending`, `transcript_path`.
 
 ## Integration
 
@@ -52,7 +52,7 @@ The status line may read the cache relay's existing state file. Rewriting `cache
 
 ## Configuration
 
-`AGY_THEME`, `AGY_STATUSLINE_LINES`, `AGY_STATUSLINE_INDENT`, `AGY_SHOW_DEFAULT_MODE`, and `AGY_CACHE_RELAY` are behavior to preserve. New settings go in `~/.gemini/agyline/config.toml`. `AGYLINE_HOME` moves that directory. Once a TOML key is chosen, the loader and both READMEs use that key.
+`AGY_THEME`, `AGY_STATUSLINE_LINES`, `AGY_STATUSLINE_INDENT`, `AGY_SHOW_DEFAULT_MODE`, and `AGY_CACHE_RELAY` are behavior to preserve. `AGYLINE_DEBUG=1` captures the latest raw live stdin JSON to `<AGYLINE_HOME>/state/last_payload.json` with zero I/O when unset or any other value. New settings go in `~/.gemini/agyline/config.toml`. `AGYLINE_HOME` moves that directory. Once a TOML key is chosen, the loader and both READMEs use that key.
 
 A terminal stdin opens the configurator. Any other stdin is a render. The preview and the live line share one renderer. Segment order and colors come from the config.
 

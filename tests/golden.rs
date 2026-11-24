@@ -10,9 +10,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agyline::{
-    CacheFrameState, EffectiveConfig, FrameData, GitCacheEntry, GitFrameState, NoopSpawner,
-    RelayStatus, RenderEnv, emit_ansi, emit_plain, parse_stdin_payload, render_lines,
-    run_live_frame, write_git_cache,
+    CacheFrameState, ColorDepth, ConfigDoc, EffectiveConfig, FrameData, GitCacheEntry,
+    GitFrameState, GlyphSet, NoopSpawner, RelayStatus, RenderEnv, emit_ansi, emit_plain,
+    parse_stdin_payload, render_lines, render_lines_with_width, run_live_frame, str_display_width,
+    write_git_cache,
 };
 use rusqlite::{Connection, params};
 use serde::Deserialize;
@@ -343,7 +344,8 @@ fn items_and_config_golden_cases_match_plain_and_ansi_bytes() {
 // bytes for git/cache/relay/speed formatting independent of the collection path.
 #[test]
 fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() {
-    let config = EffectiveConfig::default();
+    let config =
+        EffectiveConfig::from_doc(&ConfigDoc::cometix_base(), None, &BTreeMap::new(), false);
 
     // D05 exact byte check: long branch truncation + dirty + ahead/behind
     let d05_payload =
@@ -358,10 +360,9 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
             has_conflict: false,
             ahead: 2,
             behind: 1,
+            ..GitFrameState::default()
         }),
-        cache: CacheFrameState::default(),
-        last_tps: None,
-        response_model: None,
+        ..FrameData::default()
     };
     let d05_rendered = render_lines(&d05_frame, &config);
     assert_eq!(
@@ -386,10 +387,9 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
             has_conflict: true,
             ahead: 0,
             behind: 0,
+            ..GitFrameState::default()
         }),
-        cache: CacheFrameState::default(),
-        last_tps: None,
-        response_model: None,
+        ..FrameData::default()
     };
     let d06_rendered = render_lines(&d06_frame, &config);
     assert_eq!(
@@ -413,6 +413,7 @@ fn render_lines_seam_formats_git_conflict_ahead_behind_speed_and_relay_badges() 
         },
         last_tps: Some("64.5".to_string()),
         response_model: Some("claude-opus-4-6".to_string()),
+        ..FrameData::default()
     };
     let h08_rendered = render_lines(&h08_frame, &config);
     assert_eq!(
@@ -432,6 +433,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     let home_dir =
         std::env::temp_dir().join(format!("agyline_golden_git_{}_{nanos}", std::process::id()));
     fs::create_dir_all(&home_dir).expect("create temp golden home");
+    fs::write(home_dir.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
 
     let now_ms = 1_700_000_000_000_u64;
     let spawner = NoopSpawner;
@@ -454,6 +456,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} clean-repo | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m clean-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -475,6 +478,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 2,
                 behind: 1,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} ab-repo | \u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1 | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m ab-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feature/twenty-five-cha\u{2026} \u{25cf} \u{2191}2 \u{2193}1\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -495,6 +499,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: true,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} conf-repo | \u{f02a2} main \u{26a0} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m conf-repo\x1b[0;37m | \x1b[0;94m\u{f02a2}\x1b[0;31m main \u{26a0}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -515,6 +520,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} det-repo | \u{f02a2} fb7464b \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m det-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} fb7464b \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -535,6 +541,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} linked_pkg | \u{f02a2} main \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m linked_pkg\x1b[0;37m | \x1b[0;94m\u{f02a2} main \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -555,6 +562,7 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
                 has_conflict: false,
                 ahead: 0,
                 behind: 0,
+                ..GitCacheEntry::default()
             },
             "  \u{ef23} Model | \u{f024b} cn-branch-repo | \u{f02a2} feat/中文分支 \u{2713} | \u{f49b} 0% | \u{f1c0} cold\n",
             "  \x1b[0m\x1b[0;96m\u{ef23} Model\x1b[0;37m | \x1b[0;93m\u{f024b}\x1b[0;92m cn-branch-repo\x1b[0;37m | \x1b[0;94m\u{f02a2} feat/中文分支 \u{2713}\x1b[0;37m | \x1b[0;95m\u{f49b} 0%\x1b[0;37m | \x1b[0;34m\u{f1c0}\x1b[0;90m cold\x1b[0m\n",
@@ -583,4 +591,245 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
     }
 
     let _ = fs::remove_dir_all(&home_dir);
+}
+
+// Screenshot-parity 3-row HUD `Default Line` golden + 74-column narrowing verification:
+// Row 1 italic model + usage bar + ~/dir + per-count git; Row 2 dual Gemini/3P used% bars;
+// Row 3 sandbox off + token breakdown + cache hit rate + elapsed duration; narrow_stress fits <= 74 cols.
+#[test]
+fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
+    let mut doc = agyline::build_preset_doc("hud", None).expect("hud preset");
+    doc.color_depth = ColorDepth::TrueColor;
+    let mut env = BTreeMap::new();
+    env.insert("AGY_THEME".to_string(), "dark".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let config = EffectiveConfig::from_doc(&doc, None, &env, false);
+
+    let now_sec = 1_700_000_000_i64;
+    let payload_bytes = serde_json::to_vec(&serde_json::json!({
+        "session_id": "hud_parity",
+        "agent_state": "working",
+        "execution_mode": "accept-edits",
+        "model": {
+            "display_name": "Gemini 4 Neon",
+            "effort": "xHigh"
+        },
+        "cwd": "/home/dev/projects/antigravity-hud",
+        "sandbox": { "enabled": false },
+        "context_window": {
+            "current_usage": {
+                "input_tokens": 9_600,
+                "cache_read_input_tokens": 187_400,
+                "cache_creation_input_tokens": 0
+            },
+            "total_input_tokens": 4_480_000,
+            "total_output_tokens": 122_000,
+            "context_window_size": 1_000_000,
+            "used_percentage": 19.7
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.927, "reset_in_seconds": 2 * 3600 + 44 * 60 },
+            "gemini-weekly": { "remaining_fraction": 0.797, "reset_in_seconds": 5 * 86_400 + 4 * 3600 },
+            "3p-5h": { "remaining_fraction": 1.0, "reset_in_seconds": 5 * 3600 },
+            "3p-weekly": { "remaining_fraction": 0.48, "reset_in_seconds": 2 * 86_400 + 23 * 3600 }
+        }
+    }))
+    .expect("serialize hud payload");
+    let payload = parse_stdin_payload(&payload_bytes).expect("parse hud payload");
+
+    let frame = FrameData {
+        payload,
+        now_sec,
+        git: Some(GitFrameState {
+            branch: "main".to_string(),
+            dirty: true,
+            modified: 1,
+            untracked: 7,
+            ..GitFrameState::default()
+        }),
+        cache: CacheFrameState {
+            cache_ts: Some(now_sec - 120),
+            relay_touches: 0,
+            relay_status: None,
+        },
+        session_start_sec: Some(now_sec - 58 * 60),
+        user_home: Some(PathBuf::from("/home/dev")),
+        ..FrameData::default()
+    };
+
+    let full = render_lines_with_width(&frame, &config, None);
+    let plain = emit_plain(&full, &config);
+    assert_eq!(
+        plain,
+        concat!(
+            "  \u{2699} WORKING \u{2502} EDITS \u{2502} \u{ef23} Gemini 4 Neon (XHigh) \u{2502} \u{f49b} ctx \u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 19.7% \u{2502} \u{f024b} ~/projects/antigravity-hud \u{2502} \u{f02a2} main* !1 ?7\n",
+            "  \u{f0081} Gemini 5h \u{2578}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 7.3% 2h44m / week \u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 20.3% 5d4h \u{2502} \u{f007e} 3P 5h \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 0.0% 5h0m / week \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 52.0% 2d23h\n",
+            "  \u{f132} sandbox off \u{2502} \u{e26b} token 4.6M (4.5M\u{2191} 122k\u{2193}) \u{2502} \u{f1c0} cache 95.1% \u{2502} \u{f43a} 58m\n",
+        )
+    );
+
+    let ansi = emit_ansi(&full, &config);
+    assert!(
+        !ansi.contains(";48;2;"),
+        "HUD default line usage bar must not emit background slab SGR: {ansi:?}"
+    );
+    assert!(
+        ansi.contains(";3;") && ansi.contains("Gemini 4 Neon (XHigh)"),
+        "HUD model must emit italic SGR: {ansi:?}"
+    );
+    assert!(
+        ansi.contains(";93m\u{f024b}")
+            && ansi.contains(";95m\u{f49b}")
+            && ansi.contains(";34m\u{f1c0}")
+            && ansi.contains(";92m\u{f0081}"),
+        "HUD restored icons must keep semantic colors: {ansi:?}"
+    );
+    assert!(
+        ansi.contains(";1;") && ansi.contains("4.6M") && ansi.contains("95.1%"),
+        "HUD tokens and cache rate must emit bold numbers: {ansi:?}"
+    );
+
+    // 74-column narrowing must keep every row <= 74 cols and compact items before dropping them.
+    let narrow = render_lines_with_width(&frame, &config, Some(74));
+    let narrow_plain = emit_plain(&narrow, &config);
+    let narrow_lines: Vec<&str> = narrow_plain.lines().collect();
+    assert_eq!(narrow_lines.len(), 3);
+    for (idx, line) in narrow_lines.iter().enumerate() {
+        let w = str_display_width(line);
+        assert!(w <= 74, "HUD line {} width {w} > 74: {line:?}", idx + 1);
+    }
+    assert!(narrow_lines[0].contains("19.7%"));
+    assert!(narrow_lines[1].contains("Gemini 5h 7.3%"));
+    assert!(narrow_lines[2].contains("token 4.6M"));
+
+    // Ascii glyph mode uses #- bars and suppresses duplicate word prefixes like `ctx: ctx`.
+    let mut asc_doc = doc.clone();
+    asc_doc.glyphs = GlyphSet::Ascii;
+    let asc_cfg = EffectiveConfig::from_doc(&asc_doc, None, &env, false);
+    let asc_plain = emit_plain(&render_lines_with_width(&frame, &asc_cfg, None), &asc_cfg);
+    assert!(asc_plain.contains("ctx ##-------- 19.7%"));
+    assert!(!asc_plain.contains("ctx: ctx"));
+    assert!(!asc_plain.contains("cache: cache"));
+    assert!(!asc_plain.contains("sbx: sandbox"));
+    assert!(!asc_plain.contains("qta:"));
+    assert!(asc_plain.contains("token 4.6M") && asc_plain.ends_with("| 58m\n"));
+
+    // Explicit `bar_style = "solid"` under light theme emits softened #e2e5ec track bg.
+    let mut solid_light_doc = doc;
+    solid_light_doc.lines[0][3].bar_style = Some("solid".to_string());
+    let mut light_env = BTreeMap::new();
+    light_env.insert("AGY_THEME".to_string(), "light".to_string());
+    light_env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let solid_light_cfg = EffectiveConfig::from_doc(&solid_light_doc, None, &light_env, true);
+    let solid_light_ansi = emit_ansi(
+        &render_lines_with_width(&frame, &solid_light_cfg, None),
+        &solid_light_cfg,
+    );
+    assert!(
+        solid_light_ansi.contains(";48;2;226;229;236m"),
+        "solid light track must emit softened #e2e5ec bg: {solid_light_ansi:?}"
+    );
+}
+
+// Two-row Catppuccin gradient `Default Line` and showcase scenarios (wide normal, high-context
+// >90% `→ /compact`, and narrow <88 compact single-row collapse).
+#[test]
+fn agybar_default_two_row_and_showcase_scenarios_golden() {
+    let doc = ConfigDoc::default();
+    let mut env = BTreeMap::new();
+    env.insert("AGY_THEME".to_string(), "dark".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let cfg = EffectiveConfig::from_doc(&doc, None, &env, true);
+
+    // 1. Wide normal Catppuccin showcase scenario.
+    let sc_wide = agyline::find_scenario("showcase_wide").expect("showcase_wide scenario");
+    let wide_frame = sc_wide.frame_for_env(&env);
+    let wide_rendered = render_lines_with_width(&wide_frame, &cfg, Some(sc_wide.default_width));
+    let wide_plain = emit_plain(&wide_rendered, &cfg);
+    let wide_rows: Vec<&str> = wide_plain.lines().collect();
+    assert_eq!(
+        wide_rows.len(),
+        2,
+        "wide default must render 2 rows: {wide_plain:?}"
+    );
+    assert!(wide_rows[0].contains("✦ Claude Opus 4.6 [high]"));
+    assert!(wide_rows[0].contains('❚'));
+    assert!(wide_rows[0].contains("48.0% (96k/200k)"));
+    assert!(wide_rows[0].contains("↑48k ↓12k"));
+    assert!(wide_rows[0].contains("⚡ 7d:64%(3d) · 5h:82%(2h15m)"));
+    assert!(wide_rows[1].contains("● working"));
+    assert!(wide_rows[1].contains("⎇ main*"));
+    assert!(wide_rows[1].contains("~/…/clients/agyline"));
+
+    let wide_ansi = emit_ansi(&wide_rendered, &cfg);
+    // Catppuccin Mocha Mauve bold model (`38;2;203;166;247`) and Blue git (`38;2;137;180;250`).
+    assert!(
+        wide_ansi.contains(";1;38;2;203;166;247m✦ Claude Opus 4.6"),
+        "ansi: {wide_ansi:?}"
+    );
+    assert!(
+        wide_ansi.contains(";38;2;137;180;250m⎇ main"),
+        "ansi: {wide_ansi:?}"
+    );
+
+    // 2. High context (>90%) triggers bold critical `→ /compact` and surfaces active runtime items.
+    let sc_crit = agyline::find_scenario("showcase_critical").expect("showcase_critical scenario");
+    let crit_frame = sc_crit.frame_for_env(&env);
+    let crit_rendered = render_lines_with_width(&crit_frame, &cfg, Some(sc_crit.default_width));
+    let crit_plain = emit_plain(&crit_rendered, &cfg);
+    let crit_rows: Vec<&str> = crit_plain.lines().collect();
+    assert_eq!(
+        crit_rows.len(),
+        2,
+        "critical default must render 2 rows: {crit_plain:?}"
+    );
+    assert!(
+        crit_rows[0].contains("→ /compact"),
+        "row0: {:?}",
+        crit_rows[0]
+    );
+    assert!(crit_rows[0].contains("cr:420"), "row0: {:?}", crit_rows[0]);
+    assert!(
+        crit_rows[1].contains("◉ thinking"),
+        "row1: {:?}",
+        crit_rows[1]
+    );
+    assert!(crit_rows[1].contains("agents"), "row1: {:?}", crit_rows[1]);
+    assert!(crit_rows[1].contains("tasks"), "row1: {:?}", crit_rows[1]);
+    assert!(
+        crit_rows[1].contains("artifacts"),
+        "row1: {:?}",
+        crit_rows[1]
+    );
+    assert!(crit_rows[1].contains("sandbox"), "row1: {:?}", crit_rows[1]);
+
+    // 3. Narrow (<88 cols) automatically collapses to 1 compact row with zero wrapping.
+    let sc_compact = agyline::find_scenario("showcase_compact").expect("showcase_compact scenario");
+    assert!(sc_compact.default_width < 88);
+    let comp_frame = sc_compact.frame_for_env(&env);
+    let comp_rendered = render_lines_with_width(&comp_frame, &cfg, Some(sc_compact.default_width));
+    let comp_plain = emit_plain(&comp_rendered, &cfg);
+    let comp_rows: Vec<&str> = comp_plain.lines().collect();
+    assert_eq!(
+        comp_rows.len(),
+        1,
+        "narrow <88 must collapse to 1 row: {comp_plain:?}"
+    );
+    let w = str_display_width(comp_rows[0]);
+    assert!(
+        w <= sc_compact.default_width,
+        "collapsed row width {w} > {}: {:?}",
+        sc_compact.default_width,
+        comp_rows[0]
+    );
+    assert!(
+        !comp_rows[0].contains("· 5h:"),
+        "compact quota capped at 1 bucket: {:?}",
+        comp_rows[0]
+    );
+    assert!(
+        !comp_rows[0].contains("working"),
+        "compact status collapses to dot-only: {:?}",
+        comp_rows[0]
+    );
 }

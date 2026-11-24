@@ -91,12 +91,20 @@ impl Drop for Sandbox {
 struct RecordingSpawner {
     git_spawns: Mutex<Vec<String>>,
     touch_spawns: Mutex<Vec<(String, String)>>,
+    transcript_spawns: Mutex<Vec<(String, String)>>,
     sqlite_opens: AtomicUsize,
 }
 
 impl RecordingSpawner {
     fn touches(&self) -> Vec<(String, String)> {
         self.touch_spawns.lock().expect("lock touches").clone()
+    }
+
+    fn transcript_spawns(&self) -> Vec<(String, String)> {
+        self.transcript_spawns
+            .lock()
+            .expect("lock transcript_spawns")
+            .clone()
     }
 
     fn opens(&self) -> usize {
@@ -119,6 +127,13 @@ impl Spawner for RecordingSpawner {
             .push((session_id.to_string(), relay_url.to_string()));
     }
 
+    fn spawn_refresh_transcript(&self, session_id: &str, transcript_path: &str) {
+        self.transcript_spawns
+            .lock()
+            .expect("lock transcript_spawns")
+            .push((session_id.to_string(), transcript_path.to_string()));
+    }
+
     fn on_sqlite_open(&self, _db_path: &Path) {
         self.sqlite_opens.fetch_add(1, Ordering::SeqCst);
     }
@@ -137,11 +152,17 @@ fn dir_entries(dir: &Path) -> Vec<String> {
     names
 }
 
+fn seed_cometix_config(home_dir: &Path) {
+    fs::create_dir_all(home_dir).expect("create home_dir");
+    fs::write(home_dir.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
+}
+
 // Frames without a usable session id must leave no state behind, and a startup state is not an
 // accepted turn: neither may anchor the five-minute prompt-cache clock.
 #[test]
 fn pre_session_and_startup_states_isolate_writes_and_never_anchor_warm_cache() {
     let sb = Sandbox::new("pre_session_isolation");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
 
     // 1. Pre-session frames (empty/whitespace session_id & conversation_id) never touch state/sessions
@@ -184,6 +205,7 @@ fn pre_session_and_startup_states_isolate_writes_and_never_anchor_warm_cache() {
 #[test]
 fn session_key_encoding_privacy_and_unchanged_idle_write_skip() {
     let sb = Sandbox::new("session_key_and_skip_write");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
 
     // 1. Standard 36-char lowercase UUID passes through directly; email is never persisted
@@ -256,6 +278,7 @@ fn session_key_encoding_privacy_and_unchanged_idle_write_skip() {
 #[test]
 fn stateful_tps_ties_to_even_and_five_minute_prompt_cache_lifecycle() {
     let sb = Sandbox::new("tps_and_cache_lifecycle");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
     let sid = "550e8400-e29b-41d4-a716-446655440099";
 
@@ -353,6 +376,7 @@ fn stateful_tps_ties_to_even_and_five_minute_prompt_cache_lifecycle() {
 #[test]
 fn corrupt_version_mismatch_and_session_id_mismatch_self_heal_atomically() {
     let sb = Sandbox::new("self_healing");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
     let sessions_dir = sb.sessions_dir();
     fs::create_dir_all(&sessions_dir).expect("create sessions_dir");
@@ -398,6 +422,7 @@ fn corrupt_version_mismatch_and_session_id_mismatch_self_heal_atomically() {
 #[test]
 fn cache_relay_badges_keepalive_touch_gating_and_off_override() {
     let sb = Sandbox::new("cache_relay_and_touch_gating");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
     let mut relay_env = BTreeMap::new();
     relay_env.insert(
@@ -537,6 +562,7 @@ fn encode_chat_model_blob(model_name: &str) -> Vec<u8> {
 #[test]
 fn sqlite_response_model_caching_zero_idle_opens_and_picker_switch_invalidation() {
     let sb = Sandbox::new("sqlite_caching_and_switch");
+    seed_cometix_config(&sb.home_dir);
     let spawner = RecordingSpawner::default();
     let sid = "550e8400-e29b-41d4-a716-446655440077";
     let db_path = sb.conversations_dir.join(format!("{sid}.db"));
@@ -1006,6 +1032,7 @@ fn touch_worker_loopback_http_post_lock_dedup_and_ssrf_rejection() {
 #[test]
 fn live_render_spawns_detached_touch_without_holding_pipe_eof_on_slow_relay() {
     let sb = Sandbox::new("detached_touch_pipe_eof");
+    seed_cometix_config(&sb.home_dir);
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind slow relay");
     let port = listener.local_addr().expect("local_addr").port();
 
@@ -1084,4 +1111,137 @@ fn live_render_spawns_detached_touch_without_holding_pipe_eof_on_slow_relay() {
         let _ = fs::remove_file(&unix_tmp_relay);
     }
     assert!(req.starts_with(&format!("POST /_touch/{sid} HTTP/1.1\r\n")));
+}
+
+#[test]
+fn bounded_transcript_head_read_and_detached_refresh_worker_handle_large_files() {
+    let sb = Sandbox::new("transcript_bounded");
+    let tpath = sb.root.join("large_transcript.jsonl");
+    let mut file = fs::File::create(&tpath).expect("create transcript");
+    writeln!(
+        file,
+        r#"{{"type":"USER","created_at":"2026-11-23T10:00:00Z","text":"hello"}}"#
+    )
+    .expect("write head");
+    writeln!(
+        file,
+        r#"{{"type":"PLANNER_RESPONSE","input_tokens":100,"cache_read_tokens":900,"cache_creation_tokens":0,"output_tokens":50}}"#
+    )
+    .expect("write planner");
+    // Pad past 4 MiB so any full-file scan on the render path would show up and be caught.
+    let pad = format!(r#"{{"type":"NOTE","payload":"{}"}}"#, "x".repeat(4000));
+    for _ in 0..1050 {
+        writeln!(file, "{pad}").expect("write pad");
+    }
+    writeln!(
+        file,
+        r#"{{"type":"PLANNER_RESPONSE","input_tokens":200,"cache_read_tokens":1800,"cache_creation_input_tokens":0,"output_tokens":150}}"#
+    )
+    .expect("write tail planner");
+    file.flush().expect("flush");
+
+    // 1. O(1) bounded header micro-read finds exact start epoch
+    let start_sec = agyline::read_transcript_start_sec_bounded(&tpath).expect("bounded head read");
+    assert_eq!(start_sec, 1_795_428_000);
+
+    // 2. Detached `__refresh-transcript` worker parses full totals off the print path
+    let sid = "sess_large_t";
+    let out = Command::new(env!("CARGO_BIN_EXE_agyline"))
+        .args([
+            "__refresh-transcript",
+            "--session",
+            sid,
+            "--path",
+            &tpath.to_string_lossy(),
+        ])
+        .env("AGYLINE_HOME", &sb.home_dir)
+        .output()
+        .expect("run __refresh-transcript");
+    assert_eq!(out.status.code(), Some(0));
+    assert!(out.stdout.is_empty());
+    assert!(out.stderr.is_empty());
+
+    let session_json_path = sb.sessions_dir().join("id-97592d4e95679199.json");
+    // Check via session files in sessions dir (hash-agnostic)
+    let files: Vec<_> = fs::read_dir(sb.sessions_dir())
+        .expect("sessions_dir")
+        .flatten()
+        .collect();
+    assert_eq!(files.len(), 1);
+    let _ = session_json_path;
+    let saved: Value =
+        serde_json::from_slice(&fs::read(files[0].path()).expect("read session")).expect("json");
+    assert_eq!(saved["transcript_first_ts"], 1_795_428_000);
+    assert_eq!(saved["transcript_total_in"], 3000);
+    assert_eq!(saved["transcript_total_out"], 200);
+    assert_eq!(saved["transcript_cache_read"], 2700);
+    assert_eq!(saved["transcript_cache_valid"], true);
+}
+
+#[test]
+fn demand_gating_skips_session_sqlite_relay_and_transcript_when_unused() {
+    let sb = Sandbox::new("demand_gate_minimal");
+    fs::create_dir_all(&sb.home_dir).expect("mkdir home");
+    fs::write(
+        sb.home_dir.join("config.toml"),
+        "[[line]]\nitems = [\"dir\", \"context\"]\n",
+    )
+    .expect("write config");
+
+    let sid = "550e8400-e29b-41d4-a716-4466554400aa";
+    let db_path = sb.conversations_dir.join(format!("{sid}.db"));
+    let conn = Connection::open(&db_path).expect("create db");
+    conn.execute_batch(
+        "CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER NOT NULL DEFAULT 0);",
+    )
+    .expect("schema");
+    let blob = encode_chat_model_blob("claude-opus-4-6");
+    conn.execute(
+        "INSERT INTO gen_metadata (idx, data, size) VALUES (1, ?1, ?2)",
+        params![blob, blob.len() as i64],
+    )
+    .expect("insert");
+    drop(conn);
+
+    let tpath = sb.root.join("unused_transcript.jsonl");
+    fs::write(
+        &tpath,
+        r#"{"type":"USER","created_at":"2026-11-23T10:00:00Z","text":"hi"}"#,
+    )
+    .expect("write transcript");
+
+    let mut relay_env = BTreeMap::new();
+    relay_env.insert(
+        "AGY_CACHE_RELAY".to_string(),
+        "http://127.0.0.1:18080".to_string(),
+    );
+
+    let spawner = RecordingSpawner::default();
+    let payload = serde_json::to_vec(&serde_json::json!({
+        "session_id": sid,
+        "conversation_id": sid,
+        "agent_state": "working",
+        "cwd": "D:\\Work\\minimal_proj",
+        "transcript_path": tpath.to_string_lossy(),
+        "context_window": {
+            "total_output_tokens": 50,
+            "current_usage": { "input_tokens": 10000, "cache_read_input_tokens": 30000 },
+            "context_window_size": 100000
+        }
+    }))
+    .expect("json");
+
+    let out = run_live_frame(&payload, &sb.env(1_700_000_000_000, relay_env, &spawner));
+    assert!(out.plain.contains("minimal_proj"));
+    assert!(out.plain.contains("40%"));
+    assert_eq!(spawner.opens(), 0, "must perform 0 SQLite opens");
+    assert!(spawner.touches().is_empty(), "must spawn 0 relay touches");
+    assert!(
+        spawner.transcript_spawns().is_empty(),
+        "must spawn 0 transcript refreshes"
+    );
+    assert!(
+        !sb.sessions_dir().exists(),
+        "must skip session state reads/writes when unused"
+    );
 }

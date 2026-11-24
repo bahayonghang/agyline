@@ -228,6 +228,11 @@ fn main() {
         std::process::id()
     ));
     let home_warm = root.join("home_warm");
+    let home_hud = root.join("home_hud");
+    let home_badge = root.join("home_badge");
+    let home_pill = root.join("home_pill");
+    let home_transcript = root.join("home_transcript");
+    let home_minimal = root.join("home_minimal");
     let home_cold = root.join("home_cold");
     let home_sql = root.join("home_sql");
     let home_lock = root.join("home_lock");
@@ -242,39 +247,140 @@ fn main() {
     fs::create_dir_all(&repo_cwd).expect("create repo_cwd");
     let cwd_str = repo_cwd.to_string_lossy().into_owned();
 
-    // 1. Seed warm git cache
-    write_git_cache(
-        &home_warm,
-        &GitCacheEntry {
-            version: 1,
-            cwd: cwd_str.clone(),
-            updated_at_ms: now_ms,
-            is_repo: true,
-            branch: "main".to_string(),
-            dirty: true,
-            has_conflict: false,
-            ahead: 1,
-            behind: 0,
-        },
-    )
-    .expect("seed warm git cache");
-    fs::write(
-        home_warm.join("config.toml"),
-        "[git]\ncache_ms = 9223372036854775807\n",
-    )
-    .expect("keep the warm benchmark cache fresh throughout sampling");
+    // 1. Seed warm git cache across default, badge, pill, and hud benchmark homes.
+    let warm_git = GitCacheEntry {
+        version: 1,
+        cwd: cwd_str.clone(),
+        updated_at_ms: now_ms,
+        is_repo: true,
+        branch: "main".to_string(),
+        dirty: true,
+        has_conflict: false,
+        ahead: 1,
+        behind: 0,
+        ..GitCacheEntry::default()
+    };
+    for (home, cfg_toml) in [
+        (&home_warm, "[git]\ncache_ms = 9223372036854775807\n"),
+        (
+            &home_badge,
+            "item_style = \"badge\"\n[git]\ncache_ms = 9223372036854775807\n",
+        ),
+        (
+            &home_pill,
+            "item_style = \"pill\"\n[git]\ncache_ms = 9223372036854775807\n",
+        ),
+        (
+            &home_hud,
+            "preset = \"hud\"\n[git]\ncache_ms = 9223372036854775807\n",
+        ),
+    ] {
+        write_git_cache(home, &warm_git).expect("seed warm git cache");
+        fs::write(home.join("config.toml"), cfg_toml).expect("write benchmark config");
+    }
 
     let warm_payload = serde_json::to_vec(&serde_json::json!({
         "session_id": "bench_warm",
-        "agent_state": "idle",
-        "model": { "display_name": "Gemini 2.5 Pro", "effort": "high" },
+        "agent_state": "working",
+        "model": { "display_name": "Claude Opus 4.6", "effort": "high" },
         "cwd": cwd_str,
         "context_window": {
-            "current_usage": { "input_tokens": 8000, "cache_read_input_tokens": 72000 },
+            "current_usage": { "input_tokens": 16000, "cache_read_input_tokens": 80000 },
+            "total_input_tokens": 48000,
+            "total_output_tokens": 12000,
             "context_window_size": 200000
+        },
+        "quota": {
+            "3p-5h": { "remaining_fraction": 0.82, "reset_in_seconds": 8100 },
+            "3p-weekly": { "remaining_fraction": 0.64, "reset_in_seconds": 259200 }
         }
     }))
     .expect("warm json");
+
+    let compact_78_payload = serde_json::to_vec(&serde_json::json!({
+        "session_id": "bench_warm",
+        "agent_state": "working",
+        "model": { "display_name": "Claude Opus 4.6", "effort": "high" },
+        "cwd": cwd_str,
+        "terminal_width": 78,
+        "context_window": {
+            "current_usage": { "input_tokens": 16000, "cache_read_input_tokens": 80000 },
+            "total_input_tokens": 48000,
+            "total_output_tokens": 12000,
+            "context_window_size": 200000
+        },
+        "quota": {
+            "3p-5h": { "remaining_fraction": 0.82, "reset_in_seconds": 8100 },
+            "3p-weekly": { "remaining_fraction": 0.64, "reset_in_seconds": 259200 }
+        }
+    }))
+    .expect("compact 78 json");
+
+    let narrow_hud_payload = serde_json::to_vec(&serde_json::json!({
+        "session_id": "bench_warm",
+        "agent_state": "working",
+        "execution_mode": "accept-edits",
+        "model": { "display_name": "Gemini 4 Neon", "effort": "xHigh" },
+        "cwd": cwd_str,
+        "terminal_width": 74,
+        "context_window": {
+            "current_usage": { "input_tokens": 9600, "cache_read_input_tokens": 187400 },
+            "total_input_tokens": 4480000,
+            "total_output_tokens": 122000,
+            "context_window_size": 1000000
+        },
+        "quota": {
+            "gemini-5h": { "remaining_fraction": 0.927, "reset_in_seconds": 9840 },
+            "gemini-weekly": { "remaining_fraction": 0.797, "reset_in_seconds": 446400 },
+            "3p-5h": { "remaining_fraction": 1.0, "reset_in_seconds": 18000 },
+            "3p-weekly": { "remaining_fraction": 0.48, "reset_in_seconds": 255600 }
+        }
+    }))
+    .expect("narrow hud json");
+
+    // 5 MiB synthetic transcript to verify O(1) bounded <= 4 KiB header read on live path.
+    let big_transcript = root.join("large_5mb_transcript.jsonl");
+    {
+        let mut f = fs::File::create(&big_transcript).expect("create large transcript");
+        writeln!(
+            f,
+            "{{\"timestamp\":\"2026-01-01T00:00:00Z\",\"type\":\"start\"}}"
+        )
+        .expect("write transcript head");
+        let filler = format!("{{\"type\":\"turn\",\"text\":\"{}\"}}\n", "x".repeat(1000));
+        for _ in 0..5_000 {
+            f.write_all(filler.as_bytes())
+                .expect("write transcript filler");
+        }
+    }
+    fs::create_dir_all(&home_transcript).expect("create home_transcript");
+    fs::write(
+        home_transcript.join("config.toml"),
+        "preset = \"hud\"\n[git]\ncache_ms = 9223372036854775807\n",
+    )
+    .expect("write transcript config");
+    write_git_cache(&home_transcript, &warm_git).expect("seed transcript git cache");
+    let big_transcript_payload = serde_json::to_vec(&serde_json::json!({
+        "session_id": "bench_transcript_5mb",
+        "agent_state": "working",
+        "model": { "display_name": "Claude Opus 4.6", "effort": "high" },
+        "cwd": cwd_str,
+        "transcript_path": big_transcript.to_string_lossy(),
+        "context_window": {
+            "current_usage": { "input_tokens": 16000, "cache_read_input_tokens": 80000 },
+            "total_input_tokens": 48000,
+            "total_output_tokens": 12000,
+            "context_window_size": 200000
+        }
+    }))
+    .expect("big transcript json");
+
+    fs::create_dir_all(&home_minimal).expect("create home_minimal");
+    fs::write(
+        home_minimal.join("config.toml"),
+        "[[line]]\nitems = [\"dir\", \"context\"]\n",
+    )
+    .expect("write minimal 2-item config");
 
     // 2. Slow git shim for cold cache non-blocking check
     let slow_git_dir = root.join("slow_git_bin");
@@ -312,7 +418,7 @@ fn main() {
         bin.display()
     );
 
-    measure_workload("warm_cache (direct)", warmup, samples, || {
+    measure_workload("default_catppuccin_warm (direct)", warmup, samples, || {
         spawn_once(
             &bin,
             InvokeMode::Direct,
@@ -320,6 +426,72 @@ fn main() {
             &user_home,
             None,
             &warm_payload,
+        )
+    });
+
+    measure_workload("default_badge_container (direct)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_badge,
+            &user_home,
+            None,
+            &warm_payload,
+        )
+    });
+
+    measure_workload("default_pill_container (direct)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_pill,
+            &user_home,
+            None,
+            &warm_payload,
+        )
+    });
+
+    measure_workload("default_compact_78 (direct, <88)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_warm,
+            &user_home,
+            None,
+            &compact_78_payload,
+        )
+    });
+
+    measure_workload("narrow_74_hud (direct)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_hud,
+            &user_home,
+            None,
+            &narrow_hud_payload,
+        )
+    });
+
+    measure_workload("multi_mb_transcript_5m (direct)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_transcript,
+            &user_home,
+            None,
+            &big_transcript_payload,
+        )
+    });
+
+    measure_workload("minimal_2item (direct, gated)", warmup, samples, || {
+        spawn_once(
+            &bin,
+            InvokeMode::Direct,
+            &home_minimal,
+            &user_home,
+            None,
+            &narrow_hud_payload,
         )
     });
 

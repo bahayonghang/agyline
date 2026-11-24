@@ -5,7 +5,11 @@
 use std::fs;
 use std::path::Path;
 
-use crate::config::{ConfigDoc, ItemId, ItemSlot, PresetScope, parse_config_overlay};
+use crate::config::{
+    ConfigDoc, DEFAULT_COMPACT_AT, ItemId, ItemSlot, ItemStyle, ModelQuotaPeriod, PresetScope,
+    ThresholdsConfig, parse_config_overlay,
+};
+use crate::render::BarStyle;
 
 /// Picker entry: `name` is the value written to the `preset` key, `summary` is display text only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,7 +18,19 @@ pub struct PresetInfo {
     pub summary: &'static str,
 }
 
-const BUILTIN_PRESETS: [PresetInfo; 5] = [
+const BUILTIN_PRESETS: [PresetInfo; 7] = [
+    PresetInfo {
+        name: "default",
+        summary: "2-row Catppuccin gradient layout with full-height segmented bars, inline quotas, and auto-compact",
+    },
+    PresetInfo {
+        name: "hud",
+        summary: "3-row HUD with status, mode badge, line usage bars, dual quotas, and session telemetry",
+    },
+    PresetInfo {
+        name: "classic",
+        summary: "Prior 2-row default with 5-hour and weekly quotas for the active model",
+    },
     PresetInfo {
         name: "cometix",
         summary: "Reference layout with a combined quota and cost item",
@@ -30,10 +46,6 @@ const BUILTIN_PRESETS: [PresetInfo; 5] = [
     PresetInfo {
         name: "cache-focus",
         summary: "Prompt-cache & budget oriented layout with Catppuccin Mocha palette",
-    },
-    PresetInfo {
-        name: "default",
-        summary: "Workspace and usage with 5-hour and weekly limits for the current model",
     },
 ];
 
@@ -93,6 +105,169 @@ pub(super) fn workspace_and_runtime_lines(usage: ItemId) -> Vec<Vec<ItemSlot>> {
     ]
 }
 
+/// 2-row Catppuccin gradient `Default Line`: model/context/tokens/inline quota on row 1,
+/// status/git/dir plus non-zero runtime items on row 2, collapsing automatically below 88 columns.
+pub fn default_preset_doc() -> ConfigDoc {
+    let mut doc = ConfigDoc::cometix_base();
+    doc.preset = "default".to_string();
+    doc.palette = "catppuccin".to_string();
+    doc.bar_style = BarStyle::Cells;
+    doc.bar_gradient = true;
+    doc.item_style = ItemStyle::Minimal;
+    doc.separator = " │ ".to_string();
+    doc.compact_at = DEFAULT_COMPACT_AT;
+    doc.thresholds = ThresholdsConfig {
+        context_warn: 60.0,
+        context_high: 75.0,
+        context_crit: 90.0,
+        quota_warn: 40,
+        quota_high: 25,
+        quota_crit: 10,
+        cache_warn_secs: 60,
+    };
+
+    let mut model = ItemSlot::new(ItemId::Model);
+    model.style = Some("agybar".to_string());
+
+    let mut context = ItemSlot::new(ItemId::Context);
+    context.style = Some("bar".to_string());
+    context.label = Some(String::new());
+    context.icon = Some(String::new());
+    context.show_tokens = Some(true);
+    context.bar_width = Some(10);
+
+    let mut tokens = ItemSlot::new(ItemId::Tokens);
+    tokens.style = Some("arrows".to_string());
+
+    let mut quota = ItemSlot::new(ItemId::QuotaGroup);
+    quota.style = Some("inline".to_string());
+    quota.family = Some("@model".to_string());
+    quota.show_reset = Some(true);
+    quota.priority = Some(2);
+
+    let mut status = ItemSlot::new(ItemId::Status);
+    status.style = Some("dot".to_string());
+    status.priority = Some(1);
+
+    let mut git = ItemSlot::new(ItemId::Git);
+    git.style = Some("branch".to_string());
+
+    let mut dir = ItemSlot::new(ItemId::Dir);
+    dir.max_levels = Some(2);
+    dir.icon = Some(String::new());
+
+    doc.lines = vec![
+        vec![model, context, tokens, quota],
+        vec![
+            status,
+            git,
+            dir,
+            ItemSlot::new(ItemId::Subagents),
+            ItemSlot::new(ItemId::Tasks),
+            ItemSlot::new(ItemId::Artifacts),
+            ItemSlot::new(ItemId::Sandbox),
+        ],
+    ];
+    doc
+}
+
+/// 3-row HUD layout: status, mode badge, usage bars, dual Gemini/3P quota groups, and runtime telemetry.
+pub fn hud_preset_doc(preset_name: &str) -> ConfigDoc {
+    let mut doc = ConfigDoc::cometix_base();
+    doc.preset = preset_name.to_string();
+    doc.separator = " │ ".to_string();
+    doc.thresholds = ThresholdsConfig {
+        context_warn: 60.0,
+        context_high: 75.0,
+        context_crit: 90.0,
+        quota_warn: 40,
+        quota_high: 25,
+        quota_crit: 10,
+        cache_warn_secs: 60,
+    };
+
+    let mut mode = ItemSlot::new(ItemId::Mode);
+    mode.style = Some("badge".to_string());
+    mode.icon = Some(String::new());
+
+    let mut model = ItemSlot::new(ItemId::Model);
+    model.style = Some("hud".to_string());
+    model.fg = Some("context".to_string());
+
+    let mut context = ItemSlot::new(ItemId::Context);
+    context.style = Some("bar".to_string());
+
+    let mut dir = ItemSlot::new(ItemId::Dir);
+    dir.max_levels = Some(2);
+    dir.fg = Some("model".to_string());
+
+    let mut git = ItemSlot::new(ItemId::Git);
+    git.style = Some("counts".to_string());
+
+    let mut q_gemini = ItemSlot::new(ItemId::QuotaGroup);
+    q_gemini.family = Some("gemini".to_string());
+    q_gemini.priority = Some(2);
+
+    let mut q_3p = ItemSlot::new(ItemId::QuotaGroup);
+    q_3p.family = Some("3p".to_string());
+    q_3p.priority = Some(3);
+
+    let mut sandbox = ItemSlot::new(ItemId::Sandbox);
+    sandbox.show_when_off = Some(true);
+
+    let mut tokens = ItemSlot::new(ItemId::Tokens);
+    tokens.show_breakdown = Some(true);
+
+    let mut cache = ItemSlot::new(ItemId::Cache);
+    cache.style = Some("hit_rate".to_string());
+
+    doc.lines = vec![
+        vec![
+            ItemSlot::new(ItemId::Status),
+            mode,
+            model,
+            context,
+            dir,
+            git,
+        ],
+        vec![q_gemini, q_3p],
+        vec![
+            sandbox,
+            tokens,
+            cache,
+            ItemSlot::new(ItemId::Duration),
+            ItemSlot::new(ItemId::Subagents),
+            ItemSlot::new(ItemId::Tasks),
+            ItemSlot::new(ItemId::Cost),
+            ItemSlot::new(ItemId::Title),
+        ],
+    ];
+    doc
+}
+
+/// Prior 2-row default layout: workspace/cost on line 1 and `@model/5h` + `@model/weekly` on line 2.
+pub fn classic_preset_doc() -> ConfigDoc {
+    let mut doc = ConfigDoc::cometix_base();
+    doc.preset = "classic".to_string();
+    doc.lines = workspace_and_runtime_lines(ItemId::Cost);
+    doc.lines[1].splice(
+        1..1,
+        [
+            (ModelQuotaPeriod::FiveHours, "5h"),
+            (ModelQuotaPeriod::Weekly, "weekly"),
+        ]
+        .map(|(period, label)| {
+            let mut slot = ItemSlot::new(ItemId::Quota);
+            slot.bucket = Some(period.selector().to_string());
+            slot.label = Some(label.to_string());
+            slot.show_reset = Some(true);
+            slot.priority = Some(2);
+            slot
+        }),
+    );
+    doc
+}
+
 /// Whole document for `name`, or `None` when it is unknown. Built-ins ignore `home_dir`; other
 /// names are read from `<home>/presets/<name>.toml`, so `None` also covers a missing home or file.
 /// Each built-in starts from `cometix_base`, keeping reference defaults for keys it does not set.
@@ -100,6 +275,8 @@ pub fn build_preset_doc(name: &str, home_dir: Option<&Path>) -> Option<ConfigDoc
     let key = name.trim().to_ascii_lowercase();
     match key.as_str() {
         "default" => Some(ConfigDoc::default()),
+        "hud" => Some(hud_preset_doc("hud")),
+        "classic" => Some(classic_preset_doc()),
         "cometix" => Some(ConfigDoc::cometix_base()),
         "minimal" => {
             let mut doc = ConfigDoc::cometix_base();
@@ -223,10 +400,14 @@ pub fn apply_preset(
         PresetScope::All => {
             doc.lines = built.lines;
             doc.single_line = built.single_line;
+            doc.compact_at = built.compact_at;
             doc.palette = built.palette;
             doc.theme = built.theme;
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
+            doc.item_style = built.item_style;
+            doc.bar_style = built.bar_style;
+            doc.bar_gradient = built.bar_gradient;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;
@@ -234,12 +415,16 @@ pub fn apply_preset(
         PresetScope::Layout => {
             doc.lines = built.lines;
             doc.single_line = built.single_line;
+            doc.compact_at = built.compact_at;
         }
         PresetScope::Style => {
             doc.palette = built.palette;
             doc.theme = built.theme;
             doc.glyphs = built.glyphs;
             doc.color_depth = built.color_depth;
+            doc.item_style = built.item_style;
+            doc.bar_style = built.bar_style;
+            doc.bar_gradient = built.bar_gradient;
             doc.separator = built.separator;
             doc.indent = built.indent;
             doc.palette_overrides = built.palette_overrides;

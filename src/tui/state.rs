@@ -13,10 +13,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ratatui::text::Line;
 
 use crate::config::{
-    ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigSyntaxError, EffectiveConfig, GlyphSet, ItemId,
-    ItemSlot, OverflowMode, PresetScope, ThemeSetting, inspect_env_overrides, load_config_doc,
+    ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigSyntaxError, DEFAULT_COMPACT_AT,
+    EffectiveConfig, GlyphSet, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, OverflowMode,
+    PresetScope, SEMANTIC_SEPARATORS, ThemeSetting, inspect_env_overrides, load_config_doc,
     presets::{apply_preset, discover_presets},
-    serialize_config_doc,
+    resolve_separator, serialize_config_doc,
 };
 use crate::install::{
     HookInspection, InstallEnv, InstallError, InstallPlan, UninstallOptions, UninstallPlan,
@@ -24,7 +25,7 @@ use crate::install::{
 };
 use crate::items::{ItemCatalogEntry, ItemCategory, catalog};
 use crate::platform;
-use crate::render::{ColorToken, RenderedFrame, discover_palettes, parse_color_spec};
+use crate::render::{BarStyle, ColorToken, RenderedFrame, discover_palettes, parse_color_spec};
 use crate::scenarios::{Scenario, builtin_scenarios};
 use crate::state::maybe_sweep_stale_state;
 use crate::statusline::render_lines_with_width;
@@ -33,6 +34,23 @@ use crate::tui::convert::rendered_frame_to_ratatui_lines;
 // History holds whole-doc snapshots, so it is capped and the oldest is evicted when full. Undo and
 // redo only move snapshots between the two stacks, so this bounds their combined memory too.
 pub const MAX_UNDO_STEPS: usize = 100;
+/// Maximum configurable statusline rows supported by the Layout editor.
+pub const MAX_LAYOUT_ROWS: usize = 5;
+
+/// Dynamic outer height of the Live Preview box: 2 borders + 1 width ruler + 2..=4 status rows.
+pub fn preview_box_height(rendered_line_count: usize) -> u16 {
+    3 + rendered_line_count.clamp(2, 4) as u16
+}
+
+fn step_wrapped_index(len: usize, cur: usize, forward: bool) -> usize {
+    if forward {
+        (cur + 1) % len
+    } else if cur == 0 {
+        len - 1
+    } else {
+        cur - 1
+    }
+}
 
 // Keeps temp names unique when two writes share a nanosecond timestamp or the clock is coarse.
 static TUI_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -238,15 +256,27 @@ pub enum InspectorField {
     Icon,
     Fg,
     IconColor,
+    Style,
+    MaxLevels,
     ShowRemaining,
     Bucket,
+    Family,
     Label,
+    ShowUsed,
+    ShowBar,
+    BarStyle,
+    BarWidth,
     ShowReset,
     ShowAmount,
     ShowSubagent,
     ShowDefault,
     Compact,
     ShowDetail,
+    ShowWhenOff,
+    ShowTtl,
+    ShowBreakdown,
+    ShowPending,
+    ShowTokens,
 }
 
 impl InspectorField {
@@ -257,17 +287,47 @@ impl InspectorField {
             Self::Icon => "icon",
             Self::Fg => "fg",
             Self::IconColor => "icon_color",
+            Self::Style => "style",
+            Self::MaxLevels => "max_levels",
             Self::ShowRemaining => "show_remaining",
             Self::Bucket => "bucket",
+            Self::Family => "family",
             Self::Label => "label",
+            Self::ShowUsed => "show_used",
+            Self::ShowBar => "show_bar",
+            Self::BarStyle => "bar_style",
+            Self::BarWidth => "bar_width",
             Self::ShowReset => "show_reset",
             Self::ShowAmount => "show_amount",
             Self::ShowSubagent => "show_subagent",
             Self::ShowDefault => "show_default",
             Self::Compact => "compact",
             Self::ShowDetail => "show_detail",
+            Self::ShowWhenOff => "show_when_off",
+            Self::ShowTtl => "show_ttl",
+            Self::ShowBreakdown => "show_breakdown",
+            Self::ShowPending => "show_pending",
+            Self::ShowTokens => "show_tokens",
         }
     }
+}
+
+/// Default boolean value when a per-slot toggle is unset (`None`), so the Inspector and toggle
+/// actions stay synchronized for items whose options default to `true` (e.g. HUD `QuotaGroup`).
+pub const fn inspector_bool_default(id: ItemId, field: InspectorField) -> bool {
+    matches!(
+        (id, field),
+        (ItemId::Status, InspectorField::ShowPending)
+            | (ItemId::Tokens, InspectorField::ShowBreakdown)
+            | (ItemId::Context, InspectorField::ShowBar)
+            | (
+                ItemId::QuotaGroup,
+                InspectorField::ShowUsed
+                    | InspectorField::ShowBar
+                    | InspectorField::ShowReset
+                    | InspectorField::ShowAmount,
+            )
+    )
 }
 
 // Per-item field sets: the four base keys plus only the options that item actually reads.
@@ -277,12 +337,56 @@ const INSP_BASE: [InspectorField; 4] = [
     InspectorField::Fg,
     InspectorField::IconColor,
 ];
-const INSP_CONTEXT: [InspectorField; 5] = [
+const INSP_STATUS: [InspectorField; 6] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
+    InspectorField::Style,
+    InspectorField::ShowPending,
+];
+const INSP_STYLE: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+];
+const INSP_DIR: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::MaxLevels,
+];
+const INSP_CONTEXT: [InspectorField; 11] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
     InspectorField::ShowRemaining,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
+    InspectorField::Label,
+    InspectorField::ShowTokens,
+];
+const INSP_CACHE: [InspectorField; 6] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+    InspectorField::ShowTtl,
+];
+const INSP_TOKENS: [InspectorField; 6] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+    InspectorField::ShowBreakdown,
 ];
 const INSP_BUDGET: [InspectorField; 8] = [
     InspectorField::Priority,
@@ -294,11 +398,12 @@ const INSP_BUDGET: [InspectorField; 8] = [
     InspectorField::ShowAmount,
     InspectorField::ShowSubagent,
 ];
-const INSP_MODE: [InspectorField; 6] = [
+const INSP_MODE: [InspectorField; 7] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
+    InspectorField::Style,
     InspectorField::ShowDefault,
     InspectorField::Compact,
 ];
@@ -309,13 +414,39 @@ const INSP_SUBAGENTS: [InspectorField; 5] = [
     InspectorField::IconColor,
     InspectorField::ShowDetail,
 ];
-const INSP_QUOTA: [InspectorField; 8] = [
+const INSP_SANDBOX: [InspectorField; 5] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::ShowWhenOff,
+];
+const INSP_QUOTA: [InspectorField; 12] = [
     InspectorField::Priority,
     InspectorField::Icon,
     InspectorField::Fg,
     InspectorField::IconColor,
     InspectorField::Bucket,
     InspectorField::Label,
+    InspectorField::ShowReset,
+    InspectorField::ShowAmount,
+    InspectorField::ShowUsed,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
+];
+const INSP_QUOTA_GROUP: [InspectorField; 13] = [
+    InspectorField::Priority,
+    InspectorField::Icon,
+    InspectorField::Fg,
+    InspectorField::IconColor,
+    InspectorField::Style,
+    InspectorField::Family,
+    InspectorField::Label,
+    InspectorField::ShowUsed,
+    InspectorField::ShowBar,
+    InspectorField::BarStyle,
+    InspectorField::BarWidth,
     InspectorField::ShowReset,
     InspectorField::ShowAmount,
 ];
@@ -331,20 +462,23 @@ const INSP_COST: [InspectorField; 5] = [
 /// change of selection or item kind.
 pub fn inspector_fields_for_item(id: ItemId) -> &'static [InspectorField] {
     match id {
+        ItemId::Status => &INSP_STATUS,
+        ItemId::Model | ItemId::Git => &INSP_STYLE,
+        ItemId::Dir => &INSP_DIR,
         ItemId::Context => &INSP_CONTEXT,
+        ItemId::Cache => &INSP_CACHE,
+        ItemId::Tokens => &INSP_TOKENS,
         ItemId::Budget => &INSP_BUDGET,
         ItemId::Mode => &INSP_MODE,
         ItemId::Subagents => &INSP_SUBAGENTS,
+        ItemId::Sandbox => &INSP_SANDBOX,
         ItemId::Quota => &INSP_QUOTA,
+        ItemId::QuotaGroup => &INSP_QUOTA_GROUP,
         ItemId::Cost => &INSP_COST,
-        ItemId::Model
-        | ItemId::Dir
-        | ItemId::Git
-        | ItemId::Cache
-        | ItemId::Speed
+        ItemId::Speed
         | ItemId::Tasks
         | ItemId::Queue
-        | ItemId::Sandbox
+        | ItemId::Duration
         | ItemId::Vim
         | ItemId::Title
         | ItemId::Agent
@@ -360,41 +494,53 @@ pub enum StyleField {
     Theme,
     Glyphs,
     ColorDepth,
+    ItemStyle,
+    BarStyle,
+    BarGradient,
     Separator,
     Indent,
 }
 
 impl StyleField {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 9] = [
         Self::Palette,
         Self::Theme,
         Self::Glyphs,
         Self::ColorDepth,
+        Self::ItemStyle,
+        Self::BarStyle,
+        Self::BarGradient,
         Self::Separator,
         Self::Indent,
     ];
 }
 
-/// Threshold keys in navigation order. The context pair and the quota pair are cross-validated on
-/// commit and run in opposite directions: context is used percent, quota is remaining percent.
+/// Threshold keys in navigation order. The context triple (`warn < high < crit`, used %) and the
+/// quota triple (`warn > high > crit`, remaining %) are strictly cross-validated on step & commit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdField {
     SingleLine,
+    CompactAt,
     Overflow,
     ContextWarn,
+    ContextHigh,
     ContextCrit,
     QuotaWarn,
+    QuotaHigh,
     QuotaCrit,
     CacheWarnSecs,
 }
 
 impl ThresholdField {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 10] = [
         Self::SingleLine,
+        Self::CompactAt,
         Self::Overflow,
         Self::ContextWarn,
+        Self::ContextHigh,
         Self::ContextCrit,
         Self::QuotaWarn,
+        Self::QuotaHigh,
         Self::QuotaCrit,
         Self::CacheWarnSecs,
     ];
@@ -417,14 +563,22 @@ pub enum TextEditTarget {
     InspectorIcon { row: usize, slot: usize },
     InspectorFg { row: usize, slot: usize },
     InspectorIconColor { row: usize, slot: usize },
+    InspectorStyle { row: usize, slot: usize },
+    InspectorMaxLevels { row: usize, slot: usize },
     InspectorBucket { row: usize, slot: usize },
+    InspectorFamily { row: usize, slot: usize },
     InspectorLabel { row: usize, slot: usize },
+    InspectorBarStyle { row: usize, slot: usize },
+    InspectorBarWidth { row: usize, slot: usize },
     StyleSeparator,
     StyleIndent,
     PaletteTokenOverride(ColorToken),
+    ThresholdCompactAt,
     ThresholdContextWarn,
+    ThresholdContextHigh,
     ThresholdContextCrit,
     ThresholdQuotaWarn,
+    ThresholdQuotaHigh,
     ThresholdQuotaCrit,
     ThresholdCacheWarnSecs,
     RuntimeGitCacheMs,
@@ -437,14 +591,22 @@ impl TextEditTarget {
             Self::InspectorIcon { .. } => "icon",
             Self::InspectorFg { .. } => "fg",
             Self::InspectorIconColor { .. } => "icon_color",
+            Self::InspectorStyle { .. } => "style",
+            Self::InspectorMaxLevels { .. } => "max_levels",
             Self::InspectorBucket { .. } => "bucket",
+            Self::InspectorFamily { .. } => "family",
             Self::InspectorLabel { .. } => "label",
+            Self::InspectorBarStyle { .. } => "bar_style",
+            Self::InspectorBarWidth { .. } => "bar_width",
             Self::StyleSeparator => "separator",
             Self::StyleIndent => "indent",
             Self::PaletteTokenOverride(tok) => tok.as_key(),
+            Self::ThresholdCompactAt => "compact_at",
             Self::ThresholdContextWarn => "context_warn",
+            Self::ThresholdContextHigh => "context_high",
             Self::ThresholdContextCrit => "context_crit",
             Self::ThresholdQuotaWarn => "quota_warn",
+            Self::ThresholdQuotaHigh => "quota_high",
             Self::ThresholdQuotaCrit => "quota_crit",
             Self::ThresholdCacheWarnSecs => "cache_warn_secs",
             Self::RuntimeGitCacheMs => "git.cache_ms",
@@ -623,7 +785,7 @@ fn atomic_write_in_home(home_dir: &Path, file_name: &str, bytes: &[u8]) -> io::R
 /// Catalog grouped in category order (Workspace, Usage, Runtime, Session). The Layout pane draws
 /// and the mouse hit-tests by index into this list, so the order is part of the UI contract.
 pub fn ordered_catalog_entries() -> Vec<&'static ItemCatalogEntry> {
-    let mut out = Vec::with_capacity(20);
+    let mut out = Vec::with_capacity(24);
     for cat in [
         ItemCategory::Workspace,
         ItemCategory::Usage,
@@ -751,6 +913,62 @@ impl ConfiguratorApp {
             (active_index + 1).saturating_sub(visible_rows),
             (catalog_index + 1).saturating_sub(visible_rows),
         )
+    }
+
+    /// Scroll offset for Inspector fields beneath the pinned item header line.
+    pub(crate) fn inspector_list_offset(&self, visible_rows: usize) -> usize {
+        (self.inspector_idx + 1).saturating_sub(visible_rows.saturating_sub(1))
+    }
+
+    /// Scroll offset for the Presets list beneath the pinned Scope header line.
+    pub(crate) fn style_preset_offset(&self, visible_rows: usize) -> usize {
+        (self.style_preset_idx + 1).saturating_sub(visible_rows.saturating_sub(1))
+    }
+
+    /// Maps each visual line drawn in Global Style back to its `StyleField` index so mouse clicks
+    /// and scroll offsets stay aligned when `AGY_*` override badges insert extra lines.
+    pub(crate) fn style_global_row_map(&self) -> Vec<usize> {
+        let mut map = Vec::with_capacity(StyleField::ALL.len() + 2);
+        for (idx, field) in StyleField::ALL.iter().enumerate() {
+            map.push(idx);
+            let env_key = match field {
+                StyleField::Theme => Some("theme"),
+                StyleField::Indent => Some("indent"),
+                StyleField::Palette
+                | StyleField::Glyphs
+                | StyleField::ColorDepth
+                | StyleField::ItemStyle
+                | StyleField::BarStyle
+                | StyleField::BarGradient
+                | StyleField::Separator => None,
+            };
+            if let Some(key) = env_key
+                && self.env_overrides.iter().any(|ov| ov.target_key == key)
+            {
+                map.push(idx);
+            }
+        }
+        map
+    }
+
+    /// Scroll offset for Global Style that keeps the selected field (and its env badge) in view.
+    pub(crate) fn style_global_offset(&self, visible_rows: usize) -> usize {
+        let row_map = self.style_global_row_map();
+        let selected_line = row_map
+            .iter()
+            .rposition(|&f| f == self.style_field_idx)
+            .unwrap_or(self.style_field_idx);
+        (selected_line + 1).saturating_sub(visible_rows)
+    }
+
+    /// Scroll offset for `[palette_overrides]` across all `ColorToken::ALL` entries.
+    pub(crate) fn palette_override_offset(&self, visible_rows: usize) -> usize {
+        (self.palette_override_idx + 1).saturating_sub(visible_rows)
+    }
+
+    /// Scroll offset for the `Layout & [thresholds]` pane.
+    pub(crate) fn threshold_list_offset(&self, visible_rows: usize) -> usize {
+        (self.threshold_field_idx + 1).saturating_sub(visible_rows)
     }
 
     /// Loads the draft and captures every host fact once. A broken config.toml loads as defaults
@@ -890,6 +1108,13 @@ impl ConfiguratorApp {
         (rendered, cfg)
     }
 
+    /// Dynamic Live Preview box height for the currently rendered output. Shared by `view.rs`
+    /// and `input.rs` mouse hit-testing so clicks on tabs and panes stay aligned.
+    pub fn preview_box_height(&self) -> u16 {
+        let (rendered, _) = self.preview_rendered_frame();
+        preview_box_height(rendered.lines.len())
+    }
+
     /// Preview as ratatui lines; the text must equal `emit_plain` of the same frame.
     pub fn preview_lines(&self) -> Vec<Line<'static>> {
         let (rendered, cfg) = self.preview_rendered_frame();
@@ -948,7 +1173,8 @@ impl ConfiguratorApp {
     /// Keeps row, slot and inspector indices inside the doc. Must run after every mutation,
     /// undo, redo and reload, or the next draw and mouse hit test index out of bounds.
     pub(crate) fn clamp_layout_selection(&mut self) {
-        self.selected_row = self.selected_row.min(1);
+        let max_row = self.doc.lines.len().max(2) - 1;
+        self.selected_row = self.selected_row.min(max_row);
         let row_len = self.doc.lines.get(self.selected_row).map_or(0, Vec::len);
         if row_len == 0 {
             self.selected_slot = 0;
@@ -1033,6 +1259,40 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
+            TextEditTarget::InspectorStyle { row, slot } => {
+                let next = (!trimmed.is_empty()).then_some(trimmed);
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.style = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorMaxLevels { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else {
+                    let Ok(v) = trimmed.parse::<u8>() else {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Expected integer 1..=8 (empty clears)".to_string());
+                        }
+                        return;
+                    };
+                    if !(1..=8).contains(&v) {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Require 1 <= max_levels <= 8".to_string());
+                        }
+                        return;
+                    }
+                    Some(v)
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.max_levels = next;
+                    }
+                });
+                self.text_edit = None;
+            }
             TextEditTarget::InspectorBucket { row, slot } => {
                 let next = (!trimmed.is_empty()).then_some(trimmed);
                 self.mutate_doc(|doc| {
@@ -1042,11 +1302,70 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
-            TextEditTarget::InspectorLabel { row, slot } => {
+            TextEditTarget::InspectorFamily { row, slot } => {
                 let next = (!trimmed.is_empty()).then_some(trimmed);
                 self.mutate_doc(|doc| {
                     if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
-                        s.label = next;
+                        s.family = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorLabel { row, slot } => {
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        // Context distinguishes Some("") (hide "ctx ") from None (default "ctx").
+                        s.label = if s.id == ItemId::Context {
+                            Some(trimmed)
+                        } else {
+                            (!trimmed.is_empty()).then_some(trimmed)
+                        };
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorBarStyle { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else if let Some(parsed) = BarStyle::from_key(&trimmed) {
+                    Some(parsed.as_key().to_string())
+                } else {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(
+                            "Expected bar_style: cells, line, parallelogram, braille, solid, block, or ascii"
+                                .to_string(),
+                        );
+                    }
+                    return;
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.bar_style = next;
+                    }
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::InspectorBarWidth { row, slot } => {
+                let next = if trimmed.is_empty() {
+                    None
+                } else {
+                    let Ok(v) = trimmed.parse::<u8>() else {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Expected integer 4..=20 (empty clears)".to_string());
+                        }
+                        return;
+                    };
+                    if !(4..=20).contains(&v) {
+                        if let Some(ref mut st) = self.text_edit {
+                            st.error = Some("Require 4 <= bar_width <= 20".to_string());
+                        }
+                        return;
+                    }
+                    Some(v)
+                };
+                self.mutate_doc(|doc| {
+                    if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot)) {
+                        s.bar_width = next;
                     }
                 });
                 self.text_edit = None;
@@ -1081,21 +1400,37 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
-            TextEditTarget::ThresholdContextWarn => {
-                // warn must stay strictly below crit, so the reachable maximum is crit - 1.
-                let max_allowed = (self.doc.thresholds.context_crit - 1.0).max(0.0);
-                let Ok(v) = trimmed.parse::<f64>() else {
+            TextEditTarget::ThresholdCompactAt => {
+                let Ok(v) = trimmed.parse::<usize>() else {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some("Expected number 0..99 (< context_crit)".to_string());
+                        st.error = Some(format!(
+                            "Expected integer 0..={MAX_COMPACT_AT} (0 disables; default {DEFAULT_COMPACT_AT})"
+                        ));
                     }
                     return;
                 };
-                if !v.is_finite() || v < 0.0 || v >= self.doc.thresholds.context_crit {
+                if v > MAX_COMPACT_AT {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some(format!(
-                            "Require 0 <= context_warn < {} (max {max_allowed})",
-                            self.doc.thresholds.context_crit
-                        ));
+                        st.error = Some(format!("Require 0 <= compact_at <= {MAX_COMPACT_AT}"));
+                    }
+                    return;
+                }
+                self.mutate_doc(|doc| {
+                    doc.compact_at = v;
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::ThresholdContextWarn => {
+                let high = self.doc.thresholds.context_high;
+                let Ok(v) = trimmed.parse::<f64>() else {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Expected number 0..<{high} (< context_high)"));
+                    }
+                    return;
+                };
+                if !v.is_finite() || v < 0.0 || v >= high {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Require 0 <= context_warn < {high}"));
                     }
                     return;
                 }
@@ -1104,19 +1439,37 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
-            TextEditTarget::ThresholdContextCrit => {
+            TextEditTarget::ThresholdContextHigh => {
+                let warn = self.doc.thresholds.context_warn;
+                let crit = self.doc.thresholds.context_crit;
                 let Ok(v) = trimmed.parse::<f64>() else {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some("Expected number 1..100 (> context_warn)".to_string());
+                        st.error = Some(format!("Expected number between {warn} and {crit}"));
                     }
                     return;
                 };
-                if !v.is_finite() || v > 100.0 || v <= self.doc.thresholds.context_warn {
+                if !v.is_finite() || v <= warn || v >= crit {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some(format!(
-                            "Require {} < context_crit <= 100",
-                            self.doc.thresholds.context_warn
-                        ));
+                        st.error = Some(format!("Require {warn} < context_high < {crit}"));
+                    }
+                    return;
+                }
+                self.mutate_doc(|doc| {
+                    doc.thresholds.context_high = v;
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::ThresholdContextCrit => {
+                let high = self.doc.thresholds.context_high;
+                let Ok(v) = trimmed.parse::<f64>() else {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Expected number >{high}..=100 (> context_high)"));
+                    }
+                    return;
+                };
+                if !v.is_finite() || v > 100.0 || v <= high {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Require {high} < context_crit <= 100"));
                     }
                     return;
                 }
@@ -1126,19 +1479,17 @@ impl ConfiguratorApp {
                 self.text_edit = None;
             }
             TextEditTarget::ThresholdQuotaWarn => {
-                // Inverted vs context: quota is remaining percent, so warn must exceed crit.
+                // Inverted vs context: quota is remaining percent, so warn > high > crit.
+                let high = self.doc.thresholds.quota_high;
                 let Ok(v) = trimmed.parse::<i32>() else {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some("Expected integer 1..100 (> quota_crit)".to_string());
+                        st.error = Some(format!("Expected integer >{high}..=100 (> quota_high)"));
                     }
                     return;
                 };
-                if v > 100 || v <= self.doc.thresholds.quota_crit {
+                if v > 100 || v <= high {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some(format!(
-                            "Require {} < quota_warn <= 100",
-                            self.doc.thresholds.quota_crit
-                        ));
+                        st.error = Some(format!("Require {high} < quota_warn <= 100"));
                     }
                     return;
                 }
@@ -1147,19 +1498,37 @@ impl ConfiguratorApp {
                 });
                 self.text_edit = None;
             }
-            TextEditTarget::ThresholdQuotaCrit => {
+            TextEditTarget::ThresholdQuotaHigh => {
+                let crit = self.doc.thresholds.quota_crit;
+                let warn = self.doc.thresholds.quota_warn;
                 let Ok(v) = trimmed.parse::<i32>() else {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some("Expected integer 0..99 (< quota_warn)".to_string());
+                        st.error = Some(format!("Expected integer between {crit} and {warn}"));
                     }
                     return;
                 };
-                if v < 0 || v >= self.doc.thresholds.quota_warn {
+                if v <= crit || v >= warn {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some(format!(
-                            "Require 0 <= quota_crit < {}",
-                            self.doc.thresholds.quota_warn
-                        ));
+                        st.error = Some(format!("Require {crit} < quota_high < {warn}"));
+                    }
+                    return;
+                }
+                self.mutate_doc(|doc| {
+                    doc.thresholds.quota_high = v;
+                });
+                self.text_edit = None;
+            }
+            TextEditTarget::ThresholdQuotaCrit => {
+                let high = self.doc.thresholds.quota_high;
+                let Ok(v) = trimmed.parse::<i32>() else {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Expected integer 0..<{high} (< quota_high)"));
+                    }
+                    return;
+                };
+                if v < 0 || v >= high {
+                    if let Some(ref mut st) = self.text_edit {
+                        st.error = Some(format!("Require 0 <= quota_crit < {high}"));
                     }
                     return;
                 }
@@ -1228,14 +1597,7 @@ impl ConfiguratorApp {
             .iter()
             .position(|p| p.eq_ignore_ascii_case(&self.doc.palette))
             .unwrap_or(0);
-        let len = self.available_palettes.len();
-        let next_idx = if forward {
-            (cur_idx + 1) % len
-        } else if cur_idx == 0 {
-            len - 1
-        } else {
-            cur_idx - 1
-        };
+        let next_idx = step_wrapped_index(self.available_palettes.len(), cur_idx, forward);
         let next_pal = self.available_palettes[next_idx].clone();
         self.mutate_doc(|doc| {
             doc.palette = next_pal;
@@ -1286,6 +1648,57 @@ impl ConfiguratorApp {
         };
         self.mutate_doc(|doc| {
             doc.color_depth = next;
+        });
+    }
+
+    pub(crate) fn cycle_item_style(&mut self, forward: bool) {
+        let styles = ItemStyle::ALL;
+        let idx = styles
+            .iter()
+            .position(|&s| s == self.doc.item_style)
+            .unwrap_or(0);
+        let next = styles[step_wrapped_index(styles.len(), idx, forward)];
+        self.mutate_doc(|doc| {
+            doc.item_style = next;
+        });
+    }
+
+    pub(crate) fn cycle_bar_style(&mut self, forward: bool) {
+        let styles = BarStyle::ALL;
+        let idx = styles
+            .iter()
+            .position(|&s| s == self.doc.bar_style)
+            .unwrap_or(0);
+        let next = styles[step_wrapped_index(styles.len(), idx, forward)];
+        self.mutate_doc(|doc| {
+            doc.bar_style = next;
+        });
+    }
+
+    pub(crate) fn toggle_bar_gradient(&mut self) {
+        let next = !self.doc.bar_gradient;
+        self.mutate_doc(|doc| {
+            doc.bar_gradient = next;
+        });
+    }
+
+    /// Cycles semantic separator presets (`pipe`, `dashed`, `dot`, `square`, `none`). Matches
+    /// both raw aliases and their resolved glyph form so presets like `" │ "` step immediately.
+    pub(crate) fn cycle_separator_preset(&mut self, forward: bool) {
+        let cur_trimmed = self.doc.separator.trim();
+        let cur_resolved = resolve_separator(&self.doc.separator);
+        let cur_idx = SEMANTIC_SEPARATORS.iter().position(|&(alias, glyph)| {
+            alias.eq_ignore_ascii_case(cur_trimmed) || glyph == cur_resolved
+        });
+        let len = SEMANTIC_SEPARATORS.len();
+        let next_idx = match (cur_idx, forward) {
+            (Some(i), _) => step_wrapped_index(len, i, forward),
+            (None, true) => 0,
+            (None, false) => len - 1,
+        };
+        let next = SEMANTIC_SEPARATORS[next_idx].0.to_string();
+        self.mutate_doc(|doc| {
+            doc.separator = next;
         });
     }
 

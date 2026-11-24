@@ -3,11 +3,13 @@
 //! arrive already quantized by `resolve_span_color`, so preview and live output agree by
 //! construction; `tests/tui_smoke.rs` pins the text against `emit_plain`.
 
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::config::EffectiveConfig;
-use crate::render::{Ansi16Color, ColorToken, EffectiveColorDepth, RenderedFrame, ResolvedColor};
+use crate::config::{EffectiveConfig, ItemStyle};
+use crate::render::{
+    Ansi16Color, ColorToken, EffectiveColorDepth, RenderedFrame, ResolvedColor, TextStyle,
+};
 
 /// Maps an already-quantized color to ratatui. `None` means depth `None` and must stay unstyled
 /// rather than fall back to a default foreground.
@@ -48,6 +50,28 @@ pub fn style_for_resolved(color: Option<ResolvedColor>) -> Style {
     }
 }
 
+/// Full span style for ratatui preview: foreground, optional background, and text modifiers.
+pub fn style_for_resolved_text(
+    fg: Option<ResolvedColor>,
+    text_style: TextStyle,
+    bg: Option<ResolvedColor>,
+) -> Style {
+    let mut st = style_for_resolved(fg);
+    if let Some(bg_col) = resolved_color_to_ratatui(bg) {
+        st = st.bg(bg_col);
+    }
+    if text_style.bold {
+        st = st.add_modifier(Modifier::BOLD);
+    }
+    if text_style.dim {
+        st = st.add_modifier(Modifier::DIM);
+    }
+    if text_style.italic {
+        st = st.add_modifier(Modifier::ITALIC);
+    }
+    st
+}
+
 /// The preview/live parity seam: converts the very frame the printer emits, span by span, with no
 /// ANSI round-trip. Row skipping, indent, separators and the broken-config badge must mirror
 /// `emit_ansi` / `emit_plain` exactly, including their empty-row and first-emitted-row rules.
@@ -67,7 +91,9 @@ pub fn rendered_frame_to_ratatui_lines(
         | EffectiveColorDepth::Ansi16 => false,
     };
 
-    let sep_style = if plain_mode {
+    let row_sep = config.effective_row_separator();
+    let framed_mode = config.effective_item_style() != ItemStyle::Minimal;
+    let sep_style = if plain_mode || framed_mode {
         Style::default()
     } else {
         style_for_resolved(config.resolve_span_color(ColorToken::Separator))
@@ -92,8 +118,8 @@ pub fn rendered_frame_to_ratatui_lines(
         }
 
         for (idx, item) in line.items.iter().enumerate() {
-            if idx > 0 && !config.separator.is_empty() {
-                spans.push(Span::styled(config.separator.clone(), sep_style));
+            if idx > 0 && !row_sep.is_empty() {
+                spans.push(Span::styled(row_sep.to_string(), sep_style));
             }
             for sp in &item.spans {
                 if sp.text.is_empty() {
@@ -102,7 +128,9 @@ pub fn rendered_frame_to_ratatui_lines(
                 let sp_style = if plain_mode {
                     Style::default()
                 } else {
-                    style_for_resolved(config.resolve_span_color(sp.color))
+                    let fg = config.resolve_span_color(sp.color);
+                    let bg = sp.style.bg.and_then(|b| config.resolve_span_color(b));
+                    style_for_resolved_text(fg, sp.style, bg)
                 };
                 spans.push(Span::styled(sp.text.clone(), sp_style));
             }

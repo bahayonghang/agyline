@@ -49,6 +49,7 @@ impl PreviewSandbox {
             .env_remove("AGY_STATUSLINE_INDENT")
             .env_remove("AGY_SHOW_DEFAULT_MODE")
             .env_remove("AGY_CACHE_RELAY")
+            .env_remove("AGYLINE_DEBUG")
             .env_remove("COLORFGBG")
             .env_remove("NO_COLOR")
             .env_remove("COLORTERM")
@@ -77,6 +78,8 @@ impl Drop for PreviewSandbox {
 #[test]
 fn default_quota_uses_the_selected_model_and_keeps_both_periods_together() {
     let sb = PreviewSandbox::new("model_quota");
+    fs::create_dir_all(&sb.home).expect("create classic home");
+    fs::write(sb.home.join("config.toml"), "preset = \"classic\"\n").expect("write classic");
     let mut payload = serde_json::json!({
         "model": { "id": "models/GEMINI-4-carbon", "display_name": "Gemini Pro Orchestrator" },
         "cycle_mode": "auto",
@@ -180,10 +183,16 @@ fn builtin_scenarios_expose_all_six_canonical_entries() {
             "busy_subagents",
             "warn_crit",
             "narrow_stress",
+            "showcase_wide",
+            "showcase_critical",
+            "showcase_compact",
         ]
     );
     assert!(find_scenario("normal").is_some());
     assert!(find_scenario("narrow_stress").is_some());
+    assert!(find_scenario("showcase_wide").is_some());
+    assert!(find_scenario("showcase_critical").is_some());
+    assert!(find_scenario("showcase_compact").is_some());
     assert!(find_scenario("nonexistent").is_none());
 }
 
@@ -231,7 +240,7 @@ fn preview_default_scenario_list_all_plain_width_and_zero_state_writes() {
     assert!(!all_txt.contains("\x1b["));
     assert!(all_txt.contains("normal"));
     assert!(all_txt.contains("narrow_stress"));
-    assert!(all_txt.contains("approval required"));
+    assert!(all_txt.contains("CONFIRM"));
 
     // 4. `-s narrow_stress --plain` narrows to <= 74 cols by default, while `-w 0` forces Full
     let narrow_default = sb.run(&["preview", "-s", "narrow_stress", "--plain"], b"", &[]);
@@ -362,6 +371,10 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
         &["preview", "--list", "--all"],
         &["preview", "-i", "-", "-s", "normal"],
         &["preview", "-i", "-", "--list"],
+        &["preview", "--showcase", "-s", "normal"],
+        &["preview", "--showcase", "--all"],
+        &["preview", "--showcase", "--list"],
+        &["preview", "--showcase", "-i", "-"],
         &["preview", "-w", "not_a_number"],
         &["preview", "-w", "-5"],
         &["preview", "-w"],
@@ -386,5 +399,235 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
     let help_out = sb.run(&["preview", "--help"], b"", &[]);
     assert_eq!(help_out.status.code(), Some(0));
     assert!(help_out.stderr.is_empty());
-    assert!(String::from_utf8_lossy(&help_out.stdout).contains("Usage: agyline preview"));
+    let help_txt = String::from_utf8_lossy(&help_out.stdout);
+    assert!(help_txt.contains("Usage: agyline preview"));
+    assert!(
+        help_txt.contains("--showcase"),
+        "preview --help must document --showcase: {help_txt}"
+    );
+}
+
+// `preview --showcase` statelessly renders built-in palette comparisons, high-usage >90%
+// `→ /compact` alert, narrow <88 compact collapse, badge/pill Container Styles, and all semantic
+// separator presets with zero writes under AGYLINE_HOME or AGYLINE_HOME/state.
+#[test]
+fn preview_showcase_renders_gallery_statelessly_and_honors_plain_and_width() {
+    let sb = PreviewSandbox::new("showcase");
+
+    // 1. ANSI showcase gallery without touching AGYLINE_HOME.
+    let ansi_out = sb.run(&["preview", "--showcase"], b"", &[]);
+    assert_eq!(
+        ansi_out.status.code(),
+        Some(0),
+        "stderr: {:?}",
+        String::from_utf8_lossy(&ansi_out.stderr)
+    );
+    assert!(ansi_out.stderr.is_empty());
+    assert!(
+        !sb.home.exists(),
+        "preview --showcase must not create AGYLINE_HOME or state/: {:?}",
+        sb.home
+    );
+    let ansi_txt = String::from_utf8(ansi_out.stdout).expect("utf8");
+    for label in [
+        "catppuccin",
+        "tokyo-night",
+        "nord",
+        "mono",
+        "badge",
+        "pill",
+        "Bar Style: parallelogram",
+        "Bar Style: solid",
+        "Bar Style: block",
+        "Bar Style: braille",
+        "Bar Style: line",
+        "pipe",
+        "dashed",
+        "dot",
+        "square",
+        "none",
+    ] {
+        assert!(
+            ansi_txt.contains(label),
+            "showcase missing '{label}' section:\n{ansi_txt}"
+        );
+    }
+    // Distinct RGB anchors for Catppuccin Mocha (Mauve), Tokyo Night (Cyan), Nord (Frost).
+    assert!(
+        ansi_txt.contains("38;2;203;166;247"),
+        "showcase missing Catppuccin RGB"
+    );
+    assert!(
+        ansi_txt.contains("38;2;125;207;255"),
+        "showcase missing Tokyo Night RGB"
+    );
+    assert!(
+        ansi_txt.contains("38;2;136;192;208"),
+        "showcase missing Nord RGB"
+    );
+    // High-usage >90% alert, badge/pill surface backgrounds, Powerline pill caps, and separators.
+    assert!(
+        ansi_txt.contains("→ /compact"),
+        "showcase missing >90% → /compact alert"
+    );
+    assert!(
+        ansi_txt.contains(";48;2;"),
+        "showcase missing surface background SGR for badge/pill"
+    );
+    assert!(
+        ansi_txt.contains('\u{e0b6}') && ansi_txt.contains('\u{e0b4}'),
+        "showcase missing Powerline pill endcaps"
+    );
+    for sep_ch in ['\u{2502}', '\u{250a}', '\u{2022}', '\u{25aa}'] {
+        assert!(
+            ansi_txt.contains(sep_ch),
+            "showcase missing separator glyph {sep_ch:?}"
+        );
+    }
+
+    // 2. Plain showcase omits ANSI escapes and still shows compact single-row collapse (<88).
+    let plain_out = sb.run(&["preview", "--showcase", "--plain"], b"", &[]);
+    assert_eq!(plain_out.status.code(), Some(0));
+    assert!(plain_out.stderr.is_empty());
+    let plain_txt = String::from_utf8(plain_out.stdout).expect("utf8");
+    assert!(!plain_txt.contains("\x1b["));
+    assert!(plain_txt.contains("→ /compact"));
+
+    // Locate the narrow <88 section and verify it collapsed to a single row <= 78 cols.
+    let mut in_narrow = false;
+    let mut narrow_rows = Vec::new();
+    for line in plain_txt.lines() {
+        if line.starts_with("=== ") {
+            in_narrow = line.contains("<88");
+            continue;
+        }
+        if in_narrow && !line.trim().is_empty() {
+            narrow_rows.push(line);
+        }
+    }
+    assert_eq!(
+        narrow_rows.len(),
+        1,
+        "narrow <88 showcase section must collapse to 1 row, got: {narrow_rows:?}"
+    );
+    assert!(
+        str_display_width(narrow_rows[0]) <= 78,
+        "narrow <88 row width {} > 78: {:?}",
+        str_display_width(narrow_rows[0]),
+        narrow_rows[0]
+    );
+
+    // 3. Explicit `--width` caps every rendered row in the showcase.
+    let capped_out = sb.run(
+        &["preview", "--showcase", "--plain", "--width", "70"],
+        b"",
+        &[],
+    );
+    assert_eq!(capped_out.status.code(), Some(0));
+    let capped_txt = String::from_utf8(capped_out.stdout).expect("utf8");
+    for line in capped_txt.lines() {
+        if line.starts_with("=== ") || line.trim().is_empty() {
+            continue;
+        }
+        let w = str_display_width(line);
+        assert!(
+            w <= 70,
+            "showcase row exceeded --width 70 (got {w}): {line:?}"
+        );
+    }
+
+    // 4. Showcase still works cleanly even if user config.toml selects another preset, with zero
+    // state/ writes.
+    fs::create_dir_all(&sb.home).expect("create home");
+    fs::write(sb.home.join("config.toml"), "preset = \"cometix\"\n").expect("write cometix");
+    let custom_cfg_out = sb.run(&["preview", "--showcase", "--plain"], b"", &[]);
+    assert_eq!(custom_cfg_out.status.code(), Some(0));
+    let custom_txt = String::from_utf8(custom_cfg_out.stdout).expect("utf8");
+    assert!(custom_txt.contains("→ /compact"));
+    assert!(
+        !sb.home.join("state").exists(),
+        "preview --showcase must never write AGYLINE_HOME/state"
+    );
+
+    // 5. Dark-only palettes stay RGB under a light terminal (`COLORFGBG=0;15`), and explicit
+    // `--width >= 88` updates the narrow section header instead of falsely claiming `<88`.
+    let light_out = sb.run(
+        &["preview", "--showcase"],
+        b"",
+        &[("COLORFGBG", "0;15"), ("COLORTERM", "truecolor")],
+    );
+    assert_eq!(light_out.status.code(), Some(0));
+    let light_txt = String::from_utf8(light_out.stdout).expect("utf8");
+    assert!(
+        light_txt.contains("38;2;136;57;239"),
+        "dual-polarity catppuccin showcase must adapt to Catppuccin Latte under light COLORFGBG"
+    );
+    assert!(
+        light_txt.contains("38;2;125;207;255"),
+        "tokyo-night showcase must keep its dark TrueColor RGB under light COLORFGBG"
+    );
+    assert!(
+        light_txt.contains("38;2;136;192;208"),
+        "nord showcase must keep its dark TrueColor RGB under light COLORFGBG"
+    );
+
+    let wide_override = sb.run(
+        &["preview", "--showcase", "--plain", "--width", "92"],
+        b"",
+        &[],
+    );
+    assert_eq!(wide_override.status.code(), Some(0));
+    let wide_override_txt = String::from_utf8(wide_override.stdout).expect("utf8");
+    assert!(
+        wide_override_txt.contains("=== Narrow scenario (overridden to 92 cols) ==="),
+        "wide --width override must not emit a misleading <88 header:\n{wide_override_txt}"
+    );
+}
+
+#[test]
+fn hud_default_preset_renders_three_rows_and_collapses_on_single_line() {
+    // 1. Default preset renders the new 2-row Catppuccin layout.
+    let sb_def = PreviewSandbox::new("agybar_default");
+    let def_full = sb_def.run(
+        &["preview", "-s", "showcase_wide", "--plain", "-w", "0"],
+        b"",
+        &[],
+    );
+    assert_eq!(def_full.status.code(), Some(0));
+    let def_txt = String::from_utf8(def_full.stdout).expect("utf8");
+    let def_lines: Vec<&str> = def_txt.lines().collect();
+    assert_eq!(
+        def_lines.len(),
+        2,
+        "Default preset must emit 2 rows: {def_txt:?}"
+    );
+    assert!(def_lines[0].contains("✦ Claude Opus 4.6 [high]") && def_lines[0].contains('❚'));
+    assert!(def_lines[1].contains("● working") && def_lines[1].contains("⎇ main*"));
+
+    // 2. Explicit `hud` preset preserves the 3-row HUD layout and single-line collapse.
+    let sb = PreviewSandbox::new("hud_preset");
+    fs::create_dir_all(&sb.home).expect("mkdir");
+    fs::write(sb.home.join("config.toml"), "preset = \"hud\"\n").expect("write hud preset");
+    let full = sb.run(&["preview", "-s", "normal", "--plain", "-w", "0"], b"", &[]);
+    assert_eq!(full.status.code(), Some(0));
+    let full_txt = String::from_utf8(full.stdout).expect("utf8");
+    let lines: Vec<&str> = full_txt.lines().collect();
+    assert_eq!(lines.len(), 3, "HUD preset must emit 3 rows: {full_txt:?}");
+    assert!(lines[0].contains("WORKING") && lines[0].contains("AUTO"));
+    assert!(lines[0].contains("Gemini 2.5 Pro (High)") && lines[0].contains("main*"));
+    assert!(lines[1].contains("Gemini 5h") && lines[1].contains("3P 5h"));
+    assert!(
+        lines[2].contains("sandbox") && lines[2].contains("token 4.6M") && lines[2].contains("58m")
+    );
+
+    let single = sb.run(
+        &["preview", "-s", "normal", "--plain", "-w", "0"],
+        b"",
+        &[("AGY_STATUSLINE_LINES", "1")],
+    );
+    assert_eq!(single.status.code(), Some(0));
+    let single_txt = String::from_utf8(single.stdout).expect("utf8");
+    assert_eq!(single_txt.lines().count(), 1);
+    assert!(single_txt.contains("WORKING") && single_txt.contains("AUTO"));
+    assert!(!single_txt.contains("Gemini 5h") && !single_txt.contains("token 4.6M"));
 }
