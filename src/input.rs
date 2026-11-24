@@ -87,6 +87,8 @@ pub struct Payload {
     pub artifact_count: i64,
     pub version: String,
     pub plan_tier: String,
+    /// Optional credit balance used as `cr:<n>` fallback in inline quota display.
+    pub ai_credits: Option<f64>,
 }
 
 impl Payload {
@@ -1076,6 +1078,7 @@ struct RawRoot {
     plan: Option<String>,
     tier: Option<String>,
     account: Option<RawAccount>,
+    ai_credits: Option<f64>,
 }
 
 impl<'de> de::Deserialize<'de> for RawRoot {
@@ -1164,6 +1167,9 @@ impl<'de> de::Deserialize<'de> for RawRoot {
                         "tier" => root.tier = map.next_value::<LenientTrimmed>()?.0,
                         "account" => {
                             root.account = map.next_value::<LenientObject<RawAccount>>()?.0;
+                        }
+                        "ai_credits" => {
+                            root.ai_credits = map.next_value::<LenientF64>()?.0;
                         }
                         // Note: `email`, `account.email`, `battle.*`, etc. are ignored in-place.
                         _ => {
@@ -1257,6 +1263,7 @@ impl RawRoot {
                 .or(acc.plan)
                 .or(acc.tier)
                 .unwrap_or_default(),
+            ai_credits: self.ai_credits,
         }
     }
 }

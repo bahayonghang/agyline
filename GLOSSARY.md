@@ -75,3 +75,11 @@ _Avoid_: Quota pair, family quota
 **Text Style**:
 Typographic attributes carried by rendered text spans—such as bold, italic, dim, and optional background color—applied consistently across ANSI output and configurator preview.
 _Avoid_: ANSI flags, formatting mask
+
+**Container Style**:
+The row-level visual framing applied around rendered `Item`s—separator-divided `minimal`, flat colored `badge`, or Powerline-capped `pill`—independent of `Preset` layout and `Palette` colors.
+_Avoid_: Skin, theme style, pill mode
+
+**Compact Threshold**:
+The terminal column width below which a multi-row status line automatically collapses into a single compact row before per-row priority narrowing runs.
+_Avoid_: Breakpoint, wrap width, narrow cutoff

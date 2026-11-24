@@ -598,10 +598,8 @@ fn stateful_git_cache_golden_cases_d04_through_d12_match_exact_bytes() {
 // Row 3 sandbox off + token breakdown + cache hit rate + elapsed duration; narrow_stress fits <= 74 cols.
 #[test]
 fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
-    let doc = ConfigDoc {
-        color_depth: ColorDepth::TrueColor,
-        ..ConfigDoc::default()
-    };
+    let mut doc = agyline::build_preset_doc("hud", None).expect("hud preset");
+    doc.color_depth = ColorDepth::TrueColor;
     let mut env = BTreeMap::new();
     env.insert("AGY_THEME".to_string(), "dark".to_string());
     env.insert("COLORTERM".to_string(), "truecolor".to_string());
@@ -730,5 +728,108 @@ fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
     assert!(
         solid_light_ansi.contains(";48;2;226;229;236m"),
         "solid light track must emit softened #e2e5ec bg: {solid_light_ansi:?}"
+    );
+}
+
+// Two-row Catppuccin gradient `Default Line` and showcase scenarios (wide normal, high-context
+// >90% `→ /compact`, and narrow <88 compact single-row collapse).
+#[test]
+fn agybar_default_two_row_and_showcase_scenarios_golden() {
+    let doc = ConfigDoc::default();
+    let mut env = BTreeMap::new();
+    env.insert("AGY_THEME".to_string(), "dark".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let cfg = EffectiveConfig::from_doc(&doc, None, &env, true);
+
+    // 1. Wide normal Catppuccin showcase scenario.
+    let sc_wide = agyline::find_scenario("showcase_wide").expect("showcase_wide scenario");
+    let wide_frame = sc_wide.frame_for_env(&env);
+    let wide_rendered = render_lines_with_width(&wide_frame, &cfg, Some(sc_wide.default_width));
+    let wide_plain = emit_plain(&wide_rendered, &cfg);
+    let wide_rows: Vec<&str> = wide_plain.lines().collect();
+    assert_eq!(
+        wide_rows.len(),
+        2,
+        "wide default must render 2 rows: {wide_plain:?}"
+    );
+    assert!(wide_rows[0].contains("✦ Claude Opus 4.6 [high]"));
+    assert!(wide_rows[0].contains('▰') && wide_rows[0].contains('▱'));
+    assert!(wide_rows[0].contains("48.0% (96k/200k)"));
+    assert!(wide_rows[0].contains("↑48k ↓12k"));
+    assert!(wide_rows[0].contains("⚡ 7d:64%(3d) · 5h:82%(2h15m)"));
+    assert!(wide_rows[1].contains("● working"));
+    assert!(wide_rows[1].contains("⎇ main*"));
+    assert!(wide_rows[1].contains("~/…/clients/agyline"));
+
+    let wide_ansi = emit_ansi(&wide_rendered, &cfg);
+    // Catppuccin Mocha Mauve bold model (`38;2;203;166;247`) and Blue git (`38;2;137;180;250`).
+    assert!(
+        wide_ansi.contains(";1;38;2;203;166;247m✦ Claude Opus 4.6"),
+        "ansi: {wide_ansi:?}"
+    );
+    assert!(
+        wide_ansi.contains(";38;2;137;180;250m⎇ main"),
+        "ansi: {wide_ansi:?}"
+    );
+
+    // 2. High context (>90%) triggers bold critical `→ /compact` and surfaces active runtime items.
+    let sc_crit = agyline::find_scenario("showcase_critical").expect("showcase_critical scenario");
+    let crit_frame = sc_crit.frame_for_env(&env);
+    let crit_rendered = render_lines_with_width(&crit_frame, &cfg, Some(sc_crit.default_width));
+    let crit_plain = emit_plain(&crit_rendered, &cfg);
+    let crit_rows: Vec<&str> = crit_plain.lines().collect();
+    assert_eq!(
+        crit_rows.len(),
+        2,
+        "critical default must render 2 rows: {crit_plain:?}"
+    );
+    assert!(
+        crit_rows[0].contains("→ /compact"),
+        "row0: {:?}",
+        crit_rows[0]
+    );
+    assert!(crit_rows[0].contains("cr:420"), "row0: {:?}", crit_rows[0]);
+    assert!(
+        crit_rows[1].contains("◉ thinking"),
+        "row1: {:?}",
+        crit_rows[1]
+    );
+    assert!(crit_rows[1].contains("agents"), "row1: {:?}", crit_rows[1]);
+    assert!(crit_rows[1].contains("tasks"), "row1: {:?}", crit_rows[1]);
+    assert!(
+        crit_rows[1].contains("artifacts"),
+        "row1: {:?}",
+        crit_rows[1]
+    );
+    assert!(crit_rows[1].contains("sandbox"), "row1: {:?}", crit_rows[1]);
+
+    // 3. Narrow (<88 cols) automatically collapses to 1 compact row with zero wrapping.
+    let sc_compact = agyline::find_scenario("showcase_compact").expect("showcase_compact scenario");
+    assert!(sc_compact.default_width < 88);
+    let comp_frame = sc_compact.frame_for_env(&env);
+    let comp_rendered = render_lines_with_width(&comp_frame, &cfg, Some(sc_compact.default_width));
+    let comp_plain = emit_plain(&comp_rendered, &cfg);
+    let comp_rows: Vec<&str> = comp_plain.lines().collect();
+    assert_eq!(
+        comp_rows.len(),
+        1,
+        "narrow <88 must collapse to 1 row: {comp_plain:?}"
+    );
+    let w = str_display_width(comp_rows[0]);
+    assert!(
+        w <= sc_compact.default_width,
+        "collapsed row width {w} > {}: {:?}",
+        sc_compact.default_width,
+        comp_rows[0]
+    );
+    assert!(
+        !comp_rows[0].contains("· 5h:"),
+        "compact quota capped at 1 bucket: {:?}",
+        comp_rows[0]
+    );
+    assert!(
+        !comp_rows[0].contains("working"),
+        "compact status collapses to dot-only: {:?}",
+        comp_rows[0]
     );
 }

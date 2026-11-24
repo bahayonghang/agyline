@@ -60,22 +60,22 @@ pub struct ItemCatalogEntry {
 const MODEL_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     key: "style",
     kind: ItemOptionKind::Text,
-    summary: "Display style: default or hud (italic with parenthetical effort)",
+    summary: "Display style: default, agybar (bold + [effort]), or hud (italic)",
 }];
 
 const DIR_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     key: "max_levels",
     kind: ItemOptionKind::Text,
-    summary: "Trailing path depth (1..=8) with home tildefying",
+    summary: "Trailing path depth (1..=8) with home tildefying and middle ellipsis",
 }];
 
 const GIT_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
     key: "style",
     kind: ItemOptionKind::Text,
-    summary: "Display style: default or counts (main* !1 ?7)",
+    summary: "Display style: default, branch (⎇ branch*), or counts (main* !1 ?7)",
 }];
 
-const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
+const CONTEXT_OPTS: [ItemOptionSpec; 5] = [
     ItemOptionSpec {
         key: "show_remaining",
         kind: ItemOptionKind::Bool,
@@ -89,12 +89,17 @@ const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
         kind: ItemOptionKind::Text,
         summary: "Usage Bar column width (4..=20)",
+    },
+    ItemOptionSpec {
+        key: "show_tokens",
+        kind: ItemOptionKind::Bool,
+        summary: "Append (used/window) token counts in bar style",
     },
 ];
 
@@ -198,7 +203,7 @@ const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -207,19 +212,38 @@ const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     },
 ];
 
-const STATUS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
-    key: "show_pending",
-    kind: ItemOptionKind::Bool,
-    summary: "Append (+N) pending input count when non-zero",
-}];
+const STATUS_OPTS: [ItemOptionSpec; 2] = [
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or dot (lowercase indicator, collapses to dot)",
+    },
+    ItemOptionSpec {
+        key: "show_pending",
+        kind: ItemOptionKind::Bool,
+        summary: "Append (+N) pending input count when non-zero",
+    },
+];
 
-const TOKENS_OPTS: [ItemOptionSpec; 1] = [ItemOptionSpec {
-    key: "show_breakdown",
-    kind: ItemOptionKind::Bool,
-    summary: "Append (in↑ out↓) token breakdown",
-}];
+const TOKENS_OPTS: [ItemOptionSpec; 2] = [
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or arrows (compact ↑in ↓out)",
+    },
+    ItemOptionSpec {
+        key: "show_breakdown",
+        kind: ItemOptionKind::Bool,
+        summary: "Append (in↑ out↓) token breakdown",
+    },
+];
 
-const QUOTA_GROUP_OPTS: [ItemOptionSpec; 8] = [
+const QUOTA_GROUP_OPTS: [ItemOptionSpec; 9] = [
+    ItemOptionSpec {
+        key: "style",
+        kind: ItemOptionKind::Text,
+        summary: "Display style: default or inline (⚡ urgency-sorted remaining % + ai_credits)",
+    },
     ItemOptionSpec {
         key: "family",
         kind: ItemOptionKind::Text,
@@ -243,7 +267,7 @@ const QUOTA_GROUP_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, solid, block, or ascii",
+        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",

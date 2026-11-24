@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 436" width="920" height="436" role="img" aria-label="agyline v0.3.0 Catppuccin Mocha terminal status line preview">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1e2e" />
+      <stop offset="100%" stop-color="#181825" />
+    </linearGradient>
+    <filter id="card-shadow" x="-4%" y="-4%" width="108%" height="112%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0b0b12" flood-opacity="0.45" />
+    </filter>
+    <style>
+      .mono {
+        font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+        letter-spacing: 0.1px;
+      }
+      .title {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        fill: #a6adc8;
+      }
+      .label {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        fill: #7f849c;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+      }
+      .bold { font-weight: 700; }
+      .mauve { fill: #cba6f7; }
+      .blue { fill: #89b4fa; }
+      .sky { fill: #89dceb; }
+      .teal { fill: #94e2d5; }
+      .green { fill: #a6e3a1; }
+      .yellow { fill: #f9e2af; }
+      .peach { fill: #fab387; }
+      .red { fill: #f38ba8; }
+      .muted { fill: #7f849c; }
+      .sep { fill: #6c7086; }
+      .text { fill: #cdd6f4; }
+    </style>
+  </defs>
+
+  <!-- Terminal window shell -->
+  <rect x="14" y="10" width="892" height="414" rx="12" fill="url(#bg-grad)" stroke="#313244" stroke-width="1.5" filter="url(#card-shadow)" />
+
+  <!-- Title bar -->
+  <path d="M14 22 A12 12 0 0 1 26 10 L894 10 A12 12 0 0 1 906 22 L906 44 L14 44 Z" fill="#181825" />
+  <line x1="14" y1="44" x2="906" y2="44" stroke="#313244" stroke-width="1" />
+  <circle cx="36" cy="27" r="5.5" fill="#f38ba8" />
+  <circle cx="54" cy="27" r="5.5" fill="#f9e2af" />
+  <circle cx="72" cy="27" r="5.5" fill="#a6e3a1" />
+  <text x="460" y="31" text-anchor="middle" class="title">agyline v0.3.0 — Catppuccin Mocha (TrueColor · Zero-Blocking Rust)</text>
+
+  <!-- Section 1: Wide Normal Default Line -->
+  <text x="36" y="72" class="label">1 · Default Line — Wide (2-Row Catppuccin + Gradient Parallelogram Bar)</text>
+  <rect x="34" y="80" width="852" height="66" rx="8" fill="#11111b" stroke="#313244" stroke-width="1" />
+  <text x="50" y="106" class="mono" xml:space="preserve"><tspan class="bold mauve">✦ Claude Opus 4.6</tspan><tspan class="muted"> [high]</tspan><tspan class="sep"> │ </tspan><tspan fill="#a6e3a1">▰</tspan><tspan fill="#a6e3a1">▰</tspan><tspan fill="#a6e3a1">▰</tspan><tspan fill="#a6e3a1">▰</tspan><tspan fill="#a6e3a1">▰</tspan><tspan class="muted">▱▱▱▱▱</tspan><tspan class="green"> 48.0%</tspan><tspan class="muted"> (96k/200k)</tspan><tspan class="sep"> │ </tspan><tspan class="muted">↑48k ↓12k</tspan><tspan class="sep"> │ </tspan><tspan class="green">⚡ 7d:64%</tspan><tspan class="muted">(3d)</tspan><tspan class="sep"> · </tspan><tspan class="green">5h:82%</tspan><tspan class="muted">(2h15m)</tspan></text>
+  <text x="50" y="131" class="mono" xml:space="preserve"><tspan class="green">● working</tspan><tspan class="sep"> │ </tspan><tspan class="blue">⎇ main</tspan><tspan class="bold yellow">*</tspan><tspan class="sep"> │ </tspan><tspan class="sky">~/…/clients/agyline</tspan></text>
+
+  <!-- Section 2: Critical >90% Context Alert -->
+  <text x="36" y="172" class="label">2 · High Usage (&gt;90%) — 4-Tier Gradient + Bold → /compact Alert &amp; ai_credits</text>
+  <rect x="34" y="180" width="852" height="66" rx="8" fill="#11111b" stroke="#45475a" stroke-width="1" />
+  <text x="50" y="206" class="mono" xml:space="preserve"><tspan class="bold mauve">✦ Claude Opus 4.6</tspan><tspan class="muted"> [xhigh]</tspan><tspan class="sep"> │ </tspan><tspan fill="#a6e3a1">▰</tspan><tspan fill="#b0d8a2">▰</tspan><tspan fill="#b9cda3">▰</tspan><tspan fill="#c3c2a4">▰</tspan><tspan fill="#ccb7a5">▰</tspan><tspan fill="#d6aca6">▰</tspan><tspan fill="#e0a1a6">▰</tspan><tspan fill="#e996a7">▰</tspan><tspan fill="#f38ba8">▰</tspan><tspan class="muted">▱</tspan><tspan class="red"> 93.0%</tspan><tspan class="muted"> (186k/200k)</tspan><tspan class="bold red"> → /compact</tspan><tspan class="sep"> │ </tspan><tspan class="muted">↑186k ↓42k</tspan><tspan class="sep"> │ </tspan><tspan class="red">⚡ 5h:8%</tspan><tspan class="muted">(18m)</tspan><tspan class="sep"> · </tspan><tspan class="green">cr:420</tspan></text>
+  <text x="50" y="231" class="mono" xml:space="preserve"><tspan class="mauve">◉ thinking</tspan><tspan class="sep"> │ </tspan><tspan class="blue">⎇ feat/v0.3</tspan><tspan class="bold yellow">*</tspan><tspan class="sep"> │ </tspan><tspan class="sky">~/…/clients/agyline</tspan><tspan class="sep"> │ </tspan><tspan class="mauve">☍ 2/2 agents running</tspan><tspan class="sep"> │ </tspan><tspan class="yellow">⚙ 3 tasks</tspan><tspan class="sep"> │ </tspan><tspan class="blue">▤ 2 artifacts</tspan><tspan class="sep"> │ </tspan><tspan class="mauve">⛨ sandbox</tspan></text>
+
+  <!-- Section 3: Narrow <88 Auto-Collapse -->
+  <text x="36" y="272" class="label">3 · Narrow Pane (&lt;88 Cols) — Automatic Compact Threshold Single-Row Collapse</text>
+  <rect x="34" y="280" width="600" height="42" rx="8" fill="#11111b" stroke="#313244" stroke-width="1" />
+  <text x="50" y="306" class="mono" xml:space="preserve"><tspan class="bold mauve">✦ Claude Opus 4.6</tspan><tspan class="sep"> │ </tspan><tspan fill="#a6e3a1">▰▰</tspan><tspan class="muted">▱▱▱</tspan><tspan class="green"> 48.0%</tspan><tspan class="sep"> │ </tspan><tspan class="muted">↑48k↓12k</tspan><tspan class="sep"> │ </tspan><tspan class="green">⚡ 7d:64%</tspan><tspan class="muted">(3d)</tspan><tspan class="sep"> │ </tspan><tspan class="green">●</tspan><tspan class="sep"> │ </tspan><tspan class="blue">⎇ main</tspan><tspan class="bold yellow">*</tspan></text>
+  <text x="650" y="305" class="mono muted">width: 78 &lt; compact_at (88)</text>
+
+  <!-- Section 4: Container Styles (badge & pill) -->
+  <text x="36" y="348" class="label">4 · Optional Container Styles — Badge (Universal) &amp; Pill (Nerd Powerline)</text>
+  <rect x="34" y="356" width="852" height="48" rx="8" fill="#11111b" stroke="#313244" stroke-width="1" />
+
+  <!-- Badge preview -->
+  <text x="50" y="384" class="mono muted">badge:</text>
+  <rect x="106" y="368" width="194" height="22" rx="2" fill="#45475a" />
+  <text x="114" y="384" class="mono" xml:space="preserve"><tspan class="bold mauve">✦ Claude Opus 4.6</tspan><tspan class="muted"> [high]</tspan></text>
+  <rect x="308" y="368" width="84" height="22" rx="2" fill="#313244" />
+  <text x="316" y="384" class="mono" xml:space="preserve"><tspan class="blue">⎇ main</tspan><tspan class="bold yellow">*</tspan></text>
+  <rect x="400" y="368" width="90" height="22" rx="2" fill="#313244" />
+  <text x="408" y="384" class="mono muted">↑48k ↓12k</text>
+
+  <!-- Pill preview -->
+  <text x="514" y="384" class="mono muted">pill:</text>
+  <rect x="558" y="368" width="196" height="22" rx="11" fill="#45475a" />
+  <text x="568" y="384" class="mono" xml:space="preserve"><tspan class="bold mauve">✦ Claude Opus 4.6</tspan><tspan class="muted"> [high]</tspan></text>
+  <rect x="762" y="368" width="88" height="22" rx="11" fill="#313244" />
+  <text x="774" y="384" class="mono" xml:space="preserve"><tspan class="blue">⎇ main</tspan><tspan class="bold yellow">*</tspan></text>
+</svg>

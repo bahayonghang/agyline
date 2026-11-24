@@ -7,9 +7,12 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::collect::FrameData;
-use crate::config::{EffectiveConfig, ItemId, OverflowMode};
+use crate::config::{EffectiveConfig, ItemId, ItemSlot, ItemStyle, OverflowMode};
 use crate::items::{EvaluatedItem, runtime::eval_single_line_mode_pill};
-use crate::render::{ColorToken, StyledItem, StyledLine, StyledSpan, glyphs};
+use crate::render::{ColorSpec, ColorToken, StyledItem, StyledLine, StyledSpan, glyphs};
+
+const PILL_LEFT_CAP: &str = "\u{e0b6}";
+const PILL_RIGHT_CAP: &str = "\u{e0b4}";
 
 /// What narrowing did to one configured slot: `Empty` when the item produced nothing this frame,
 /// otherwise `Full` or the stage that changed it (`Compact`, `Dropped`, `Truncated`). Indexed by
@@ -134,22 +137,30 @@ pub fn layout_evaluated_rows(
         .collect();
 
     let single_line = config.single_line && evaluated_rows.len() > 1;
-    let row_count = if single_line { 1 } else { evaluated_rows.len() };
+    let compact_collapse = !single_line
+        && evaluated_rows.len() > 1
+        && config.compact_at > 0
+        && max_cols.is_some_and(|w| w > 0 && w < config.compact_at);
+    let row_count = if single_line || compact_collapse {
+        1
+    } else {
+        evaluated_rows.len()
+    };
+    let eff_item_style = config.effective_item_style();
     let mut working_rows = vec![Vec::new(); row_count];
     let mut secondary_has_items = false;
 
     for (row_idx, row) in evaluated_rows.into_iter().enumerate() {
         for (slot_idx, eval) in row.into_iter().enumerate() {
-            let Some(eval) = eval else { continue };
+            let Some(mut eval) = eval else { continue };
+            let slot = config
+                .lines
+                .get(row_idx)
+                .and_then(|line| line.get(slot_idx));
             let promote = single_line && row_idx > 0;
             if promote {
                 secondary_has_items = true;
-                let model_quota = config
-                    .lines
-                    .get(row_idx)
-                    .and_then(|line| line.get(slot_idx))
-                    .and_then(|slot| slot.model_quota_period())
-                    .is_some();
+                let model_quota = slot.and_then(|s| s.model_quota_period()).is_some();
                 if !model_quota {
                     slot_outcomes[row_idx][slot_idx] = SlotOutcome::Dropped;
                     continue;
@@ -157,11 +168,19 @@ pub fn layout_evaluated_rows(
                 if eval.has_compact_diff() {
                     slot_outcomes[row_idx][slot_idx] = SlotOutcome::Compact;
                 }
+            } else if compact_collapse && eval.has_compact_diff() {
+                slot_outcomes[row_idx][slot_idx] = SlotOutcome::Compact;
             }
-            working_rows[if promote { 0 } else { row_idx }].push(ActiveSlot::from_eval(
+            wrap_eval_for_container(&mut eval, slot, eff_item_style);
+            let target_row = if promote || compact_collapse {
+                0
+            } else {
+                row_idx
+            };
+            working_rows[target_row].push(ActiveSlot::from_eval(
                 Some((row_idx, slot_idx)),
                 eval,
-                promote,
+                promote || compact_collapse,
             ));
         }
     }
@@ -169,8 +188,9 @@ pub fn layout_evaluated_rows(
     // Keep the mode cue when its configured row was hidden.
     if secondary_has_items
         && !working_rows[0].iter().any(|s| s.eval.id == ItemId::Mode)
-        && let Some(pill) = eval_single_line_mode_pill(frame, config)
+        && let Some(mut pill) = eval_single_line_mode_pill(frame, config)
     {
+        wrap_eval_for_container(&mut pill, None, eff_item_style);
         working_rows[0].push(ActiveSlot::from_eval(None, pill, false));
     }
 
@@ -215,7 +235,7 @@ fn narrow_single_row(
     };
 
     let indent_w = str_display_width(&config.indent);
-    let sep_w = str_display_width(&config.separator);
+    let sep_w = str_display_width(config.effective_row_separator());
     // 9 is the display width of the " ! config" badge reserved on the first emitted row.
     let broken_w = if append_broken { 9 } else { 0 };
 
@@ -425,4 +445,112 @@ fn clip_plain_str(text: &str, budget: usize) -> String {
         used += gw;
     }
     out
+}
+
+fn is_container_boxed(id: ItemId, slot: Option<&ItemSlot>) -> bool {
+    match id {
+        // Graphic or lightweight items stay un-boxed in badge/pill modes to keep visual rhythm.
+        ItemId::QuotaGroup | ItemId::Status | ItemId::Dir => false,
+        ItemId::Context => !slot.is_some_and(|s| {
+            s.style
+                .as_deref()
+                .is_some_and(|st| st.eq_ignore_ascii_case("bar"))
+        }),
+        ItemId::Model
+        | ItemId::Git
+        | ItemId::Cache
+        | ItemId::Speed
+        | ItemId::Budget
+        | ItemId::Quota
+        | ItemId::Cost
+        | ItemId::Mode
+        | ItemId::Subagents
+        | ItemId::Tasks
+        | ItemId::Queue
+        | ItemId::Sandbox
+        | ItemId::Vim
+        | ItemId::Title
+        | ItemId::Agent
+        | ItemId::Artifacts
+        | ItemId::Version
+        | ItemId::Plan
+        | ItemId::Tokens
+        | ItemId::Duration => true,
+    }
+}
+
+fn container_bg_token(id: ItemId) -> ColorToken {
+    match id {
+        ItemId::Model => ColorToken::SurfaceHi,
+        ItemId::Dir
+        | ItemId::Git
+        | ItemId::Context
+        | ItemId::Cache
+        | ItemId::Speed
+        | ItemId::Budget
+        | ItemId::Quota
+        | ItemId::Cost
+        | ItemId::Mode
+        | ItemId::Subagents
+        | ItemId::Tasks
+        | ItemId::Queue
+        | ItemId::Sandbox
+        | ItemId::Vim
+        | ItemId::Title
+        | ItemId::Agent
+        | ItemId::Artifacts
+        | ItemId::Version
+        | ItemId::Plan
+        | ItemId::Status
+        | ItemId::Tokens
+        | ItemId::Duration
+        | ItemId::QuotaGroup => ColorToken::Surface,
+    }
+}
+
+fn wrap_eval_for_container(eval: &mut EvaluatedItem, slot: Option<&ItemSlot>, style: ItemStyle) {
+    if style == ItemStyle::Minimal || !is_container_boxed(eval.id, slot) {
+        return;
+    }
+    let full = std::mem::take(&mut eval.full_spans);
+    let compact = std::mem::take(&mut eval.compact_spans);
+    eval.full_spans = wrap_spans_for_container(eval.id, full, style);
+    eval.compact_spans = wrap_spans_for_container(eval.id, compact, style);
+}
+
+fn wrap_spans_for_container(
+    id: ItemId,
+    spans: Vec<StyledSpan>,
+    style: ItemStyle,
+) -> Vec<StyledSpan> {
+    if spans.is_empty() {
+        return spans;
+    }
+    match style {
+        ItemStyle::Minimal => spans,
+        ItemStyle::Badge | ItemStyle::Pill => {
+            let bg_spec = ColorSpec::Token(container_bg_token(id));
+            let extra = match style {
+                ItemStyle::Minimal => 0,
+                ItemStyle::Badge => 2,
+                ItemStyle::Pill => 4,
+            };
+            let mut out = Vec::with_capacity(spans.len() + extra);
+            if style == ItemStyle::Pill {
+                out.push(StyledSpan::new(bg_spec, PILL_LEFT_CAP));
+            }
+            out.push(StyledSpan::new(bg_spec, " ").with_bg(bg_spec));
+            for mut sp in spans {
+                if sp.style.bg.is_none() {
+                    sp.style.bg = Some(bg_spec);
+                }
+                out.push(sp);
+            }
+            out.push(StyledSpan::new(bg_spec, " ").with_bg(bg_spec));
+            if style == ItemStyle::Pill {
+                out.push(StyledSpan::new(bg_spec, PILL_RIGHT_CAP));
+            }
+            out
+        }
+    }
 }

@@ -1,7 +1,7 @@
-//! Color tokens, palettes, and depth quantization. `terminal` is the default and reproduces the
-//! reference's ANSI colors for both themes; the seven RGB palettes have a fixed polarity and
-//! fall back to `terminal` on a mismatch. Tokens stay symbolic until emit time, so one resolved
-//! palette serves the ANSI writer and the TUI alike.
+//! Color tokens, palettes, and depth quantization. `terminal`, `catppuccin`, and `mono` are
+//! dual-polarity built-ins adapting to dark and light themes; the seven fixed-polarity RGB
+//! palettes fall back to `terminal` on a mismatch. Tokens stay symbolic until emit time, so one
+//! resolved palette serves the ANSI writer and the TUI alike.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -11,8 +11,9 @@ use std::path::Path;
 use crate::config::{ColorDepth, PaletteOverrides, ThemePolarity};
 use crate::render::TextStyle;
 
-/// Semantic color slots rather than literal colors: items ask for `Ok`/`Warn`/`Crit` and the
-/// palette decides what those mean. `Auto` is the mode pill's accent.
+/// Semantic color slots rather than literal colors: items ask for `Ok`/`Warn`/`High`/`Crit` and
+/// container surfaces (`Surface`/`SurfaceHi`), and the palette decides what those mean. `Auto` is
+/// the mode pill's accent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ColorToken {
     Separator,
@@ -27,10 +28,15 @@ pub enum ColorToken {
     Warn,
     Crit,
     Auto,
+    High,
+    Surface,
+    SurfaceHi,
 }
 
 impl ColorToken {
-    pub const ALL: [Self; 12] = [
+    pub const COUNT: usize = 15;
+
+    pub const ALL: [Self; Self::COUNT] = [
         Self::Separator,
         Self::Muted,
         Self::Model,
@@ -41,11 +47,14 @@ impl ColorToken {
         Self::Cache,
         Self::Ok,
         Self::Warn,
+        Self::High,
         Self::Crit,
         Self::Auto,
+        Self::Surface,
+        Self::SurfaceHi,
     ];
 
-    /// Position in every 12-color palette array; `ALL`, this, and the tables must stay in sync.
+    /// Position in every palette array; `COUNT`, this, and the palette tables must stay in sync.
     pub const fn index(self) -> usize {
         match self {
             Self::Separator => 0,
@@ -60,6 +69,9 @@ impl ColorToken {
             Self::Warn => 9,
             Self::Crit => 10,
             Self::Auto => 11,
+            Self::High => 12,
+            Self::Surface => 13,
+            Self::SurfaceHi => 14,
         }
     }
 
@@ -78,6 +90,9 @@ impl ColorToken {
             Self::Warn => "warn",
             Self::Crit => "crit",
             Self::Auto => "auto",
+            Self::High => "high",
+            Self::Surface => "surface",
+            Self::SurfaceHi => "surface_hi",
         }
     }
 
@@ -94,8 +109,11 @@ impl ColorToken {
             "cache" => Some(Self::Cache),
             "ok" => Some(Self::Ok),
             "warn" => Some(Self::Warn),
+            "high" => Some(Self::High),
             "crit" => Some(Self::Crit),
             "auto" => Some(Self::Auto),
+            "surface" => Some(Self::Surface),
+            "surface_hi" => Some(Self::SurfaceHi),
             _ => None,
         }
     }
@@ -285,8 +303,9 @@ pub enum EffectiveColorDepth {
 }
 
 /// Resolves the `color_depth` setting; an explicit value always wins. `auto` probes the injected
-/// env in order (NO_COLOR, TERM=dumb, COLORTERM, TERM) and otherwise assumes truecolor. Env is a
-/// parameter so tests can vary capability without mutating process env.
+/// env in order (`NO_COLOR`, `TERM=dumb`, `COLORTERM`, `TERM_PROGRAM` / modern terminal markers,
+/// `TERM`) and otherwise assumes truecolor. Env is a parameter so tests can vary capability without
+/// mutating process env.
 pub fn resolve_effective_color_depth(
     setting: ColorDepth,
     env_vars: &BTreeMap<String, String>,
@@ -318,6 +337,46 @@ pub fn resolve_effective_color_depth(
                     return EffectiveColorDepth::Ansi256;
                 }
             }
+            // Check concrete terminal identity ahead of generic `TERM=*256color`: macOS Terminal
+            // lacks 24-bit color even when TERM is unset, while modern emulators often export
+            // `TERM=xterm-256color` despite full TrueColor support.
+            if let Some(prog) = env_vars.get("TERM_PROGRAM").map(|s| s.trim())
+                && !prog.is_empty()
+            {
+                let low = prog.to_ascii_lowercase();
+                if low == "apple_terminal" {
+                    return EffectiveColorDepth::Ansi256;
+                }
+                if matches!(
+                    low.as_str(),
+                    "iterm.app"
+                        | "iterm2"
+                        | "wezterm"
+                        | "vscode"
+                        | "warpterminal"
+                        | "ghostty"
+                        | "alacritty"
+                        | "kitty"
+                        | "hyper"
+                        | "tabby"
+                        | "rio"
+                ) {
+                    return EffectiveColorDepth::TrueColor;
+                }
+            }
+            const TRUECOLOR_ENV_MARKERS: [&str; 5] = [
+                "WT_SESSION",
+                "ITERM_SESSION_ID",
+                "KITTY_WINDOW_ID",
+                "GHOSTTY_RESOURCES_DIR",
+                "WEZTERM_EXECUTABLE",
+            ];
+            if TRUECOLOR_ENV_MARKERS
+                .iter()
+                .any(|key| env_vars.get(*key).is_some_and(|v| !v.trim().is_empty()))
+            {
+                return EffectiveColorDepth::TrueColor;
+            }
             if let Some(term) = env_vars.get("TERM").map(|s| s.trim())
                 && !term.is_empty()
             {
@@ -347,6 +406,16 @@ pub enum ResolvedColor {
 }
 
 impl ResolvedColor {
+    /// Returns an RGB triplet for this color, using standard stand-in values for ANSI-16 and
+    /// ANSI-256 indices so linear RGB interpolation works across all palettes.
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Ansi16(c) => c.to_rgb(),
+            Self::Ansi256(idx) => ansi256_to_rgb(idx),
+            Self::Rgb(r, g, b) => (r, g, b),
+        }
+    }
+
     /// Downgrades to what the terminal can show; `None` at depth `None` means "write no SGR".
     /// Ansi16 passes through at 256 depth so the terminal's own palette stays authoritative.
     pub fn quantize(self, depth: EffectiveColorDepth) -> Option<Self> {
@@ -453,10 +522,18 @@ pub struct PaletteInfo {
     pub polarity: PalettePolarity,
 }
 
-// Picker order: `terminal` first, then the seven fixed-polarity RGB sets.
-const BUILTIN_PALETTES: [PaletteInfo; 8] = [
+// Picker order: dual-polarity built-ins first, then the seven fixed-polarity RGB sets.
+const BUILTIN_PALETTES: [PaletteInfo; 10] = [
     PaletteInfo {
         name: "terminal",
+        polarity: PalettePolarity::Dual,
+    },
+    PaletteInfo {
+        name: "catppuccin",
+        polarity: PalettePolarity::Dual,
+    },
+    PaletteInfo {
+        name: "mono",
         polarity: PalettePolarity::Dual,
     },
     PaletteInfo {
@@ -521,10 +598,10 @@ pub fn discover_palettes(home_dir: &Path) -> Vec<String> {
     names
 }
 
-/// The 12 token colors ready for quantization, plus whether polarity forced a fallback.
+/// All semantic token colors ready for quantization, plus whether polarity forced a fallback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResolvedPalette {
-    colors: [ResolvedColor; 12],
+    colors: [ResolvedColor; ColorToken::COUNT],
     /// True when the requested palette's polarity mismatched the theme and `terminal` was used;
     /// the configurator surfaces this as a "(polarity fallback)" note.
     pub polarity_fell_back: bool,
@@ -565,6 +642,8 @@ pub fn resolve_palette(
     let key = palette_name.trim().to_ascii_lowercase();
     let (mut base, fell_back) = if key.is_empty() || key == "terminal" {
         (terminal_colors(polarity), false)
+    } else if let Some(pal_colors) = builtin_dual_rgb_palette(&key, polarity) {
+        (pal_colors, false)
     } else if let Some((pal_pol, pal_colors)) = builtin_rgb_palette(&key) {
         // A fixed-polarity RGB set on the wrong theme would be unreadable, so use `terminal`
         // and flag the fallback instead of forcing the mismatch.
@@ -622,8 +701,8 @@ const fn polarity_matches(pal_pol: PalettePolarity, target: ThemePolarity) -> bo
 }
 
 // The reference's exact ANSI mapping (statusline.py c_sep/c_model/c_dir_icon/...): dark uses the
-// bright variants, light the plain ones, and both keep `crit` red. Arrays are in token order.
-const fn terminal_colors(polarity: ThemePolarity) -> [ResolvedColor; 12] {
+// bright variants, light the plain ones, and both keep `crit` red. Arrays are in `ColorToken::index` order.
+const fn terminal_colors(polarity: ThemePolarity) -> [ResolvedColor; ColorToken::COUNT] {
     match polarity {
         ThemePolarity::Dark => [
             ResolvedColor::Ansi16(Ansi16Color::White),
@@ -638,6 +717,9 @@ const fn terminal_colors(polarity: ThemePolarity) -> [ResolvedColor; 12] {
             ResolvedColor::Ansi16(Ansi16Color::Yellow),
             ResolvedColor::Ansi16(Ansi16Color::Red),
             ResolvedColor::Ansi16(Ansi16Color::BrightRed),
+            ResolvedColor::Ansi16(Ansi16Color::BrightRed),
+            ResolvedColor::Ansi16(Ansi16Color::Black),
+            ResolvedColor::Ansi16(Ansi16Color::BrightBlack),
         ],
         ThemePolarity::Light => [
             ResolvedColor::Ansi16(Ansi16Color::BrightBlack),
@@ -652,6 +734,9 @@ const fn terminal_colors(polarity: ThemePolarity) -> [ResolvedColor; 12] {
             ResolvedColor::Ansi16(Ansi16Color::Yellow),
             ResolvedColor::Ansi16(Ansi16Color::Red),
             ResolvedColor::Ansi16(Ansi16Color::Red),
+            ResolvedColor::Ansi16(Ansi16Color::BrightRed),
+            ResolvedColor::Ansi16(Ansi16Color::White),
+            ResolvedColor::Ansi16(Ansi16Color::BrightWhite),
         ],
     }
 }
@@ -660,9 +745,89 @@ const fn rgb(r: u8, g: u8, b: u8) -> ResolvedColor {
     ResolvedColor::Rgb(r, g, b)
 }
 
+// Dual-polarity RGB palettes adapt across dark and light themes without falling back to `terminal`.
+// `catppuccin` pairs Mocha (dark) with Latte (light) using Mauve model, Blue git, Teal info, and
+// Green -> Yellow -> Peach -> Red urgency; `mono` stays achromatic except for warn/high/crit.
+fn builtin_dual_rgb_palette(
+    key: &str,
+    polarity: ThemePolarity,
+) -> Option<[ResolvedColor; ColorToken::COUNT]> {
+    match (key, polarity) {
+        ("catppuccin", ThemePolarity::Dark) => Some([
+            rgb(0x6c, 0x70, 0x86), // Overlay0
+            rgb(0x7f, 0x84, 0x9c), // Overlay1
+            rgb(0xcb, 0xa6, 0xf7), // Mauve
+            rgb(0xf9, 0xe2, 0xaf), // Yellow
+            rgb(0x89, 0xdc, 0xeb), // Sky
+            rgb(0x89, 0xb4, 0xfa), // Blue
+            rgb(0xcb, 0xa6, 0xf7), // Mauve
+            rgb(0x94, 0xe2, 0xd5), // Teal
+            rgb(0xa6, 0xe3, 0xa1), // Green
+            rgb(0xf9, 0xe2, 0xaf), // Yellow
+            rgb(0xf3, 0x8b, 0xa8), // Red
+            rgb(0xeb, 0xa0, 0xac), // Maroon
+            rgb(0xfa, 0xb3, 0x87), // Peach
+            rgb(0x31, 0x32, 0x44), // Surface0
+            rgb(0x45, 0x47, 0x5a), // Surface1
+        ]),
+        ("catppuccin", ThemePolarity::Light) => Some([
+            rgb(0x8c, 0x8f, 0xa1), // Overlay1
+            rgb(0x7c, 0x7f, 0x93), // Overlay2
+            rgb(0x88, 0x39, 0xef), // Mauve
+            rgb(0xdf, 0x8e, 0x1d), // Yellow
+            rgb(0x04, 0xa5, 0xe5), // Sky
+            rgb(0x1e, 0x66, 0xf5), // Blue
+            rgb(0x88, 0x39, 0xef), // Mauve
+            rgb(0x17, 0x92, 0x99), // Teal
+            rgb(0x40, 0xa0, 0x2b), // Green
+            rgb(0xdf, 0x8e, 0x1d), // Yellow
+            rgb(0xd2, 0x0f, 0x39), // Red
+            rgb(0xe6, 0x45, 0x53), // Maroon
+            rgb(0xfe, 0x64, 0x0b), // Peach
+            rgb(0xcc, 0xd0, 0xda), // Surface0
+            rgb(0xbc, 0xc0, 0xcc), // Surface1
+        ]),
+        ("mono", ThemePolarity::Dark) => Some([
+            rgb(0x52, 0x52, 0x52),
+            rgb(0x78, 0x78, 0x78),
+            rgb(0xf0, 0xf0, 0xf0),
+            rgb(0xa4, 0xa4, 0xa4),
+            rgb(0xd0, 0xd0, 0xd0),
+            rgb(0xe0, 0xe0, 0xe0),
+            rgb(0xd0, 0xd0, 0xd0),
+            rgb(0xa4, 0xa4, 0xa4),
+            rgb(0xc8, 0xc8, 0xc8),
+            rgb(0xfa, 0xcc, 0x15),
+            rgb(0xf8, 0x71, 0x71),
+            rgb(0xe0, 0xe0, 0xe0),
+            rgb(0xfb, 0x92, 0x3c),
+            rgb(0x28, 0x28, 0x28),
+            rgb(0x3e, 0x3e, 0x3e),
+        ]),
+        ("mono", ThemePolarity::Light) => Some([
+            rgb(0xa4, 0xa4, 0xa4),
+            rgb(0x76, 0x76, 0x76),
+            rgb(0x1c, 0x1c, 0x1c),
+            rgb(0x54, 0x54, 0x54),
+            rgb(0x3c, 0x3c, 0x3c),
+            rgb(0x28, 0x28, 0x28),
+            rgb(0x3c, 0x3c, 0x3c),
+            rgb(0x54, 0x54, 0x54),
+            rgb(0x40, 0x40, 0x40),
+            rgb(0xb4, 0x53, 0x09),
+            rgb(0xdc, 0x26, 0x26),
+            rgb(0x28, 0x28, 0x28),
+            rgb(0xea, 0x58, 0x0c),
+            rgb(0xe4, 0xe4, 0xe4),
+            rgb(0xd4, 0xd4, 0xd4),
+        ]),
+        _ => None,
+    }
+}
+
 // The seven fixed-polarity sets, each in `ColorToken::index` order and using that theme's
-// published colors. Only `terminal` adapts to the host's light/dark theme.
-fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12])> {
+// published colors.
+fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; ColorToken::COUNT])> {
     match key {
         "catppuccin-mocha" => Some((
             PalettePolarity::Dark,
@@ -679,6 +844,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xf9, 0xe2, 0xaf),
                 rgb(0xf3, 0x8b, 0xa8),
                 rgb(0xeb, 0xa0, 0xac),
+                rgb(0xfa, 0xb3, 0x87),
+                rgb(0x31, 0x32, 0x44),
+                rgb(0x45, 0x47, 0x5a),
             ],
         )),
         "catppuccin-latte" => Some((
@@ -696,6 +864,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xdf, 0x8e, 0x1d),
                 rgb(0xd2, 0x0f, 0x39),
                 rgb(0xe6, 0x45, 0x53),
+                rgb(0xfe, 0x64, 0x0b),
+                rgb(0xcc, 0xd0, 0xda),
+                rgb(0xbc, 0xc0, 0xcc),
             ],
         )),
         "tokyo-night" => Some((
@@ -713,6 +884,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xe0, 0xaf, 0x68),
                 rgb(0xf7, 0x76, 0x8e),
                 rgb(0xff, 0x9e, 0x64),
+                rgb(0xff, 0x9e, 0x64),
+                rgb(0x24, 0x28, 0x3b),
+                rgb(0x3b, 0x42, 0x61),
             ],
         )),
         "nord" => Some((
@@ -730,6 +904,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xeb, 0xcb, 0x8b),
                 rgb(0xbf, 0x61, 0x6a),
                 rgb(0xd0, 0x87, 0x70),
+                rgb(0xd0, 0x87, 0x70),
+                rgb(0x3b, 0x42, 0x52),
+                rgb(0x43, 0x4c, 0x5e),
             ],
         )),
         "gruvbox" => Some((
@@ -747,6 +924,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xfa, 0xbd, 0x2f),
                 rgb(0xfb, 0x49, 0x34),
                 rgb(0xfe, 0x80, 0x19),
+                rgb(0xfe, 0x80, 0x19),
+                rgb(0x3c, 0x38, 0x36),
+                rgb(0x50, 0x49, 0x45),
             ],
         )),
         "rose-pine" => Some((
@@ -764,6 +944,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xf6, 0xc1, 0x77),
                 rgb(0xeb, 0x6f, 0x92),
                 rgb(0xeb, 0x6f, 0x92),
+                rgb(0xea, 0x9a, 0x97),
+                rgb(0x26, 0x23, 0x3a),
+                rgb(0x40, 0x3d, 0x52),
             ],
         )),
         "dracula" => Some((
@@ -781,6 +964,9 @@ fn builtin_rgb_palette(key: &str) -> Option<(PalettePolarity, [ResolvedColor; 12
                 rgb(0xf1, 0xfa, 0x8c),
                 rgb(0xff, 0x55, 0x55),
                 rgb(0xff, 0xb8, 0x6c),
+                rgb(0xff, 0xb8, 0x6c),
+                rgb(0x34, 0x37, 0x46),
+                rgb(0x44, 0x47, 0x5a),
             ],
         )),
         _ => None,
@@ -804,7 +990,11 @@ fn is_safe_asset_name(name: &str) -> bool {
 fn load_custom_palette(
     home_dir: &Path,
     name: &str,
-) -> Option<(PalettePolarity, [ResolvedColor; 12], [ResolvedColor; 12])> {
+) -> Option<(
+    PalettePolarity,
+    [ResolvedColor; ColorToken::COUNT],
+    [ResolvedColor; ColorToken::COUNT],
+)> {
     if !is_safe_asset_name(name) {
         return None;
     }
@@ -860,7 +1050,10 @@ fn load_custom_palette(
     Some((pol, dark, light))
 }
 
-fn apply_toml_color_map(tbl: &toml::map::Map<String, toml::Value>, dst: &mut [ResolvedColor; 12]) {
+fn apply_toml_color_map(
+    tbl: &toml::map::Map<String, toml::Value>,
+    dst: &mut [ResolvedColor; ColorToken::COUNT],
+) {
     // Same snapshot rule as config overrides: a token value reads this map's pre-edit colors.
     let snap = *dst;
     for tok in ColorToken::ALL {
@@ -938,8 +1131,9 @@ fn nearest_cube_idx(v: u8) -> usize {
     best_i
 }
 
-// Inverse xterm layout (base 16, cube, gray ramp), used to quantize 256 colors down to 16.
-fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
+// Inverse xterm layout (base 16, cube, gray ramp), used to quantize 256 colors down to 16 and
+// to resolve ANSI-256 palette entries to RGB for linear gradient interpolation.
+const fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
     if idx < 16 {
         Ansi16Color::ALL[idx as usize].to_rgb()
     } else if idx < 232 {

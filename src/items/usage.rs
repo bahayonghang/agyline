@@ -4,7 +4,9 @@
 //! `statusline.py`. Inputs are already in `FrameData`; nothing here reads state or the network.
 
 use crate::collect::{FrameData, RelayStatus};
-use crate::config::{EffectiveConfig, ItemId, ItemSlot, ModelQuotaPeriod, ThresholdsConfig};
+use crate::config::{
+    EffectiveConfig, GlyphSet, ItemId, ItemSlot, ModelQuotaPeriod, ThresholdsConfig,
+};
 use crate::input::QuotaBucketData;
 use crate::items::{
     EvaluatedItem, coalesced_icon_body_spans, labeled_slot_icon, slot_custom_icon_color,
@@ -62,6 +64,8 @@ pub fn eval_context(
     {
         let bar_col: ColorSpec = if used_pct >= config.thresholds.context_crit {
             ColorToken::Crit.into()
+        } else if used_pct >= config.thresholds.context_high {
+            ColorToken::High.into()
         } else if used_pct >= config.thresholds.context_warn {
             ColorToken::Warn.into()
         } else {
@@ -84,14 +88,17 @@ pub fn eval_context(
         } else {
             format!("{disp_pct:.1}%")
         };
+        let show_bar = slot.show_bar.unwrap_or(true);
+        let show_tokens = slot.show_tokens.unwrap_or(false);
         let bar_w = usize::from(slot.bar_width.unwrap_or(10).clamp(4, 20));
         let bar_style = slot
             .bar_style
             .as_deref()
             .and_then(BarStyle::from_key)
-            .unwrap_or_default();
+            .unwrap_or(config.bar_style);
         let icon = labeled_slot_icon(slot, config.glyphs, glyphs::context_icon);
         let custom_ic = slot_custom_icon_color(slot);
+        let label = slot.label.as_deref().unwrap_or("ctx");
 
         let mut prefix_spans = Vec::with_capacity(2);
         if !icon.is_empty() {
@@ -100,10 +107,19 @@ pub fn eval_context(
                 format!("{icon} "),
             ));
         }
-        prefix_spans.push(StyledSpan::new(ColorToken::Muted, "ctx "));
+        if !label.is_empty() {
+            prefix_spans.push(StyledSpan::new(ColorToken::Muted, format!("{label} ")));
+        }
+
+        let crit_alert = used_pct >= config.thresholds.context_crit;
+        let compact_hint = if config.glyphs == GlyphSet::Ascii {
+            " -> /compact"
+        } else {
+            " \u{2192} /compact"
+        };
 
         let mut full_spans = prefix_spans.clone();
-        if slot.show_bar.unwrap_or(true) {
+        if show_bar {
             full_spans.extend(render_usage_bar(
                 disp_pct, bar_w, bar_col, config, bar_style,
             ));
@@ -111,9 +127,45 @@ pub fn eval_context(
         } else {
             full_spans.push(StyledSpan::new(bar_col, pct_label.clone()));
         }
+        if show_tokens && used_tokens > 0 && win_sz > 0.0 {
+            let used_fmt = format_compact_tokens(used_tokens);
+            let win_fmt = format_compact_tokens(win_sz.round() as i64);
+            full_spans.push(StyledSpan::new(
+                ColorToken::Muted,
+                format!(" ({used_fmt}/{win_fmt})"),
+            ));
+        }
+        if crit_alert {
+            full_spans.push(StyledSpan::styled(
+                ColorToken::Crit,
+                TextStyle::PLAIN.bold(),
+                compact_hint,
+            ));
+        }
 
         let mut compact_spans = prefix_spans;
-        compact_spans.push(StyledSpan::new(bar_col, pct_label));
+        // Keep a shortened bar in compact mode when `show_tokens` is enabled (v0.3 default);
+        // HUD (`show_tokens = false`) drops the bar to fit 6 items into 74 columns.
+        if show_tokens && show_bar {
+            let compact_bar_w = (bar_w / 2).clamp(4, 6);
+            compact_spans.extend(render_usage_bar(
+                disp_pct,
+                compact_bar_w,
+                bar_col,
+                config,
+                bar_style,
+            ));
+            compact_spans.push(StyledSpan::new(bar_col, format!(" {pct_label}")));
+        } else {
+            compact_spans.push(StyledSpan::new(bar_col, pct_label));
+        }
+        if crit_alert {
+            compact_spans.push(StyledSpan::styled(
+                ColorToken::Crit,
+                TextStyle::PLAIN.bold(),
+                compact_hint,
+            ));
+        }
 
         return Some(EvaluatedItem {
             id: ItemId::Context,
@@ -654,9 +706,12 @@ fn render_quota_spans(
         let used_tenths = (((1.0 - rf) * 1000.0).round() as i32).clamp(0, 1000);
         let q_col: ColorSpec = if show_used {
             let used_crit_tenths = (100 - config.thresholds.quota_crit) * 10;
+            let used_high_tenths = (100 - config.thresholds.quota_high) * 10;
             let used_warn_tenths = (100 - config.thresholds.quota_warn) * 10;
             if used_tenths >= used_crit_tenths {
                 ColorToken::Crit.into()
+            } else if used_tenths >= used_high_tenths {
+                ColorToken::High.into()
             } else if used_tenths >= used_warn_tenths {
                 ColorToken::Warn.into()
             } else {
@@ -664,6 +719,8 @@ fn render_quota_spans(
             }
         } else if quota_pct < config.thresholds.quota_crit {
             ColorToken::Crit.into()
+        } else if show_bar && quota_pct < config.thresholds.quota_high {
+            ColorToken::High.into()
         } else if quota_pct < config.thresholds.quota_warn {
             ColorToken::Warn.into()
         } else {
@@ -704,7 +761,7 @@ fn render_quota_spans(
                     .bar_style
                     .as_deref()
                     .and_then(BarStyle::from_key)
-                    .unwrap_or_default();
+                    .unwrap_or(config.bar_style);
                 full_spans.extend(render_usage_bar(bar_pct, bar_w, q_col, config, bar_style));
                 full_spans.push(StyledSpan::new(
                     q_col,
@@ -945,6 +1002,37 @@ pub fn eval_tokens(
         )
     };
     let total = tok_in.saturating_add(tok_out);
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("arrows"))
+    {
+        if total == 0 {
+            return None;
+        }
+        let up = glyphs::token_in_arrow(config.glyphs);
+        let down = glyphs::token_out_arrow(config.glyphs);
+        let in_s = format_compact_tokens(tok_in);
+        let out_s = format_compact_tokens(tok_out);
+        let body_col = slot_fg_color(slot, ColorToken::Muted);
+        let custom_ic = slot_custom_icon_color(slot);
+        let build = |txt: String| -> Vec<StyledSpan> {
+            if let Some(ic) = slot.icon.as_deref()
+                && !ic.is_empty()
+            {
+                coalesced_icon_body_spans(ic, custom_ic, body_col, txt)
+            } else {
+                vec![StyledSpan::new(body_col, txt)]
+            }
+        };
+        return Some(EvaluatedItem {
+            id: ItemId::Tokens,
+            priority: slot.effective_priority(),
+            full_spans: build(format!("{up}{in_s} {down}{out_s}")),
+            compact_spans: build(format!("{up}{in_s}{down}{out_s}")),
+        });
+    }
+
     let icon = slot
         .icon
         .as_deref()
@@ -995,6 +1083,14 @@ pub fn eval_quota_group(
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
+    if slot
+        .style
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("inline"))
+    {
+        return eval_quota_group_inline(slot, frame, config);
+    }
+
     let payload = &frame.payload;
     let fam_raw = slot
         .family
@@ -1074,7 +1170,7 @@ pub fn eval_quota_group(
         .bar_style
         .as_deref()
         .and_then(BarStyle::from_key)
-        .unwrap_or_default();
+        .unwrap_or(config.bar_style);
     let ev_5h = b_5h.map(|b| (b, eval_quota_group_bucket(b, show_used, &config.thresholds)));
     let ev_wk = b_wk.map(|b| (b, eval_quota_group_bucket(b, show_used, &config.thresholds)));
     let (worst_urgency, worst_rem_pct) = [ev_5h.as_ref(), ev_wk.as_ref()]
@@ -1165,6 +1261,7 @@ pub fn eval_quota_group(
 enum QuotaUrgency {
     Ok,
     Warn,
+    High,
     Crit,
 }
 
@@ -1173,6 +1270,7 @@ impl QuotaUrgency {
         match self {
             Self::Ok => base_ok,
             Self::Warn => ColorToken::Warn.into(),
+            Self::High => ColorToken::High.into(),
             Self::Crit => ColorToken::Crit.into(),
         }
     }
@@ -1196,9 +1294,12 @@ fn eval_quota_group_bucket(
         let rem_pct = ((rf * 100.0).round() as i32).clamp(0, 100);
         let (disp_tenths, urgency) = if show_used {
             let crit_t = (100 - thresholds.quota_crit) * 10;
+            let high_t = (100 - thresholds.quota_high) * 10;
             let warn_t = (100 - thresholds.quota_warn) * 10;
             let u = if used_tenths >= crit_t {
                 QuotaUrgency::Crit
+            } else if used_tenths >= high_t {
+                QuotaUrgency::High
             } else if used_tenths >= warn_t {
                 QuotaUrgency::Warn
             } else {
@@ -1208,6 +1309,8 @@ fn eval_quota_group_bucket(
         } else {
             let u = if rem_tenths < thresholds.quota_crit * 10 {
                 QuotaUrgency::Crit
+            } else if rem_tenths < thresholds.quota_high * 10 {
+                QuotaUrgency::High
             } else if rem_tenths < thresholds.quota_warn * 10 {
                 QuotaUrgency::Warn
             } else {
@@ -1237,7 +1340,7 @@ fn eval_quota_group_bucket(
     }
 }
 
-fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
+fn remaining_reset_seconds(bucket: &QuotaBucketData, now_sec: i64) -> Option<i64> {
     let rem_secs = if let Some(s) = bucket.reset_in_seconds.filter(|&v| v > 0) {
         s
     } else if let Some(ref ts_str) = bucket.reset_time
@@ -1247,9 +1350,11 @@ fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
     } else {
         return None;
     };
-    if rem_secs <= 0 {
-        return None;
-    }
+    (rem_secs > 0).then_some(rem_secs)
+}
+
+fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
+    let rem_secs = remaining_reset_seconds(bucket, now_sec)?;
     let mins = (rem_secs + 59) / 60;
     if mins >= 1440 {
         Some(format!("{}d{}h", mins / 1440, (mins % 1440) / 60))
@@ -1257,6 +1362,200 @@ fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
         Some(format!("{}h{}m", mins / 60, mins % 60))
     } else {
         Some(format!("{mins}m"))
+    }
+}
+
+/// Compact inline `Quota Group` (`⚡ 7d:64%(3d) · 5h:82%(2h15m)`), active-model-matched first,
+/// then urgency-sorted, with `cr:<n>` fallback from `ai_credits` when buckets are sparse or absent.
+fn eval_quota_group_inline(
+    slot: &ItemSlot,
+    frame: &FrameData,
+    config: &EffectiveConfig,
+) -> Option<EvaluatedItem> {
+    let payload = &frame.payload;
+    let fam_raw = slot
+        .family
+        .as_deref()
+        .or(slot.bucket.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("@model");
+
+    let active_prefix: Option<&'static str> = if fam_raw.eq_ignore_ascii_case("@model") {
+        model_quota_bucket(&payload.model_id, ModelQuotaPeriod::FiveHours)
+            .or_else(|| {
+                model_quota_bucket(&payload.model_display_name, ModelQuotaPeriod::FiveHours)
+            })
+            .map(|k| {
+                if k.starts_with("gemini") {
+                    "gemini"
+                } else {
+                    "3p"
+                }
+            })
+    } else {
+        None
+    };
+
+    let mut candidates: Vec<(bool, i32, u8, &QuotaBucketData, QuotaGroupBucketEval)> = payload
+        .quota_buckets
+        .iter()
+        .filter(|b| {
+            !b.disabled
+                && b.remaining_fraction
+                    .is_some_and(|rf| (0.0..=1.0).contains(&rf))
+        })
+        .filter_map(|b| {
+            let low = b.name.to_ascii_lowercase();
+            let is_match = if fam_raw.eq_ignore_ascii_case("@model") {
+                active_prefix
+                    .is_some_and(|pref| low == pref || low.starts_with(&format!("{pref}-")))
+            } else {
+                let target = fam_raw.to_ascii_lowercase();
+                if low == target || low.starts_with(&format!("{target}-")) {
+                    true
+                } else {
+                    return None;
+                }
+            };
+            let ev = eval_quota_group_bucket(b, false, &config.thresholds);
+            let rem_tenths = ev.disp_tenths.unwrap_or(ev.rem_pct * 10);
+            let period_rank = if low.contains("5h") { 0 } else { 1 };
+            Some((is_match, rem_tenths, period_rank, b, ev))
+        })
+        .collect();
+
+    // Sort active-model-matched first, then lowest remaining % (most urgent), then period/name.
+    candidates.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+            .then_with(|| a.3.name.cmp(&b.3.name))
+    });
+
+    let credits = payload.ai_credits.filter(|v| v.is_finite() && *v >= 0.0);
+    if candidates.is_empty() && credits.is_none() {
+        return None;
+    }
+
+    let wide_buckets = &candidates[..candidates.len().min(2)];
+    let compact_buckets = &candidates[..candidates.len().min(1)];
+    let include_credits_wide = credits.is_some() && wide_buckets.len() < 2;
+    let include_credits_compact = credits.is_some() && compact_buckets.is_empty();
+
+    let mut worst_urgency = wide_buckets
+        .iter()
+        .map(|entry| entry.4.urgency)
+        .max()
+        .unwrap_or(QuotaUrgency::Ok);
+    if include_credits_wide && credits.is_some_and(|v| v <= 0.0) {
+        worst_urgency = worst_urgency.max(QuotaUrgency::Crit);
+    }
+
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::agybar_quota_icon(config.glyphs));
+    let custom_ic = slot_custom_icon_color(slot);
+    let base_ok = slot_fg_color(slot, ColorToken::Ok);
+    let icon_col = custom_ic.unwrap_or_else(|| worst_urgency.color(base_ok));
+    let show_reset = slot.show_reset.unwrap_or(true);
+
+    let build = |entries: &[(bool, i32, u8, &QuotaBucketData, QuotaGroupBucketEval)],
+                 with_credits: bool|
+     -> Vec<StyledSpan> {
+        let mut spans = Vec::with_capacity(8);
+        if !icon.is_empty() {
+            spans.push(StyledSpan::new(icon_col, format!("{icon} ")));
+        }
+        let mut emitted = 0usize;
+        for (_, _, _, b, ev) in entries {
+            if emitted > 0 {
+                spans.push(StyledSpan::new(
+                    ColorToken::Separator,
+                    glyphs::dot_sep(config.glyphs),
+                ));
+            }
+            let period = inline_bucket_period_label(&b.name);
+            spans.push(StyledSpan::new(
+                ev.urgency.color(base_ok),
+                format!("{period}:{}%", ev.rem_pct),
+            ));
+            if show_reset && let Some(reset) = format_inline_reset(b, frame.now_sec) {
+                spans.push(StyledSpan::new(ColorToken::Muted, format!("({reset})")));
+            }
+            emitted += 1;
+        }
+        if with_credits && let Some(cr) = credits {
+            if emitted > 0 {
+                spans.push(StyledSpan::new(
+                    ColorToken::Separator,
+                    glyphs::dot_sep(config.glyphs),
+                ));
+            }
+            let cr_col = if cr <= 0.0 {
+                ColorToken::Crit.into()
+            } else {
+                base_ok
+            };
+            spans.push(StyledSpan::new(cr_col, format_ai_credits(cr)));
+        }
+        spans
+    };
+
+    Some(EvaluatedItem {
+        id: ItemId::QuotaGroup,
+        priority: slot.effective_priority(),
+        full_spans: build(wide_buckets, include_credits_wide),
+        compact_spans: build(compact_buckets, include_credits_compact),
+    })
+}
+
+fn inline_bucket_period_label(name: &str) -> String {
+    let low = name.trim().to_ascii_lowercase();
+    if low.ends_with("-weekly") || low.contains("weekly") || low.ends_with("-7d") || low == "7d" {
+        "7d".to_string()
+    } else if low.ends_with("-5h") || low.contains("5h") {
+        "5h".to_string()
+    } else if let Some(rest) = low
+        .strip_prefix("gemini-")
+        .or_else(|| low.strip_prefix("3p-"))
+    {
+        rest.to_string()
+    } else {
+        low
+    }
+}
+
+fn format_inline_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
+    let rem_sec = remaining_reset_seconds(bucket, now_sec)?;
+    let total_mins = (rem_sec + 59) / 60;
+    let days = total_mins / (60 * 24);
+    let hours = (total_mins % (60 * 24)) / 60;
+    let mins = total_mins % 60;
+    if days > 0 {
+        if hours > 0 {
+            Some(format!("{days}d{hours}h"))
+        } else {
+            Some(format!("{days}d"))
+        }
+    } else if hours > 0 {
+        if mins > 0 {
+            Some(format!("{hours}h{mins}m"))
+        } else {
+            Some(format!("{hours}h"))
+        }
+    } else {
+        Some(format!("{mins}m"))
+    }
+}
+
+fn format_ai_credits(credits: f64) -> String {
+    let rounded = credits.round();
+    if (credits - rounded).abs() < 1e-6 {
+        format!("cr:{}", rounded as i64)
+    } else {
+        format!("cr:{credits:.1}")
     }
 }
 
