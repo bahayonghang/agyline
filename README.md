@@ -218,7 +218,7 @@ The gitignored `ref/agy-patch` directory holds the original local reference scri
 | --- | --- |
 | `statusline.ps1`, `statusline.py` | Layout and byte-parity baseline for `preset = "cometix"` (`Reference Line`) |
 | `install.ps1` | Legacy PowerShell hook installer reference |
-| `cache_relay.py` | Prompt-cache keepalive daemon; `agyline` reads its temp state file read-only (porting the relay to Rust is a separate decision) |
+| `cache_relay.py` | Local Cache Relay for prompt-cache keepalive; `agyline` reads its temp state file read-only (porting the relay to Rust is a separate decision) |
 | `hub-wrapper.ps1`, `hub-wrapper.sh` | Gateway environment for a local CLIProxyAPI |
 | `patch_agy.py`, `references/` | Mach-O patches and TUI notes for macOS `agy` |
 | `consult_gemini/` | MCP server multiplexing Claude Code instances onto one `agy acp` process |

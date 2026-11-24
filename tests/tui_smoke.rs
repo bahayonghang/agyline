@@ -1397,10 +1397,10 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
         app.handle_event(press(KeyCode::Right));
     }
     assert_eq!(app.doc().thresholds.context_warn, 74.0);
-    app.handle_event(press(KeyCode::Delete)); // reset warn -> 50.0
-    assert_eq!(app.doc().thresholds.context_warn, 50.0);
+    app.handle_event(press(KeyCode::Delete)); // reset warn -> 60.0 (active `default` preset)
+    assert_eq!(app.doc().thresholds.context_warn, 60.0);
 
-    // Move to ContextHigh (4): step right clamps < 90, step left clamps > 50, invalid inline rejected.
+    // Move to ContextHigh (4): step right clamps < 90, step left clamps > 60, invalid inline rejected.
     app.handle_event(press(KeyCode::Down)); // ContextHigh (4)
     for _ in 0..30 {
         app.handle_event(press(KeyCode::Right));
@@ -1409,7 +1409,7 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
     for _ in 0..50 {
         app.handle_event(press(KeyCode::Left));
     }
-    assert_eq!(app.doc().thresholds.context_high, 51.0);
+    assert_eq!(app.doc().thresholds.context_high, 61.0);
 
     app.handle_event(press(KeyCode::Enter));
     for _ in 0..4 {
@@ -1424,7 +1424,7 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
     for _ in 0..4 {
         app.handle_event(press(KeyCode::Backspace));
     }
-    type_str(&mut app, "50"); // equal to context_warn -> invalid!
+    type_str(&mut app, "60"); // equal to context_warn -> invalid!
     app.handle_event(press(KeyCode::Enter));
     assert!(
         app.is_editing_text(),
@@ -1437,7 +1437,7 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
     app.handle_event(press(KeyCode::Enter));
     assert!(!app.is_editing_text());
     assert_eq!(app.doc().thresholds.context_high, 72.0);
-    app.handle_event(press(KeyCode::Delete)); // reset to 75.0 (within 50..90)
+    app.handle_event(press(KeyCode::Delete)); // reset to 75.0 (within 60..90)
     assert_eq!(app.doc().thresholds.context_high, 75.0);
 
     // When 75.0 falls outside (warn, crit), Delete on ContextHigh resets to the exact midpoint.
@@ -1457,11 +1457,11 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
     app.handle_event(press(KeyCode::Down)); // ContextHigh (now 86 inside 80..90)
     app.handle_event(press(KeyCode::Delete)); // midpoint of (80, 90) = 85.0
     assert_eq!(app.doc().thresholds.context_high, 85.0);
-    // Undo restores 86, 50, and 75 cleanly.
+    // Undo restores 86, 60, and 75 cleanly.
     app.handle_event(ctrl_press('z'));
     app.handle_event(ctrl_press('z'));
     app.handle_event(ctrl_press('z'));
-    assert_eq!(app.doc().thresholds.context_warn, 50.0);
+    assert_eq!(app.doc().thresholds.context_warn, 60.0);
     assert_eq!(app.doc().thresholds.context_high, 75.0);
 
     // Move to ContextCrit (5): step left clamps strictly above context_high (76 > 75).
@@ -1481,6 +1481,8 @@ fn thresholds_tab_compact_at_and_four_tier_ordering_validation() {
         "context_crit <= context_high must fail"
     );
     app.handle_event(press(KeyCode::Esc));
+    app.handle_event(press(KeyCode::Delete)); // reset crit -> 90.0 (active `default` preset)
+    assert_eq!(app.doc().thresholds.context_crit, 90.0);
 
     // 3. QuotaWarn (6), QuotaHigh (7), QuotaCrit (8): default 40 / 25 / 10 (warn > high > crit).
     app.handle_event(press(KeyCode::Down)); // QuotaWarn (6)

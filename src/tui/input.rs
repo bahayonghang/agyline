@@ -8,8 +8,7 @@ use crossterm::event::{
 };
 
 use crate::config::{
-    ConfigDoc, DEFAULT_COMPACT_AT, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, OverflowMode,
-    PresetScope,
+    ConfigDoc, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, PresetScope, presets::build_preset_doc,
 };
 use crate::render::{BarStyle, ColorToken};
 use crate::tui::state::{
@@ -1620,21 +1619,24 @@ impl ConfiguratorApp {
         }
     }
 
-    /// Delete/Backspace: resets to canonical defaults (`compact_at` 88, context 50/75/80,
-    /// quota 45/25/20, cache 60 s), clamped against neighbors so a reset never inverts bounds.
+    /// Delete/Backspace: resets to the active preset's canonical defaults (e.g. `default`:
+    /// `compact_at` 88, context 60/75/90, quota 40/25/10, cache 60 s; `cometix`: 0, 50/75/80,
+    /// 45/25/20), clamped against neighbors so a reset never inverts bounds.
     fn reset_threshold_field(&mut self, field: ThresholdField) {
+        let base = build_preset_doc(&self.doc.preset, Some(&self.env.home_dir)).unwrap_or_default();
         match field {
-            ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = false),
+            ThresholdField::SingleLine => self.mutate_doc(|doc| doc.single_line = base.single_line),
             ThresholdField::CompactAt => {
-                self.mutate_doc(|doc| doc.compact_at = DEFAULT_COMPACT_AT);
+                self.mutate_doc(|doc| doc.compact_at = base.compact_at);
             }
             ThresholdField::Overflow => {
-                self.mutate_doc(|doc| doc.overflow = OverflowMode::Fit);
+                self.mutate_doc(|doc| doc.overflow = base.overflow);
             }
             ThresholdField::ContextWarn => {
+                let target = base.thresholds.context_warn;
                 let high = self.doc.thresholds.context_high;
-                let def = if 50.0 < high {
-                    50.0
+                let def = if target < high {
+                    target
                 } else if high >= 1.0 {
                     high - 1.0
                 } else {
@@ -1645,10 +1647,11 @@ impl ConfiguratorApp {
                 }
             }
             ThresholdField::ContextHigh => {
+                let target = base.thresholds.context_high;
                 let warn = self.doc.thresholds.context_warn;
                 let crit = self.doc.thresholds.context_crit;
-                let def = if 75.0 > warn && 75.0 < crit {
-                    75.0
+                let def = if target > warn && target < crit {
+                    target
                 } else {
                     (warn + crit) * 0.5
                 };
@@ -1657,9 +1660,10 @@ impl ConfiguratorApp {
                 }
             }
             ThresholdField::ContextCrit => {
+                let target = base.thresholds.context_crit;
                 let high = self.doc.thresholds.context_high;
-                let def = if 80.0 > high {
-                    80.0
+                let def = if target > high {
+                    target
                 } else if high <= 99.0 {
                     high + 1.0
                 } else {
@@ -1670,18 +1674,20 @@ impl ConfiguratorApp {
                 }
             }
             ThresholdField::QuotaWarn => {
+                let target = base.thresholds.quota_warn;
                 let high = self.doc.thresholds.quota_high;
-                let def = 45.max((high + 1).min(100));
+                let def = target.max((high + 1).min(100));
                 if def > high {
                     self.mutate_doc(|doc| doc.thresholds.quota_warn = def);
                 }
             }
             ThresholdField::QuotaHigh => {
+                let target = base.thresholds.quota_high;
                 let crit = self.doc.thresholds.quota_crit;
                 let warn = self.doc.thresholds.quota_warn;
                 if warn - crit >= 2 {
-                    let def = if 25 > crit && 25 < warn {
-                        25
+                    let def = if target > crit && target < warn {
+                        target
                     } else {
                         (crit + warn) / 2
                     };
@@ -1689,14 +1695,17 @@ impl ConfiguratorApp {
                 }
             }
             ThresholdField::QuotaCrit => {
+                let target = base.thresholds.quota_crit;
                 let high = self.doc.thresholds.quota_high;
-                let def = 20.min((high - 1).max(0));
+                let def = target.min((high - 1).max(0));
                 if def < high {
                     self.mutate_doc(|doc| doc.thresholds.quota_crit = def);
                 }
             }
             ThresholdField::CacheWarnSecs => {
-                self.mutate_doc(|doc| doc.thresholds.cache_warn_secs = 60);
+                self.mutate_doc(|doc| {
+                    doc.thresholds.cache_warn_secs = base.thresholds.cache_warn_secs
+                });
             }
         }
     }

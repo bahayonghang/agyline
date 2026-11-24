@@ -15,7 +15,7 @@ use ratatui::text::Line;
 use crate::config::{
     ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigSyntaxError, DEFAULT_COMPACT_AT,
     EffectiveConfig, GlyphSet, ItemId, ItemSlot, ItemStyle, MAX_COMPACT_AT, OverflowMode,
-    PresetScope, ThemeSetting, inspect_env_overrides, load_config_doc,
+    PresetScope, SEMANTIC_SEPARATORS, ThemeSetting, inspect_env_overrides, load_config_doc,
     presets::{apply_preset, discover_presets},
     resolve_separator, serialize_config_doc,
 };
@@ -36,12 +36,20 @@ use crate::tui::convert::rendered_frame_to_ratatui_lines;
 pub const MAX_UNDO_STEPS: usize = 100;
 /// Maximum configurable statusline rows supported by the Layout editor.
 pub const MAX_LAYOUT_ROWS: usize = 5;
-/// Semantic separator aliases cycled by Left/Right in Global Style; Enter edits raw text.
-pub const SEPARATOR_PRESETS: [&str; 5] = ["pipe", "dashed", "dot", "square", "none"];
 
 /// Dynamic outer height of the Live Preview box: 2 borders + 1 width ruler + 2..=4 status rows.
 pub fn preview_box_height(rendered_line_count: usize) -> u16 {
     3 + rendered_line_count.clamp(2, 4) as u16
+}
+
+fn step_wrapped_index(len: usize, cur: usize, forward: bool) -> usize {
+    if forward {
+        (cur + 1) % len
+    } else if cur == 0 {
+        len - 1
+    } else {
+        cur - 1
+    }
 }
 
 // Keeps temp names unique when two writes share a nanosecond timestamp or the clock is coarse.
@@ -1589,14 +1597,7 @@ impl ConfiguratorApp {
             .iter()
             .position(|p| p.eq_ignore_ascii_case(&self.doc.palette))
             .unwrap_or(0);
-        let len = self.available_palettes.len();
-        let next_idx = if forward {
-            (cur_idx + 1) % len
-        } else if cur_idx == 0 {
-            len - 1
-        } else {
-            cur_idx - 1
-        };
+        let next_idx = step_wrapped_index(self.available_palettes.len(), cur_idx, forward);
         let next_pal = self.available_palettes[next_idx].clone();
         self.mutate_doc(|doc| {
             doc.palette = next_pal;
@@ -1656,14 +1657,7 @@ impl ConfiguratorApp {
             .iter()
             .position(|&s| s == self.doc.item_style)
             .unwrap_or(0);
-        let next_idx = if forward {
-            (idx + 1) % styles.len()
-        } else if idx == 0 {
-            styles.len() - 1
-        } else {
-            idx - 1
-        };
-        let next = styles[next_idx];
+        let next = styles[step_wrapped_index(styles.len(), idx, forward)];
         self.mutate_doc(|doc| {
             doc.item_style = next;
         });
@@ -1675,14 +1669,7 @@ impl ConfiguratorApp {
             .iter()
             .position(|&s| s == self.doc.bar_style)
             .unwrap_or(0);
-        let next_idx = if forward {
-            (idx + 1) % styles.len()
-        } else if idx == 0 {
-            styles.len() - 1
-        } else {
-            idx - 1
-        };
-        let next = styles[next_idx];
+        let next = styles[step_wrapped_index(styles.len(), idx, forward)];
         self.mutate_doc(|doc| {
             doc.bar_style = next;
         });
@@ -1700,17 +1687,16 @@ impl ConfiguratorApp {
     pub(crate) fn cycle_separator_preset(&mut self, forward: bool) {
         let cur_trimmed = self.doc.separator.trim();
         let cur_resolved = resolve_separator(&self.doc.separator);
-        let cur_idx = SEPARATOR_PRESETS.iter().position(|preset| {
-            preset.eq_ignore_ascii_case(cur_trimmed) || resolve_separator(preset) == cur_resolved
+        let cur_idx = SEMANTIC_SEPARATORS.iter().position(|&(alias, glyph)| {
+            alias.eq_ignore_ascii_case(cur_trimmed) || glyph == cur_resolved
         });
+        let len = SEMANTIC_SEPARATORS.len();
         let next_idx = match (cur_idx, forward) {
-            (Some(i), true) => (i + 1) % SEPARATOR_PRESETS.len(),
-            (Some(0), false) => SEPARATOR_PRESETS.len() - 1,
-            (Some(i), false) => i - 1,
+            (Some(i), _) => step_wrapped_index(len, i, forward),
             (None, true) => 0,
-            (None, false) => SEPARATOR_PRESETS.len() - 1,
+            (None, false) => len - 1,
         };
-        let next = SEPARATOR_PRESETS[next_idx].to_string();
+        let next = SEMANTIC_SEPARATORS[next_idx].0.to_string();
         self.mutate_doc(|doc| {
             doc.separator = next;
         });

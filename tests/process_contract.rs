@@ -415,6 +415,24 @@ fn cli_config_subcommand_prints_effective_settings_and_path() {
     assert!(text2.contains("light"));
     assert!(text2.contains("single_line") && text2.contains("true"));
 
+    // 2b. Capability degradation on `item_style` (`pill` + `unicode` -> effective `badge`) is shown.
+    fs::write(
+        &expected_cfg,
+        "item_style = \"pill\"\nglyphs = \"unicode\"\n",
+    )
+    .expect("write pill+unicode");
+    let degraded_out = run_with_stdin_and_env(
+        &["config"],
+        b"",
+        &[("AGYLINE_HOME", home_str), ("COLORTERM", "truecolor")],
+    );
+    assert_eq!(degraded_out.status.code(), Some(0));
+    let degraded_txt = String::from_utf8(degraded_out.stdout).expect("utf8");
+    assert!(
+        degraded_txt.contains("item_style: pill (effective: badge)"),
+        "config output must surface degraded item_style:\n{degraded_txt}"
+    );
+
     // 3. Broken config.toml -> warns on stderr with line/col and still exits 0 with defaults.
     fs::write(&expected_cfg, "version = 1\nbroken == 123\n").expect("write broken");
     let broken_cfg = run_with_stdin_and_env(&["config"], b"", &[("AGYLINE_HOME", home_str)]);

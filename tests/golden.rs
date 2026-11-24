@@ -731,8 +731,8 @@ fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
     );
 }
 
-// Ticket #43: new 2-row Catppuccin gradient `Default Line` and showcase scenarios (wide normal,
-// high-context >90% `→ /compact`, and narrow <88 compact single-row collapse).
+// Two-row Catppuccin gradient `Default Line` and showcase scenarios (wide normal, high-context
+// >90% `→ /compact`, and narrow <88 compact single-row collapse).
 #[test]
 fn agybar_default_two_row_and_showcase_scenarios_golden() {
     let doc = ConfigDoc::default();

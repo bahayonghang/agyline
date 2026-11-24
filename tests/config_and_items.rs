@@ -877,8 +877,8 @@ items = [{ id = "dir", max_levels = 99 }, { id = "context", style = "bar", bar_s
     );
 }
 
-// Ticket #39: 4-tier semantic tokens (`high`, `surface`, `surface_hi`), dual-polarity
-// `catppuccin` (Mocha dark / Latte light) and `mono` palettes, plus legacy custom palette loading.
+// Four-tier semantic tokens (`high`, `surface`, `surface_hi`), dual-polarity `catppuccin`
+// (Mocha dark / Latte light) and `mono` palettes, plus legacy custom palette loading.
 #[test]
 fn four_tier_color_tokens_and_dual_polarity_catppuccin_and_mono_palettes() {
     use agyline::{
@@ -1093,8 +1093,8 @@ fn four_tier_color_tokens_and_dual_polarity_catppuccin_and_mono_palettes() {
     ));
 }
 
-// Ticket #39: four-tier `[thresholds]` (`context_high`, `quota_high`) parsing, tolerant fallback
-// for legacy configs omitting them, out-of-order guards, and TOML round-trip.
+// Four-tier `[thresholds]` (`context_high`, `quota_high`) parsing, tolerant fallback for legacy
+// configs omitting them, out-of-order guards, and TOML round-trip.
 #[test]
 fn four_tier_thresholds_parse_validate_degrade_and_roundtrip() {
     let default_doc = ConfigDoc::default();
@@ -1179,8 +1179,8 @@ quota_crit = 20
     );
 }
 
-// Ticket #39: `color_depth = "auto"` preserves NO_COLOR / TERM=dumb, downgrades Apple_Terminal
-// to 256-color, and promotes known modern TrueColor terminals ahead of generic `*256color`.
+// `color_depth = "auto"` preserves NO_COLOR / TERM=dumb, downgrades Apple_Terminal to 256-color,
+// and promotes known modern TrueColor terminals ahead of generic `*256color`.
 #[test]
 fn auto_color_depth_detects_apple_terminal_and_modern_truecolor_hints() {
     use agyline::{EffectiveColorDepth, resolve_effective_color_depth};
@@ -1838,7 +1838,7 @@ fn compact_threshold_collapses_multi_row_below_cutoff_and_respects_single_line_p
     }
 }
 
-// Ticket #41: top-level `bar_style` / `bar_gradient` and `context.show_tokens` parsing, validation,
+// Top-level `bar_style` / `bar_gradient` and `context.show_tokens` parsing, validation,
 // tolerant alias normalization, preset scopes, TOML round-trip, and slot override precedence.
 #[test]
 fn top_level_bar_style_bar_gradient_and_context_show_tokens_parse_roundtrip_and_override() {
@@ -1959,7 +1959,7 @@ items = [{ id = "context", show_tokens = "nope" }]
     );
 }
 
-// Ticket #41: `context` (`style = "bar"`) four-tier colors, `(used/window)` counts, bold `→ /compact`
+// `context` (`style = "bar"`) four-tier colors, `(used/window)` counts, bold `→ /compact`
 // crit alert, compact bar shortening, ASCII fallback, TUI span parity, and 4-tier `quota_group`.
 #[test]
 fn context_bar_four_tiers_tokens_ratio_compact_alert_and_quota_group_four_tiers() {
@@ -2120,8 +2120,8 @@ fn context_bar_four_tiers_tokens_ratio_compact_alert_and_quota_group_four_tiers(
     assert_eq!(def_txt, "ctx ▰▰▰▰▱▱▱▱▱▱ 40.0%");
 }
 
-// Ticket #43: streaming `ai_credits` parsing, all 6 opt-in agybar Item variants + TOML round-trip,
-// and the new 2-row Catppuccin `default` Preset alongside preserved `hud`/`classic`/`cometix`.
+// Streaming `ai_credits` parsing, all six opt-in agybar Item variants + TOML round-trip,
+// and the two-row Catppuccin `default` Preset alongside preserved `hud`/`classic`/`cometix`.
 #[test]
 fn payload_parses_ai_credits_leniently_and_new_item_variants_roundtrip_and_render() {
     use agyline::{
@@ -2362,4 +2362,51 @@ fn payload_parses_ai_credits_leniently_and_new_item_variants_roundtrip_and_rende
     let d_ev = evaluate_slot_dual(&dir_slot, &frame, &cfg).expect("dir middle ellipsis");
     let d_txt: String = d_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
     assert_eq!(d_txt, "~/…/clients/agyline");
+
+    // Review regression guards: 0 used tokens omits `(0/200k)`, `reset_in_seconds = 0` falls back
+    // to `reset_time`, `cr:0` promotes `⚡` icon to Crit, and `quota_warn - quota_crit == 1` warns.
+    let mut zero_ctx = frame.clone();
+    zero_ctx.payload.input_tokens = 0;
+    zero_ctx.payload.cache_read_input_tokens = 0;
+    zero_ctx.payload.used_percentage = 0.0;
+    let ctx_ev = evaluate_slot_dual(&def.lines[0][1], &zero_ctx, &cfg).expect("zero ctx");
+    let ctx_txt: String = ctx_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert!(
+        !ctx_txt.contains("(0/"),
+        "must omit (0/window): {ctx_txt:?}"
+    );
+
+    let mut zero_reset_frame = frame.clone();
+    zero_reset_frame.now_sec = 1_700_000_000;
+    zero_reset_frame.payload.quota_buckets = vec![QuotaBucketData {
+        name: "3p-5h".to_string(),
+        disabled: false,
+        remaining_fraction: Some(0.80),
+        remaining_amount: None,
+        reset_in_seconds: Some(0),
+        reset_time: Some("2023-11-14T23:13:20Z".to_string()),
+    }];
+    zero_reset_frame.payload.ai_credits = Some(0.0);
+    let zr_ev = evaluate_slot_dual(&q_slot, &zero_reset_frame, &cfg).expect("zero reset + cr:0");
+    let zr_txt: String = zr_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert!(
+        zr_txt.contains("(1h)") && zr_txt.contains("cr:0"),
+        "must fall back to reset_time and show cr:0: {zr_txt:?}"
+    );
+    assert_eq!(
+        zr_ev.full_spans[0].color,
+        ColorToken::Crit.into(),
+        "⚡ icon must escalate to Crit when cr:0 is displayed"
+    );
+
+    let (narrow_q, narrow_q_warn) =
+        parse_config_doc("[thresholds]\nquota_warn = 21\nquota_crit = 20\n").expect("parse");
+    assert!(
+        !narrow_q_warn.is_empty(),
+        "adjacent quota_warn/quota_crit must warn"
+    );
+    assert!(
+        narrow_q.thresholds.quota_crit < narrow_q.thresholds.quota_high
+            && narrow_q.thresholds.quota_high < narrow_q.thresholds.quota_warn
+    );
 }

@@ -127,7 +127,7 @@ pub fn eval_context(
         } else {
             full_spans.push(StyledSpan::new(bar_col, pct_label.clone()));
         }
-        if show_tokens && win_sz > 0.0 {
+        if show_tokens && used_tokens > 0 && win_sz > 0.0 {
             let used_fmt = format_compact_tokens(used_tokens);
             let win_fmt = format_compact_tokens(win_sz.round() as i64);
             full_spans.push(StyledSpan::new(
@@ -144,6 +144,8 @@ pub fn eval_context(
         }
 
         let mut compact_spans = prefix_spans;
+        // Keep a shortened bar in compact mode when `show_tokens` is enabled (v0.3 default);
+        // HUD (`show_tokens = false`) drops the bar to fit 6 items into 74 columns.
         if show_tokens && show_bar {
             let compact_bar_w = (bar_w / 2).clamp(4, 6);
             compact_spans.extend(render_usage_bar(
@@ -1338,7 +1340,7 @@ fn eval_quota_group_bucket(
     }
 }
 
-fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
+fn remaining_reset_seconds(bucket: &QuotaBucketData, now_sec: i64) -> Option<i64> {
     let rem_secs = if let Some(s) = bucket.reset_in_seconds.filter(|&v| v > 0) {
         s
     } else if let Some(ref ts_str) = bucket.reset_time
@@ -1348,9 +1350,11 @@ fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
     } else {
         return None;
     };
-    if rem_secs <= 0 {
-        return None;
-    }
+    (rem_secs > 0).then_some(rem_secs)
+}
+
+fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
+    let rem_secs = remaining_reset_seconds(bucket, now_sec)?;
     let mins = (rem_secs + 59) / 60;
     if mins >= 1440 {
         Some(format!("{}d{}h", mins / 1440, (mins % 1440) / 60))
@@ -1361,7 +1365,8 @@ fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
     }
 }
 
-/// Maps -0.0 to 0.0: rounding a small negative remainder to zero would otherwise print `-0%`.
+/// Compact inline `Quota Group` (`⚡ 7d:64%(3d) · 5h:82%(2h15m)`), active-model-matched first,
+/// then urgency-sorted, with `cr:<n>` fallback from `ai_credits` when buckets are sparse or absent.
 fn eval_quota_group_inline(
     slot: &ItemSlot,
     frame: &FrameData,
@@ -1438,15 +1443,14 @@ fn eval_quota_group_inline(
     let include_credits_wide = credits.is_some() && wide_buckets.len() < 2;
     let include_credits_compact = credits.is_some() && compact_buckets.is_empty();
 
-    let worst_urgency = wide_buckets
+    let mut worst_urgency = wide_buckets
         .iter()
         .map(|entry| entry.4.urgency)
         .max()
-        .unwrap_or(if credits.is_some_and(|v| v <= 0.0) {
-            QuotaUrgency::Crit
-        } else {
-            QuotaUrgency::Ok
-        });
+        .unwrap_or(QuotaUrgency::Ok);
+    if include_credits_wide && credits.is_some_and(|v| v <= 0.0) {
+        worst_urgency = worst_urgency.max(QuotaUrgency::Crit);
+    }
 
     let icon = slot
         .icon
@@ -1524,15 +1528,7 @@ fn inline_bucket_period_label(name: &str) -> String {
 }
 
 fn format_inline_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
-    let rem_sec = if let Some(s) = bucket.reset_in_seconds {
-        s
-    } else {
-        let ts = bucket.reset_time.as_deref()?;
-        parse_rfc3339_epoch_secs(ts)? - now_sec
-    };
-    if rem_sec <= 0 {
-        return None;
-    }
+    let rem_sec = remaining_reset_seconds(bucket, now_sec)?;
     let total_mins = (rem_sec + 59) / 60;
     let days = total_mins / (60 * 24);
     let hours = (total_mins % (60 * 24)) / 60;
@@ -1563,6 +1559,7 @@ fn format_ai_credits(credits: f64) -> String {
     }
 }
 
+/// Maps -0.0 to 0.0: rounding a small negative remainder to zero would otherwise print `-0%`.
 fn normalize_zero(v: f64) -> f64 {
     if v == 0.0 { 0.0 } else { v }
 }

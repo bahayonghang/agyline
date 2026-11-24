@@ -187,19 +187,26 @@ impl ItemStyle {
 pub const DEFAULT_COMPACT_AT: usize = 88;
 /// Maximum configurable `Compact Threshold` in columns.
 pub const MAX_COMPACT_AT: usize = 500;
+/// Semantic separator aliases and their Unicode glyphs, shared by config, CLI, and TUI.
+pub const SEMANTIC_SEPARATORS: [(&str, &str); 5] = [
+    ("pipe", " \u{2502} "),
+    ("dashed", " \u{250a} "),
+    ("dot", " \u{2022} "),
+    ("square", " \u{25aa} "),
+    ("none", "  "),
+];
 
 /// Resolves semantic separator presets (`pipe`, `dashed`, `dot`, `square`, `none`) and strips
 /// control characters from arbitrary raw strings while preserving surrounding spacing.
 pub fn resolve_separator(raw: &str) -> String {
     let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
-    match clean.trim().to_ascii_lowercase().as_str() {
-        "pipe" => " \u{2502} ".to_string(),
-        "dashed" => " \u{250a} ".to_string(),
-        "dot" => " \u{2022} ".to_string(),
-        "square" => " \u{25aa} ".to_string(),
-        "none" => "  ".to_string(),
-        _ => clean,
+    let key = clean.trim().to_ascii_lowercase();
+    for (alias, rendered) in SEMANTIC_SEPARATORS {
+        if key == alias {
+            return rendered.to_string();
+        }
     }
+    clean
 }
 
 /// What `presets::apply_preset` replaces: rows only, style only, or both.
@@ -1321,10 +1328,8 @@ fn fallback_context_high(default_high: f64, warn: f64, crit: f64) -> f64 {
 fn fallback_quota_high(default_high: i32, crit: i32, warn: i32) -> i32 {
     if default_high > crit && default_high < warn {
         default_high
-    } else if warn - crit >= 2 {
-        (crit + warn) / 2
     } else {
-        crit
+        (crit + warn) / 2
     }
 }
 
@@ -1469,9 +1474,9 @@ fn parse_thresholds_table(
         }
     }
 
-    // Quota counts down: warn > high > crit; inverted outer bounds fall back to defaults.
+    // Quota counts down: require warn >= crit + 2 so an integer `quota_high` fits strictly between.
     if q_touched {
-        if q_bounds_valid && cand_q_warn > cand_q_crit {
+        if q_bounds_valid && cand_q_warn >= cand_q_crit + 2 {
             let default_high = thresholds.quota_high;
             thresholds.quota_warn = cand_q_warn;
             thresholds.quota_crit = cand_q_crit;
@@ -1493,7 +1498,7 @@ fn parse_thresholds_table(
             }
         } else if q_bounds_valid {
             warnings.push(
-                "inverted quota thresholds (require quota_warn > quota_crit); using defaults"
+                "inverted or too-narrow quota thresholds (require quota_warn >= quota_crit + 2); using defaults"
                     .to_string(),
             );
         }

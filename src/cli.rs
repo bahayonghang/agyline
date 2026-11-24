@@ -14,9 +14,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::collect::{FrameData, NoopSpawner, SystemSpawner};
 use crate::config::{
-    ConfigDoc, DEFAULT_COMPACT_AT, EffectiveConfig, ItemStyle, PresetScope, ThemePolarity,
-    ThemeSetting, load_config_doc,
-    presets::{apply_preset, build_preset_doc, builtin_presets, discover_presets},
+    ConfigDoc, DEFAULT_COMPACT_AT, EffectiveConfig, ItemStyle, MAX_COMPACT_AT, SEMANTIC_SEPARATORS,
+    ThemePolarity, ThemeSetting, load_config_doc,
+    presets::{build_preset_doc, builtin_presets, discover_presets},
     serialize_config_doc,
 };
 use crate::input::{MAX_STDIN_BYTES, parse_stdin_payload};
@@ -29,15 +29,7 @@ use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_pa
 use crate::state::{atomic_write_bytes, ensure_state_dir};
 use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame_ansi};
 
-const MAX_COMPACT_AT: usize = 500;
 const SET_KEYS_LIST: &str = "preset, palette, theme, style, bar, bar-gradient, sep, compact-at";
-const SEMANTIC_SEPARATORS: [(&str, &str); 5] = [
-    ("pipe", " │ "),
-    ("dashed", " ┊ "),
-    ("dot", " • "),
-    ("square", " ▪ "),
-    ("none", "  "),
-];
 
 static CLI_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -316,7 +308,17 @@ fn execute_show_config(streams: &mut CliStreams<'_>) -> u8 {
         "theme: {} ({polarity})",
         config.theme_setting.as_key()
     );
-    let _ = writeln!(streams.stdout, "item_style: {}", config.item_style.as_key());
+    let eff_style = config.effective_item_style();
+    let item_style_display = if eff_style == config.item_style {
+        config.item_style.as_key().to_string()
+    } else {
+        format!(
+            "{} (effective: {})",
+            config.item_style.as_key(),
+            eff_style.as_key()
+        )
+    };
+    let _ = writeln!(streams.stdout, "item_style: {item_style_display}");
     let _ = writeln!(streams.stdout, "bar_style: {}", config.bar_style.as_key());
     let _ = writeln!(streams.stdout, "bar_gradient: {}", config.bar_gradient);
     let _ = writeln!(streams.stdout, "separator: {sep_display}");
@@ -372,8 +374,21 @@ fn execute_set(opts: SetOptions, streams: &mut CliStreams<'_>) -> u8 {
     let canonical_display = match validated {
         ValidatedSetValue::Preset(built) => {
             let name = built.preset.clone();
+            doc.preset = built.preset;
+            doc.lines = built.lines;
+            doc.single_line = built.single_line;
+            doc.compact_at = built.compact_at;
+            doc.palette = built.palette;
+            doc.theme = built.theme;
+            doc.glyphs = built.glyphs;
+            doc.color_depth = built.color_depth;
+            doc.item_style = built.item_style;
+            doc.bar_style = built.bar_style;
+            doc.bar_gradient = built.bar_gradient;
+            doc.separator = built.separator;
+            doc.indent = built.indent;
+            doc.palette_overrides = built.palette_overrides;
             doc.thresholds = built.thresholds;
-            let _ = apply_preset(&mut doc, &name, PresetScope::All, Some(home_dir));
             name
         }
         ValidatedSetValue::Palette(name) => {
@@ -798,6 +813,10 @@ fn execute_showcase(opts: &PreviewOptions, env: &RenderEnv<'_>, streams: &mut Cl
     for palette in ["catppuccin", "tokyo-night", "nord", "mono"] {
         let mut doc = base_doc.clone();
         doc.palette = palette.to_string();
+        // Pin dark polarity for dark-only built-ins so light terminals still preview true RGB colors.
+        if matches!(palette, "tokyo-night" | "nord") {
+            doc.theme = ThemeSetting::Dark;
+        }
         emit_section(
             &format!("Palette: {palette}"),
             &doc,
@@ -813,15 +832,13 @@ fn execute_showcase(opts: &PreviewOptions, env: &RenderEnv<'_>, streams: &mut Cl
         sc_crit.default_width,
     );
 
-    emit_section(
-        &format!(
-            "Narrow (<88 cols auto-compact, {} cols)",
-            sc_compact.default_width
-        ),
-        &base_doc,
-        &frame_compact,
-        sc_compact.default_width,
-    );
+    let narrow_w = opts.width.unwrap_or(sc_compact.default_width);
+    let narrow_title = if narrow_w < base_doc.compact_at {
+        format!("Narrow (<88 cols auto-compact, {narrow_w} cols)")
+    } else {
+        format!("Narrow scenario (overridden to {narrow_w} cols)")
+    };
+    emit_section(&narrow_title, &base_doc, &frame_compact, narrow_w);
 
     for style in [ItemStyle::Badge, ItemStyle::Pill] {
         let mut doc = base_doc.clone();

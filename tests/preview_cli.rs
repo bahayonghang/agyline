@@ -543,6 +543,40 @@ fn preview_showcase_renders_gallery_statelessly_and_honors_plain_and_width() {
         !sb.home.join("state").exists(),
         "preview --showcase must never write AGYLINE_HOME/state"
     );
+
+    // 5. Dark-only palettes stay RGB under a light terminal (`COLORFGBG=0;15`), and explicit
+    // `--width >= 88` updates the narrow section header instead of falsely claiming `<88`.
+    let light_out = sb.run(
+        &["preview", "--showcase"],
+        b"",
+        &[("COLORFGBG", "0;15"), ("COLORTERM", "truecolor")],
+    );
+    assert_eq!(light_out.status.code(), Some(0));
+    let light_txt = String::from_utf8(light_out.stdout).expect("utf8");
+    assert!(
+        light_txt.contains("38;2;136;57;239"),
+        "dual-polarity catppuccin showcase must adapt to Catppuccin Latte under light COLORFGBG"
+    );
+    assert!(
+        light_txt.contains("38;2;125;207;255"),
+        "tokyo-night showcase must keep its dark TrueColor RGB under light COLORFGBG"
+    );
+    assert!(
+        light_txt.contains("38;2;136;192;208"),
+        "nord showcase must keep its dark TrueColor RGB under light COLORFGBG"
+    );
+
+    let wide_override = sb.run(
+        &["preview", "--showcase", "--plain", "--width", "92"],
+        b"",
+        &[],
+    );
+    assert_eq!(wide_override.status.code(), Some(0));
+    let wide_override_txt = String::from_utf8(wide_override.stdout).expect("utf8");
+    assert!(
+        wide_override_txt.contains("=== Narrow scenario (overridden to 92 cols) ==="),
+        "wide --width override must not emit a misleading <88 header:\n{wide_override_txt}"
+    );
 }
 
 #[test]

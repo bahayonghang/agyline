@@ -752,18 +752,7 @@ pub fn eval_status(
         let default_ic = glyphs::status_dot_icon(config.glyphs, state_low.as_str());
         let icon = slot.icon.as_deref().unwrap_or(default_ic);
         let body_col = slot_fg_color(slot, tok);
-        let mut full_spans = if icon.is_empty() {
-            vec![StyledSpan::new(body_col, lbl.clone())]
-        } else if let Some(ic) = custom_ic
-            && ic != body_col
-        {
-            vec![
-                StyledSpan::new(ic, icon),
-                StyledSpan::new(body_col, format!(" {lbl}")),
-            ]
-        } else {
-            vec![StyledSpan::new(body_col, format!("{icon} {lbl}"))]
-        };
+        let mut full_spans = coalesced_icon_body_spans(icon, custom_ic, body_col, lbl.clone());
         if slot.show_pending.unwrap_or(true) && payload.pending_input_count > 0 {
             full_spans.push(StyledSpan::new(
                 ColorToken::Warn,
