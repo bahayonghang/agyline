@@ -47,15 +47,15 @@ Git status runs while the line is drawn. `statusline.py` stops that call after 1
 
 ## Shipped in this repository
 
-The `default` (HUD) preset renders a 3-row status line separated by ` │ `:
+The `default` (HUD) preset renders a 3-row status line separated by ` │ ` with Nerd/Unicode icons and slim pure-foreground `line` usage bars (`━╸─`, adapting cleanly across light and dark terminals without background blocks):
 
-1. **Identity & workspace**: agent status badge (`status`), mode pill (`mode` with `style = "badge"`), italicized model (`model` with `style = "hud"`), context usage bar (`context` with `style = "bar"`), multi-level path (`dir` with `max_levels = 2`), and per-category Git counts (`git` with `style = "counts"`).
-2. **Quota groups**: dual `Gemini` and `3P` (`quota_group`) 5-hour and weekly usage bars (`used %` by default with compact reset countdowns like `2h44m` and `5d4h`; empty families are omitted).
+1. **Identity & workspace**: agent status badge (`status`), iconless mode pill (`mode` with `style = "badge"`), italicized model (`model` with `style = "hud"`), context usage bar (`context` with `style = "bar"`), multi-level path (`dir` with `max_levels = 2`), and per-category Git counts (`git` with `style = "counts"`).
+2. **Quota groups**: dual `Gemini` and `3P` (`quota_group`) 5-hour and weekly usage bars with dynamic urgency battery icons (`used %` by default with compact reset countdowns like `2h44m` and `5d4h`; empty families are omitted).
 3. **Runtime telemetry**: sandbox state (`sandbox` with `show_when_off = true`), session token count and breakdown (`tokens`), cache hit rate (`cache` with `style = "hit_rate"`), elapsed duration (`duration`), plus non-zero `subagents`, `tasks`, `cost`, and `title`.
 
 Choose the `classic` layout in the configurator (or set `preset = "classic"`) to restore the prior 2-row `@model` layout, or choose `cometix` (`preset = "cometix"`) for 100% parity with `ref/agy-patch`.
 
-Custom `quota` slots still support `bucket = "@model/5h"` or `bucket = "@model/weekly"`, while `quota_group` accepts `family` (`"gemini"`, `"3p"`, or `"@model"`), `show_used`, `show_bar`, `bar_style` (`"solid"`, `"block"`, `"ascii"`), `bar_width` (`4..=20`), and `show_reset`.
+Custom `quota` slots still support `bucket = "@model/5h"` or `bucket = "@model/weekly"`, while `quota_group` and `context` bars accept `bar_style` (`"line"` default, `"solid"`, `"block"`, `"ascii"`) and `bar_width` (`4..=20`); `quota_group` also supports `family` (`"gemini"`, `"3p"`, or `"@model"`), `show_used`, `show_bar`, and `show_reset`. Note: if choosing `bar_style = "solid"` on a light terminal without `COLORFGBG`, set `theme = "light"` (or `AGY_THEME=light`) for a light track background.
 
 Unlike PowerShell or Python status line scripts, `agyline` runs as one compiled Rust binary: the printing path never spawns a shell, never waits on `git`, and uses an O(1) bounded header read (`<= 4 KiB`) for transcript start timestamps. Stale local Git caches, prompt-cache relay touches, and optional full transcript token scans run asynchronously in detached background worker modes (`__refresh-git`, `__touch`, `__refresh-transcript`).
 

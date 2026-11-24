@@ -89,7 +89,7 @@ const CONTEXT_OPTS: [ItemOptionSpec; 4] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: solid, block, or ascii",
+        summary: "Usage Bar style: line, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -198,7 +198,7 @@ const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: solid, block, or ascii",
+        summary: "Usage Bar style: line, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -243,7 +243,7 @@ const QUOTA_GROUP_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: solid, block, or ascii",
+        summary: "Usage Bar style: line, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -594,6 +594,21 @@ pub(crate) fn slot_fg_color(slot: &ItemSlot, default_token: ColorToken) -> Color
 /// icon with the body color, `dir` uses the reference's separate folder-icon color.
 pub(crate) fn slot_custom_icon_color(slot: &ItemSlot) -> Option<ColorSpec> {
     slot.icon_color.as_deref().and_then(parse_color_spec)
+}
+
+/// Default icon for HUD items that always print a text label (`ctx`, `cache`, `sandbox`,
+/// `quota_group`): suppresses ASCII word prefixes like `ctx:` so they do not double up, while
+/// still honoring an explicit `slot.icon` override.
+pub(crate) fn labeled_slot_icon(
+    slot: &ItemSlot,
+    glyphs: GlyphSet,
+    default_fn: impl FnOnce(GlyphSet) -> &'static str,
+) -> &str {
+    match slot.icon.as_deref() {
+        Some(s) => s,
+        None if glyphs == GlyphSet::Ascii => "",
+        None => default_fn(glyphs),
+    }
 }
 
 /// One span when icon and body share a color, two when `icon_color` differs: the emitter writes an

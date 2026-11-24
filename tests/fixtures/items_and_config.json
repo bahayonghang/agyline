@@ -137,8 +137,8 @@
       "payload": {
         "session_id": ""
       },
-      "expected_plain": "  ● READY │ Model │ ctx            0.0% ! config\n  sandbox off │ token 0 (0↑ 0↓) │ 0m\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;1;92m● READY\u001b[0;37m │ \u001b[0;3;95mModel\u001b[0;37m │ \u001b[0;90mctx \u001b[0;90;48;2;59;63;76m          \u001b[0;92m 0.0%\u001b[0;31m ! config\u001b[0m\n  \u001b[0m\u001b[0;90msandbox off\u001b[0;37m │ \u001b[0;90mtoken \u001b[0;1;37m0\u001b[0;90m (0↑ 0↓)\u001b[0;37m │ \u001b[0;90m0m\u001b[0m\n"
+      "expected_plain": "  ● READY │ \uef23 Model │ \uf49b ctx ────────── 0.0% ! config\n  \uf132 sandbox off │ \ue26b token 0 (0↑ 0↓) │ \uf43a 0m\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;1;92m● READY\u001b[0;37m │ \u001b[0;95m\uef23 \u001b[0;3;95mModel\u001b[0;37m │ \u001b[0;95m\uf49b \u001b[0;90mctx \u001b[0;90m──────────\u001b[0;92m 0.0%\u001b[0;31m ! config\u001b[0m\n  \u001b[0m\u001b[0;90m\uf132 sandbox off\u001b[0;37m │ \u001b[0;90m\ue26b \u001b[0;90mtoken \u001b[0;1;37m0\u001b[0;90m (0↑ 0↓)\u001b[0;37m │ \u001b[0;90m\uf43a 0m\u001b[0m\n"
     },
     {
       "id": "IC11_narrowing_stage1_compact",

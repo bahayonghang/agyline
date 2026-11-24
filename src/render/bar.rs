@@ -1,6 +1,6 @@
-//! Proportional `Usage Bar` renderer for context and quota items. Uses fractional eighth-block
-//! fills over a polarity-aware track background on TrueColor/256 terminals, degrading cleanly to
-//! shaded block glyphs (`█░`) on 16-color terminals and ASCII (`#-`) under `none` or ASCII mode.
+//! Proportional `Usage Bar` renderer for context and quota items. Defaults to pure-foreground
+//! half-cell `line` tracks (`━╸─`), and also supports `solid` (`█` over a polarity-aware track
+//! background), shaded `block` (`█░`), and `ascii` (`#-`) degradation.
 
 use crate::config::{EffectiveConfig, GlyphSet};
 use crate::render::{
@@ -13,14 +13,18 @@ const PARTIAL_BLOCKS: [&str; 8] = ["", "▏", "▎", "▍", "▌", "▋", "▊",
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BarStyle {
     #[default]
+    Line,
     Solid,
     Block,
     Ascii,
 }
 
 impl BarStyle {
+    pub const ALL: [Self; 4] = [Self::Line, Self::Solid, Self::Block, Self::Ascii];
+
     pub const fn as_key(self) -> &'static str {
         match self {
+            Self::Line => "line",
             Self::Solid => "solid",
             Self::Block => "block",
             Self::Ascii => "ascii",
@@ -29,6 +33,7 @@ impl BarStyle {
 
     pub fn from_key(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
+            "line" => Some(Self::Line),
             "solid" => Some(Self::Solid),
             "block" => Some(Self::Block),
             "ascii" => Some(Self::Ascii),
@@ -53,23 +58,47 @@ pub fn render_usage_bar(
         0.0
     };
 
-    if config.effective_color_depth == EffectiveColorDepth::None
-        || config.glyphs == GlyphSet::Ascii
-        || style == BarStyle::Ascii
+    if config.effective_color_depth == EffectiveColorDepth::None || config.glyphs == GlyphSet::Ascii
     {
         return render_ascii_bar(pct, width, fill_col);
     }
 
-    if style == BarStyle::Solid
-        && matches!(
-            config.effective_color_depth,
-            EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256
-        )
-    {
-        return render_solid_bar(pct, width, fill_col, config);
+    match style {
+        BarStyle::Line => render_line_bar(pct, width, fill_col),
+        BarStyle::Solid => {
+            if matches!(
+                config.effective_color_depth,
+                EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256
+            ) {
+                render_solid_bar(pct, width, fill_col, config)
+            } else {
+                render_block_bar(pct, width, fill_col)
+            }
+        }
+        BarStyle::Block => render_block_bar(pct, width, fill_col),
+        BarStyle::Ascii => render_ascii_bar(pct, width, fill_col),
     }
+}
 
-    render_block_bar(pct, width, fill_col)
+fn render_line_bar(pct: f64, width: usize, fill_col: ColorSpec) -> Vec<StyledSpan> {
+    let total_halves = width * 2;
+    let halves = (((pct / 100.0) * (total_halves as f64)).round() as usize).min(total_halves);
+    let full = halves / 2;
+    let half = halves % 2;
+    let empty = width.saturating_sub(full + half);
+
+    let mut spans = Vec::with_capacity(2);
+    if full > 0 || half > 0 {
+        let mut fill_txt = "━".repeat(full);
+        if half > 0 {
+            fill_txt.push('╸');
+        }
+        spans.push(StyledSpan::new(fill_col, fill_txt));
+    }
+    if empty > 0 {
+        spans.push(StyledSpan::new(ColorToken::Muted, "─".repeat(empty)));
+    }
+    spans
 }
 
 fn render_solid_bar(
@@ -175,6 +204,83 @@ mod tests {
         let basc = render_usage_bar(30.0, 10, ColorToken::Ok.into(), &asc_cfg, BarStyle::Solid);
         assert_eq!(basc[0].text, "###");
         assert_eq!(basc[1].text, "-------");
+    }
+
+    #[test]
+    fn line_style_is_default_uses_half_cells_with_no_bg_and_light_solid_uses_soft_track() {
+        assert_eq!(BarStyle::default(), BarStyle::Line);
+        assert_eq!(BarStyle::from_key("line"), Some(BarStyle::Line));
+
+        let mut tc_doc = ConfigDoc::cometix_base();
+        tc_doc.color_depth = crate::config::ColorDepth::TrueColor;
+        let tc_cfg = EffectiveConfig::from_doc(&tc_doc, None, &BTreeMap::new(), false);
+
+        let expected = [
+            (0.0, "──────────"),
+            (5.0, "╸─────────"),
+            (7.3, "╸─────────"),
+            (14.2, "━╸────────"),
+            (19.7, "━━────────"),
+            (35.3, "━━━╸──────"),
+            (52.0, "━━━━━─────"),
+            (100.0, "━━━━━━━━━━"),
+        ];
+        for (pct, exp_str) in expected {
+            let spans = render_usage_bar(pct, 10, ColorToken::Ok.into(), &tc_cfg, BarStyle::Line);
+            let total_w: usize = spans.iter().map(|s| str_display_width(&s.text)).sum();
+            assert_eq!(total_w, 10, "width mismatch at {pct}%");
+            for s in &spans {
+                assert!(s.style.bg.is_none(), "line bar must have no bg at {pct}%");
+                assert_eq!(s.style, TextStyle::PLAIN);
+            }
+            let joined: String = spans.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(joined, exp_str, "half-cell mismatch at {pct}%");
+        }
+
+        // Line bar stays ━╸─ across TrueColor, Ansi256, and Ansi16
+        for depth in [
+            crate::config::ColorDepth::TrueColor,
+            crate::config::ColorDepth::Ansi256,
+            crate::config::ColorDepth::Ansi16,
+        ] {
+            let mut d = tc_doc.clone();
+            d.color_depth = depth;
+            let cfg = EffectiveConfig::from_doc(&d, None, &BTreeMap::new(), false);
+            let spans = render_usage_bar(35.3, 10, ColorToken::Ok.into(), &cfg, BarStyle::Line);
+            let joined: String = spans.iter().map(|s| s.text.as_str()).collect();
+            assert_eq!(joined, "━━━╸──────", "depth {depth:?} changed line bar");
+        }
+
+        // Ascii glyphs or None depth degrade Line to #-
+        let mut asc_doc = tc_doc.clone();
+        asc_doc.glyphs = GlyphSet::Ascii;
+        let asc_cfg = EffectiveConfig::from_doc(&asc_doc, None, &BTreeMap::new(), false);
+        let l_asc = render_usage_bar(30.0, 10, ColorToken::Ok.into(), &asc_cfg, BarStyle::Line);
+        assert_eq!(l_asc[0].text, "###");
+        assert_eq!(l_asc[1].text, "-------");
+
+        let mut none_doc = tc_doc.clone();
+        none_doc.color_depth = crate::config::ColorDepth::None;
+        let none_cfg = EffectiveConfig::from_doc(&none_doc, None, &BTreeMap::new(), false);
+        let l_none = render_usage_bar(30.0, 10, ColorToken::Ok.into(), &none_cfg, BarStyle::Line);
+        assert_eq!(l_none[0].text, "###");
+        assert_eq!(l_none[1].text, "-------");
+
+        // Solid style on Light polarity emits #e2e5ec track and degrades to █░ on Ansi16
+        let mut light_doc = tc_doc.clone();
+        light_doc.theme = crate::config::ThemeSetting::Light;
+        let light_cfg = EffectiveConfig::from_doc(&light_doc, None, &BTreeMap::new(), false);
+        let s_light =
+            render_usage_bar(20.0, 10, ColorToken::Ok.into(), &light_cfg, BarStyle::Solid);
+        assert_eq!(s_light[0].style.bg, Some(ColorSpec::Rgb(226, 229, 236)));
+        assert_eq!(s_light[1].style.bg, Some(ColorSpec::Rgb(226, 229, 236)));
+
+        let mut l16_doc = light_doc;
+        l16_doc.color_depth = crate::config::ColorDepth::Ansi16;
+        let l16_cfg = EffectiveConfig::from_doc(&l16_doc, None, &BTreeMap::new(), false);
+        let s16 = render_usage_bar(50.0, 10, ColorToken::Ok.into(), &l16_cfg, BarStyle::Solid);
+        assert_eq!(s16[0].text, "█████");
+        assert_eq!(s16[1].text, "░░░░░");
     }
 
     #[test]

@@ -748,12 +748,12 @@ impl ConfiguratorApp {
                 true
             }
             InspectorField::BarStyle => {
-                let styles = [BarStyle::Solid, BarStyle::Block, BarStyle::Ascii];
+                let styles = BarStyle::ALL;
                 let cur = slot_snapshot
                     .bar_style
                     .as_deref()
                     .and_then(BarStyle::from_key)
-                    .unwrap_or(BarStyle::Solid);
+                    .unwrap_or_default();
                 let idx = styles.iter().position(|&s| s == cur).unwrap_or(0);
                 let next_idx = if forward {
                     (idx + 1) % styles.len()
@@ -765,7 +765,7 @@ impl ConfiguratorApp {
                 let next_style = styles[next_idx];
                 self.mutate_doc(|doc| {
                     if let Some(s) = doc.lines.get_mut(row).and_then(|r| r.get_mut(slot_idx)) {
-                        s.bar_style = if next_style == BarStyle::Solid {
+                        s.bar_style = if next_style == BarStyle::default() {
                             None
                         } else {
                             Some(next_style.as_key().to_string())

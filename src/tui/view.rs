@@ -695,7 +695,7 @@ fn format_inspector_value(slot: &ItemSlot, field: InspectorField) -> String {
         InspectorField::BarStyle => slot
             .bar_style
             .clone()
-            .unwrap_or_else(|| "solid (default)".to_string()),
+            .unwrap_or_else(|| "line (default)".to_string()),
         InspectorField::BarWidth => match slot.bar_width {
             Some(w) => format!("{w}"),
             None => "10 (default)".to_string(),

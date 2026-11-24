@@ -123,21 +123,17 @@ pub fn hud_preset_doc(preset_name: &str) -> ConfigDoc {
 
     let mut model = ItemSlot::new(ItemId::Model);
     model.style = Some("hud".to_string());
-    model.icon = Some(String::new());
     model.fg = Some("context".to_string());
 
     let mut context = ItemSlot::new(ItemId::Context);
     context.style = Some("bar".to_string());
-    context.icon = Some(String::new());
 
     let mut dir = ItemSlot::new(ItemId::Dir);
     dir.max_levels = Some(2);
-    dir.icon = Some(String::new());
     dir.fg = Some("model".to_string());
 
     let mut git = ItemSlot::new(ItemId::Git);
     git.style = Some("counts".to_string());
-    git.icon = Some(String::new());
 
     let mut q_gemini = ItemSlot::new(ItemId::QuotaGroup);
     q_gemini.family = Some("gemini".to_string());
@@ -149,18 +145,12 @@ pub fn hud_preset_doc(preset_name: &str) -> ConfigDoc {
 
     let mut sandbox = ItemSlot::new(ItemId::Sandbox);
     sandbox.show_when_off = Some(true);
-    sandbox.icon = Some(String::new());
 
     let mut tokens = ItemSlot::new(ItemId::Tokens);
     tokens.show_breakdown = Some(true);
-    tokens.icon = Some(String::new());
 
     let mut cache = ItemSlot::new(ItemId::Cache);
     cache.style = Some("hit_rate".to_string());
-    cache.icon = Some(String::new());
-
-    let mut duration = ItemSlot::new(ItemId::Duration);
-    duration.icon = Some(String::new());
 
     doc.lines = vec![
         vec![
@@ -176,7 +166,7 @@ pub fn hud_preset_doc(preset_name: &str) -> ConfigDoc {
             sandbox,
             tokens,
             cache,
-            duration,
+            ItemSlot::new(ItemId::Duration),
             ItemSlot::new(ItemId::Subagents),
             ItemSlot::new(ItemId::Tasks),
             ItemSlot::new(ItemId::Cost),

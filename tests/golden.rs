@@ -11,8 +11,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agyline::{
     CacheFrameState, ColorDepth, ConfigDoc, EffectiveConfig, FrameData, GitCacheEntry,
-    GitFrameState, NoopSpawner, RelayStatus, RenderEnv, emit_ansi, emit_plain, parse_stdin_payload,
-    render_lines, render_lines_with_width, run_live_frame, str_display_width, write_git_cache,
+    GitFrameState, GlyphSet, NoopSpawner, RelayStatus, RenderEnv, emit_ansi, emit_plain,
+    parse_stdin_payload, render_lines, render_lines_with_width, run_live_frame, str_display_width,
+    write_git_cache,
 };
 use rusqlite::{Connection, params};
 use serde::Deserialize;
@@ -663,20 +664,27 @@ fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
     assert_eq!(
         plain,
         concat!(
-            "  \u{2699} WORKING \u{2502} EDITS \u{2502} Gemini 4 Neon (XHigh) \u{2502} ctx \u{2588}\u{2588}         19.7% \u{2502} ~/projects/antigravity-hud \u{2502} main* !1 ?7\n",
-            "  Gemini 5h \u{258a}          7.3% 2h44m / week \u{2588}\u{2588}         20.3% 5d4h \u{2502} 3P 5h            0.0% 5h0m / week \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{258e}     52.0% 2d23h\n",
-            "  sandbox off \u{2502} token 4.6M (4.5M\u{2191} 122k\u{2193}) \u{2502} cache 95.1% \u{2502} 58m\n",
+            "  \u{2699} WORKING \u{2502} EDITS \u{2502} \u{ef23} Gemini 4 Neon (XHigh) \u{2502} \u{f49b} ctx \u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 19.7% \u{2502} \u{f024b} ~/projects/antigravity-hud \u{2502} \u{f02a2} main* !1 ?7\n",
+            "  \u{f0081} Gemini 5h \u{2578}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 7.3% 2h44m / week \u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 20.3% 5d4h \u{2502} \u{f007e} 3P 5h \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 0.0% 5h0m / week \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 52.0% 2d23h\n",
+            "  \u{f132} sandbox off \u{2502} \u{e26b} token 4.6M (4.5M\u{2191} 122k\u{2193}) \u{2502} \u{f1c0} cache 95.1% \u{2502} \u{f43a} 58m\n",
         )
     );
 
     let ansi = emit_ansi(&full, &config);
     assert!(
+        !ansi.contains(";48;2;"),
+        "HUD default line usage bar must not emit background slab SGR: {ansi:?}"
+    );
+    assert!(
         ansi.contains(";3;") && ansi.contains("Gemini 4 Neon (XHigh)"),
         "HUD model must emit italic SGR: {ansi:?}"
     );
     assert!(
-        ansi.contains(";48;2;59;63;76m"),
-        "HUD solid usage bar must emit #3b3f4c dark track bg: {ansi:?}"
+        ansi.contains(";93m\u{f024b}")
+            && ansi.contains(";95m\u{f49b}")
+            && ansi.contains(";34m\u{f1c0}")
+            && ansi.contains(";92m\u{f0081}"),
+        "HUD restored icons must keep semantic colors: {ansi:?}"
     );
     assert!(
         ansi.contains(";1;") && ansi.contains("4.6M") && ansi.contains("95.1%"),
@@ -695,4 +703,32 @@ fn hud_default_three_row_golden_and_narrowing_match_exact_bytes() {
     assert!(narrow_lines[0].contains("19.7%"));
     assert!(narrow_lines[1].contains("Gemini 5h 7.3%"));
     assert!(narrow_lines[2].contains("token 4.6M"));
+
+    // Ascii glyph mode uses #- bars and suppresses duplicate word prefixes like `ctx: ctx`.
+    let mut asc_doc = doc.clone();
+    asc_doc.glyphs = GlyphSet::Ascii;
+    let asc_cfg = EffectiveConfig::from_doc(&asc_doc, None, &env, false);
+    let asc_plain = emit_plain(&render_lines_with_width(&frame, &asc_cfg, None), &asc_cfg);
+    assert!(asc_plain.contains("ctx ##-------- 19.7%"));
+    assert!(!asc_plain.contains("ctx: ctx"));
+    assert!(!asc_plain.contains("cache: cache"));
+    assert!(!asc_plain.contains("sbx: sandbox"));
+    assert!(!asc_plain.contains("qta:"));
+    assert!(asc_plain.contains("token 4.6M") && asc_plain.ends_with("| 58m\n"));
+
+    // Explicit `bar_style = "solid"` under light theme emits softened #e2e5ec track bg.
+    let mut solid_light_doc = doc;
+    solid_light_doc.lines[0][3].bar_style = Some("solid".to_string());
+    let mut light_env = BTreeMap::new();
+    light_env.insert("AGY_THEME".to_string(), "light".to_string());
+    light_env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    let solid_light_cfg = EffectiveConfig::from_doc(&solid_light_doc, None, &light_env, true);
+    let solid_light_ansi = emit_ansi(
+        &render_lines_with_width(&frame, &solid_light_cfg, None),
+        &solid_light_cfg,
+    );
+    assert!(
+        solid_light_ansi.contains(";48;2;226;229;236m"),
+        "solid light track must emit softened #e2e5ec bg: {solid_light_ansi:?}"
+    );
 }

@@ -6,8 +6,9 @@
 use crate::collect::FrameData;
 use crate::config::{EffectiveConfig, ItemId, ItemSlot};
 use crate::items::{
-    EvaluatedItem, coalesced_icon_body_spans, parse_color_spec, slot_custom_icon_color,
-    slot_fg_color, truncate_chars_with_ellipsis, workspace::format_pretty_model_slug,
+    EvaluatedItem, coalesced_icon_body_spans, labeled_slot_icon, parse_color_spec,
+    slot_custom_icon_color, slot_fg_color, truncate_chars_with_ellipsis,
+    workspace::format_pretty_model_slug,
 };
 use crate::render::{ColorSpec, ColorToken, StyledSpan, TextStyle, glyphs};
 
@@ -436,18 +437,10 @@ pub fn eval_sandbox(
     if !frame.payload.sandbox_enabled && !show_when_off {
         return None;
     }
-    let icon = slot
-        .icon
-        .as_deref()
-        .unwrap_or_else(|| glyphs::sandbox_icon(config.glyphs));
     let custom_ic = slot_custom_icon_color(slot);
 
     if show_when_off {
-        let prefix = if icon.is_empty() {
-            String::new()
-        } else {
-            format!("{icon} ")
-        };
+        let icon = labeled_slot_icon(slot, config.glyphs, glyphs::sandbox_icon);
         if frame.payload.sandbox_enabled {
             let val_col = slot_fg_color(slot, ColorToken::Ok);
             let on_txt = if frame.payload.sandbox_allow_network {
@@ -458,20 +451,13 @@ pub fn eval_sandbox(
             let bold = TextStyle::PLAIN.bold();
             let mut full_spans = Vec::with_capacity(3);
             let mut compact_spans = Vec::with_capacity(3);
-            if let Some(ic) = custom_ic
-                && !icon.is_empty()
-            {
-                full_spans.push(StyledSpan::new(ic, icon));
-                full_spans.push(StyledSpan::new(ColorToken::Muted, " sandbox "));
-                compact_spans.push(StyledSpan::new(ic, icon));
-                compact_spans.push(StyledSpan::new(ColorToken::Muted, " sbx "));
-            } else {
-                full_spans.push(StyledSpan::new(
-                    ColorToken::Muted,
-                    format!("{prefix}sandbox "),
-                ));
-                compact_spans.push(StyledSpan::new(ColorToken::Muted, format!("{prefix}sbx ")));
+            if !icon.is_empty() {
+                let ic_col = custom_ic.unwrap_or(val_col);
+                full_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
+                compact_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
             }
+            full_spans.push(StyledSpan::new(ColorToken::Muted, "sandbox "));
+            compact_spans.push(StyledSpan::new(ColorToken::Muted, "sbx "));
             full_spans.push(StyledSpan::styled(val_col, bold, on_txt));
             compact_spans.push(StyledSpan::styled(val_col, bold, on_txt));
             return Some(EvaluatedItem {
@@ -481,40 +467,28 @@ pub fn eval_sandbox(
                 compact_spans,
             });
         }
-        let full_spans = if let Some(ic) = custom_ic
-            && !icon.is_empty()
-        {
-            vec![
-                StyledSpan::new(ic, icon),
-                StyledSpan::new(ColorToken::Muted, " sandbox off"),
-            ]
-        } else {
-            vec![StyledSpan::new(
-                ColorToken::Muted,
-                format!("{prefix}sandbox off"),
-            )]
-        };
-        let compact_spans = if let Some(ic) = custom_ic
-            && !icon.is_empty()
-        {
-            vec![
-                StyledSpan::new(ic, icon),
-                StyledSpan::new(ColorToken::Muted, " sbx off"),
-            ]
-        } else {
-            vec![StyledSpan::new(
-                ColorToken::Muted,
-                format!("{prefix}sbx off"),
-            )]
-        };
         return Some(EvaluatedItem {
             id: ItemId::Sandbox,
             priority: slot.effective_priority(),
-            full_spans,
-            compact_spans,
+            full_spans: coalesced_icon_body_spans(
+                icon,
+                custom_ic,
+                ColorToken::Muted.into(),
+                "sandbox off".to_string(),
+            ),
+            compact_spans: coalesced_icon_body_spans(
+                icon,
+                custom_ic,
+                ColorToken::Muted.into(),
+                "sbx off".to_string(),
+            ),
         });
     }
 
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::sandbox_icon(config.glyphs));
     let body_col = slot_fg_color(slot, ColorToken::Model);
     let tag = if frame.payload.sandbox_allow_network {
         "sandbox+net"
@@ -848,7 +822,7 @@ pub fn eval_status(
 pub fn eval_duration(
     slot: &ItemSlot,
     frame: &FrameData,
-    _config: &EffectiveConfig,
+    config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
     let elapsed_secs = frame
         .session_start_sec
@@ -862,7 +836,10 @@ pub fn eval_duration(
     } else {
         format!("{mins}m")
     };
-    let icon = slot.icon.as_deref().unwrap_or("");
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::duration_icon(config.glyphs));
     let body_col = slot_fg_color(slot, ColorToken::Muted);
     let custom_ic = slot_custom_icon_color(slot);
     let spans = coalesced_icon_body_spans(icon, custom_ic, body_col, body);

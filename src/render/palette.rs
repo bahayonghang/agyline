@@ -434,7 +434,7 @@ impl ResolvedColor {
 pub fn bar_track_color(polarity: ThemePolarity) -> ColorSpec {
     match polarity {
         ThemePolarity::Dark => ColorSpec::Rgb(59, 63, 76),
-        ThemePolarity::Light => ColorSpec::Rgb(218, 222, 230),
+        ThemePolarity::Light => ColorSpec::Rgb(226, 229, 236),
     }
 }
 

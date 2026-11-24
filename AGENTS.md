@@ -36,7 +36,7 @@ The product boundary is [README.md](README.md) and [README.zh-CN.md](README.zh-C
 
 ## Default line
 
-The `default` layout uses the 3-row `hud` preset (`status`, badge `mode`, italic `model`, bar `context`, multi-level `dir`, per-count `git` on row 1; dual `Gemini` & `3P` 5-hour/weekly `quota_group` bars on row 2; `sandbox`, `tokens`, hit-rate `cache`, `duration`, and non-zero runtime items on row 3). The prior 2-row `@model` layout is preserved as the `classic` preset. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
+The `default` layout uses the 3-row `hud` preset with pure-foreground `line` (`━╸─`) usage bars and default Nerd/Unicode icons (`status`, iconless badge `mode`, italic `model`, bar `context`, multi-level `dir`, per-count `git` on row 1; dual `Gemini` & `3P` 5-hour/weekly `quota_group` bars with dynamic battery icons on row 2; `sandbox`, `tokens`, hit-rate `cache`, `duration`, and non-zero runtime items on row 3). The prior 2-row `@model` layout is preserved as the `classic` preset. Match `ref/agy-patch/statusline.ps1` for parity work on the `cometix` preset. `statusline.py` is the cross-platform companion. If the two files disagree on output, stop and report the difference before choosing one.
 
 Stdin fields read by agyline include:
 

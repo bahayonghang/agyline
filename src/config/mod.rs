@@ -350,7 +350,7 @@ pub struct ItemSlot {
     pub show_used: Option<bool>,
     /// Context / Quota / QuotaGroup: display proportional `Usage Bar`.
     pub show_bar: Option<bool>,
-    /// `Usage Bar` style (`solid`, `block`, `ascii`).
+    /// `Usage Bar` style (`line`, `solid`, `block`, `ascii`).
     pub bar_style: Option<String>,
     /// `Usage Bar` column width (`4..=20`, default `10`).
     pub bar_width: Option<u8>,
@@ -1440,7 +1440,7 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                             slot.bar_style = Some(bs.as_key().to_string());
                         } else {
                             warnings.push(format!(
-                                "invalid '{id_str}.bar_style': expected solid, block, or ascii"
+                                "invalid '{id_str}.bar_style': expected line, solid, block, or ascii"
                             ));
                         }
                     }

@@ -368,8 +368,8 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     assert_eq!(
         out.plain,
         concat!(
-            "  \u{25cf} READY \u{2502} Model \u{2502} ctx            0.0% ! config\n",
-            "  sandbox off \u{2502} token 0 (0\u{2191} 0\u{2193}) \u{2502} 0m\n",
+            "  \u{25cf} READY \u{2502} \u{ef23} Model \u{2502} \u{f49b} ctx \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 0.0% ! config\n",
+            "  \u{f132} sandbox off \u{2502} \u{e26b} token 0 (0\u{2191} 0\u{2193}) \u{2502} \u{f43a} 0m\n",
         )
     );
     let first_ansi_line = out.ansi.lines().next().expect("row 1 ansi");
@@ -756,7 +756,7 @@ items = [
 
 [[line]]
 items = [
-  { id = "quota_group", family = "gemini", label = "Gemini", show_used = true, show_bar = true, show_reset = true },
+  { id = "quota_group", family = "gemini", label = "Gemini", show_used = true, show_bar = true, bar_style = "line", show_reset = true },
   { id = "quota_group", family = "3p", label = "3P", show_used = false, show_bar = false, show_reset = true },
 ]
 
@@ -844,16 +844,28 @@ items = [{ id = "dir", max_levels = 99 }, { id = "context", style = "bar", bar_s
     assert_eq!(rows.len(), 3, "plain: {plain:?}");
     assert!(rows[0].contains("WORKING (+2) │ EDITS [I] │ Gemini 4 Neon (XHigh) │ ctx "));
     assert!(rows[0].contains(" 19.7% │ ~/projects/antigravity-hud │ main* !1 ?7"));
-    assert!(rows[1].contains("Gemini 5h "));
-    assert!(rows[1].contains(" 7.3% 2h44m / week "));
-    assert!(rows[1].contains(" 20.3% 5d4h │ 3P 5h 100.0% 5h0m"));
-    assert!(rows[2].contains("sandbox off │ token 4.6M (4.5M↑ 122k↓) │ cache 90.0%"));
+    assert!(rows[1].contains(
+        "\u{f0081} Gemini 5h \u{2578}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 7.3% 2h44m / week \u{2501}\u{2501}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} 20.3% 5d4h"
+    ));
+    assert!(rows[1].contains(" 20.3% 5d4h │ \u{f0079} 3P 5h 100.0% 5h0m"));
+    assert!(rows[2].contains("sandbox off │ \u{e26b} token 4.6M (4.5M↑ 122k↓) │ cache 90.0%"));
     assert!(rows[2].contains("3:40"));
-    assert!(rows[2].ends_with("│ 58m"));
+    assert!(rows[2].ends_with("│ \u{f43a} 58m"));
 
     let ansi = agyline::emit_ansi(&rendered, &cfg);
     // Bold WORKING (`;1;`), Italic model (`;3;`), Bold 4.6M (`;1;`)
     assert!(ansi.contains(";1;96m⚙ WORKING\x1b[0;33m (+2)"));
     assert!(ansi.contains(";3;95mGemini 4 Neon (XHigh)"));
     assert!(ansi.contains(";1;37m4.6M"));
+
+    // Enabled sandbox with `show_when_off = true` paints its icon in `Ok` green instead of `Muted`.
+    let mut sbx_frame = frame;
+    sbx_frame.payload.sandbox_enabled = true;
+    let mut sbx_cfg = cfg;
+    sbx_cfg.lines[2][0].icon = None;
+    let sbx_ansi = agyline::emit_ansi(&agyline::render_lines(&sbx_frame, &sbx_cfg), &sbx_cfg);
+    assert!(
+        sbx_ansi.contains("\x1b[0;92m\u{f132} \x1b[0;90msandbox \x1b[0;1;92mON"),
+        "enabled sandbox icon must be Ok green: {sbx_ansi:?}"
+    );
 }

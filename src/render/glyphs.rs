@@ -124,6 +124,24 @@ pub fn plan_icon(glyphs: GlyphSet) -> &'static str {
     }
 }
 
+/// Returns empty under `Ascii` because `eval_tokens` already prints the `token` label.
+pub fn tokens_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{e26b}",
+        GlyphSet::Unicode => "\u{25c8}",
+        GlyphSet::Ascii => "",
+    }
+}
+
+/// Returns empty under `Ascii` because duration values (`58m`, `1h5m`) are self-labeled.
+pub fn duration_icon(glyphs: GlyphSet) -> &'static str {
+    match glyphs {
+        GlyphSet::Nerd => "\u{f43a}",
+        GlyphSet::Unicode => "\u{25f7}",
+        GlyphSet::Ascii => "",
+    }
+}
+
 /// Battery glyph for remaining quota percent. The 90/70/45/20 steps and their Nerd codepoints
 /// reproduce `statusline.py`; only the `nerd` set varies by level.
 pub fn quota_icon(glyphs: GlyphSet, quota_pct: i32) -> &'static str {

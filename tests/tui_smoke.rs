@@ -956,7 +956,7 @@ fn hud_three_row_preview_emits_styles_and_syncs_mouse_clicks_at_dynamic_heights(
     let mut app = ConfiguratorApp::new(sb.env(BTreeMap::new()));
     app.handle_event(Event::Resize(100, 28));
 
-    // Default 3-row HUD preview height = 6 -> tab bar at row 7; spans carry BOLD/ITALIC/bg track.
+    // Default 3-row HUD preview height = 6 -> tab bar at row 7; spans carry BOLD/ITALIC and pure-fg line bars.
     assert_eq!(app.preview_box_height(), 6);
     let preview = app.preview_lines();
     assert_eq!(preview.len(), 3);
@@ -972,7 +972,8 @@ fn hud_three_row_preview_emits_styles_and_syncs_mouse_clicks_at_dynamic_heights(
             .iter()
             .any(|s| s.style.add_modifier.contains(Modifier::ITALIC))
     );
-    assert!(preview[0].spans.iter().any(|s| s.style.bg.is_some()));
+    assert!(preview[0].spans.iter().all(|s| s.style.bg.is_none()));
+    assert!(preview[0].spans.iter().any(|s| s.content.contains('━')));
 
     app.handle_event(left_click(15, 7)); // Tab 2 (Style & Presets) at row 7
     assert_eq!(app.active_tab(), TuiTab::StylePresets);
@@ -1027,6 +1028,8 @@ fn multi_row_editor_navigates_adds_moves_removes_rows_and_edits_new_inspector_fi
     for _ in 0..7 {
         app.handle_event(press(KeyCode::Down));
     }
+    app.handle_event(press(KeyCode::Right)); // bar_style: line -> solid
+    assert_eq!(app.doc().lines[0][3].bar_style.as_deref(), Some("solid"));
     app.handle_event(press(KeyCode::Right)); // bar_style: solid -> block
     assert_eq!(app.doc().lines[0][3].bar_style.as_deref(), Some("block"));
 

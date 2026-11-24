@@ -1235,7 +1235,8 @@ impl ConfiguratorApp {
                     Some(parsed.as_key().to_string())
                 } else {
                     if let Some(ref mut st) = self.text_edit {
-                        st.error = Some("Expected bar_style: solid, block, or ascii".to_string());
+                        st.error =
+                            Some("Expected bar_style: line, solid, block, or ascii".to_string());
                     }
                     return;
                 };

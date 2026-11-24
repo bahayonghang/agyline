@@ -47,15 +47,15 @@ Windows 上是 `statusline.ps1`，另一份是 Python 的 `statusline.py`。外�
 
 ## 仓库已实现功能
 
-`default`（HUD）预设使用 ` │ ` 分隔符渲染 3 行状态栏：
+`default`（HUD）预设使用 ` │ ` 分隔符渲染 3 行状态栏，默认启用 Nerd/Unicode 语义小图标与纯前景 `line` 细轨进度条（`━╸─`，无需背景色块即可自适应深浅终端）：
 
-1. **身份与工作区**：状态徽章（`status`）、模式徽章（`mode` 的 `style = "badge"`）、斜体模型名与档位（`model` 的 `style = "hud"`）、上下文进度条（`context` 的 `style = "bar"`）、多级路径（`dir` 的 `max_levels = 2`）以及细粒度 Git 计数（`git` 的 `style = "counts"`）。
-2. **模型家族额度组**：同屏展示 `Gemini` 与 `3P`（`quota_group`）的 5 小时与每周已用百分比进度条及紧凑重置倒计时（如 `2h44m`、`5d4h`；空家族自动隐藏）。
+1. **身份与工作区**：状态徽章（`status`）、简洁模式徽章（`mode` 的 `style = "badge"`）、斜体模型名与档位（`model` 的 `style = "hud"`）、上下文进度条（`context` 的 `style = "bar"`）、多级路径（`dir` 的 `max_levels = 2`）以及细粒度 Git 计数（`git` 的 `style = "counts"`）。
+2. **模型家族额度组**：同屏展示 `Gemini` 与 `3P`（`quota_group`）的 5 小时与每周已用百分比进度条及紧凑重置倒计时（如 `2h44m`、`5d4h`，并带按紧迫度变化的电量图标；空家族自动隐藏）。
 3. **运行期遥测**：沙箱状态（`sandbox` 开启 `show_when_off = true`）、累计 token 与输入/输出拆解（`tokens`）、缓存命中率（`cache` 的 `style = "hit_rate"`）、会话时长（`duration`），以及非零时显示的 `subagents`、`tasks`、`cost`、`title`。
 
 在配置器中选择 `classic`（或设置 `preset = "classic"`）可恢复原 2 行 `@model` 默认布局；选择 `cometix`（`preset = "cometix"`）则与 `ref/agy-patch` 保持 100% 字节级一致。
 
-自定义 `quota` 项仍支持 `bucket = "@model/5h"` 或 `bucket = "@model/weekly"`；`quota_group` 支持 `family`（`"gemini"`、`"3p"` 或 `"@model"`）、`show_used`、`show_bar`、`bar_style`（`"solid"`、`"block"`、`"ascii"`）、`bar_width`（`4..=20`）与 `show_reset`。
+自定义 `quota` 项仍支持 `bucket = "@model/5h"` 或 `bucket = "@model/weekly"`；`quota_group` 与 `context` 进度条均支持 `bar_style`（默认 `"line"`，可选 `"solid"`、`"block"`、`"ascii"`）和 `bar_width`（`4..=20`），其中 `quota_group` 还支持 `family`（`"gemini"`、`"3p"` 或 `"@model"`）、`show_used`、`show_bar` 与 `show_reset`。若在未设置 `COLORFGBG` 的浅色终端显式选用 `bar_style = "solid"`，建议配置 `theme = "light"`（或 `AGY_THEME=light`）以启用浅色轨道底色。
 
 不同于每次刷新都启动 PowerShell 或 Python 的脚本，`agyline` 是编译后的单一 Rust 二进制：渲染输出路径绝不启动 shell，绝不阻塞等待 `git`，且仅用 `<= 4 KiB` 的 O(1) 头部微读获取会话起始时间。本地 Git 缓存更新、缓存中继 touch 与可选的完整 transcript token 统计均通过后台分离进程（`__refresh-git`、`__touch`、`__refresh-transcript`）异步完成。
 

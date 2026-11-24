@@ -4,11 +4,11 @@
 //! `statusline.py`. Inputs are already in `FrameData`; nothing here reads state or the network.
 
 use crate::collect::{FrameData, RelayStatus};
-use crate::config::{EffectiveConfig, ItemId, ItemSlot, ModelQuotaPeriod};
+use crate::config::{EffectiveConfig, ItemId, ItemSlot, ModelQuotaPeriod, ThresholdsConfig};
 use crate::input::QuotaBucketData;
 use crate::items::{
-    EvaluatedItem, coalesced_icon_body_spans, slot_custom_icon_color, slot_fg_color,
-    truncate_chars_with_ellipsis,
+    EvaluatedItem, coalesced_icon_body_spans, labeled_slot_icon, slot_custom_icon_color,
+    slot_fg_color, truncate_chars_with_ellipsis,
 };
 use crate::render::{
     BarStyle, ColorSpec, ColorToken, StyledSpan, TextStyle, glyphs, render_usage_bar,
@@ -89,17 +89,14 @@ pub fn eval_context(
             .bar_style
             .as_deref()
             .and_then(BarStyle::from_key)
-            .unwrap_or(BarStyle::Solid);
-        let icon = slot
-            .icon
-            .as_deref()
-            .unwrap_or_else(|| glyphs::context_icon(config.glyphs));
+            .unwrap_or_default();
+        let icon = labeled_slot_icon(slot, config.glyphs, glyphs::context_icon);
         let custom_ic = slot_custom_icon_color(slot);
 
         let mut prefix_spans = Vec::with_capacity(2);
         if !icon.is_empty() {
             prefix_spans.push(StyledSpan::new(
-                custom_ic.unwrap_or(ColorSpec::Token(ColorToken::Muted)),
+                custom_ic.unwrap_or(ColorSpec::Token(ColorToken::Context)),
                 format!("{icon} "),
             ));
         }
@@ -197,10 +194,6 @@ pub fn eval_cache(
     frame: &FrameData,
     config: &EffectiveConfig,
 ) -> Option<EvaluatedItem> {
-    let icon = slot
-        .icon
-        .as_deref()
-        .unwrap_or_else(|| glyphs::cache_icon(config.glyphs));
     let base_col = slot_fg_color(slot, ColorToken::Cache);
     let icon_col = slot_custom_icon_color(slot).unwrap_or(base_col);
 
@@ -234,9 +227,10 @@ pub fn eval_cache(
         }
         let val_col = slot_fg_color(slot, ColorToken::Separator);
         let bold = TextStyle::PLAIN.bold();
+        let hit_icon = labeled_slot_icon(slot, config.glyphs, glyphs::cache_icon);
         let mut base_spans = Vec::with_capacity(4);
-        if !icon.is_empty() {
-            base_spans.push(StyledSpan::new(icon_col, format!("{icon} ")));
+        if !hit_icon.is_empty() {
+            base_spans.push(StyledSpan::new(icon_col, format!("{hit_icon} ")));
         }
         base_spans.push(StyledSpan::new(ColorToken::Muted, "cache "));
         if let Some(pct) = hit_pct {
@@ -293,6 +287,10 @@ pub fn eval_cache(
         });
     }
     // Hit rate truncates instead of rounding, like the reference's integer division.
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::cache_icon(config.glyphs));
     let cache_pct = if tot_prompt > 0 {
         (cache_read.saturating_mul(100)) / tot_prompt
     } else {
@@ -706,7 +704,7 @@ fn render_quota_spans(
                     .bar_style
                     .as_deref()
                     .and_then(BarStyle::from_key)
-                    .unwrap_or(BarStyle::Solid);
+                    .unwrap_or_default();
                 full_spans.extend(render_usage_bar(bar_pct, bar_w, q_col, config, bar_style));
                 full_spans.push(StyledSpan::new(
                     q_col,
@@ -947,7 +945,10 @@ pub fn eval_tokens(
         )
     };
     let total = tok_in.saturating_add(tok_out);
-    let icon = slot.icon.as_deref().unwrap_or("");
+    let icon = slot
+        .icon
+        .as_deref()
+        .unwrap_or_else(|| glyphs::tokens_icon(config.glyphs));
     let custom_ic = slot_custom_icon_color(slot);
     let num_col = slot_fg_color(slot, ColorToken::Separator);
     let bold = TextStyle::PLAIN.bold();
@@ -1073,15 +1074,26 @@ pub fn eval_quota_group(
         .bar_style
         .as_deref()
         .and_then(BarStyle::from_key)
-        .unwrap_or(BarStyle::Solid);
-    let icon = slot.icon.as_deref().unwrap_or("");
+        .unwrap_or_default();
+    let ev_5h = b_5h.map(|b| (b, eval_quota_group_bucket(b, show_used, &config.thresholds)));
+    let ev_wk = b_wk.map(|b| (b, eval_quota_group_bucket(b, show_used, &config.thresholds)));
+    let (worst_urgency, worst_rem_pct) = [ev_5h.as_ref(), ev_wk.as_ref()]
+        .into_iter()
+        .flatten()
+        .fold((QuotaUrgency::Ok, 100_i32), |(acc_u, acc_pct), (_, ev)| {
+            (acc_u.max(ev.urgency), acc_pct.min(ev.rem_pct))
+        });
+    let icon = labeled_slot_icon(slot, config.glyphs, |g| {
+        glyphs::quota_icon(g, worst_rem_pct)
+    });
     let custom_ic = slot_custom_icon_color(slot);
     let base_ok = slot_fg_color(slot, ColorToken::Ok);
+    let default_icon_col = worst_urgency.color(base_ok);
 
     let mut full_spans = Vec::with_capacity(12);
     let mut compact_spans = Vec::with_capacity(8);
     if !icon.is_empty() {
-        let ic_col = custom_ic.unwrap_or(ColorSpec::Token(ColorToken::Muted));
+        let ic_col = custom_ic.unwrap_or(default_icon_col);
         full_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
         compact_spans.push(StyledSpan::new(ic_col, format!("{icon} ")));
     }
@@ -1091,33 +1103,12 @@ pub fn eval_quota_group(
     let append_entry = |dst: &mut Vec<StyledSpan>,
                         period: &str,
                         b: &QuotaBucketData,
+                        ev: QuotaGroupBucketEval,
                         with_bar: bool,
                         with_reset: bool| {
         dst.push(StyledSpan::new(ColorToken::Muted, format!("{period} ")));
-        if let Some(rf) = b.remaining_fraction.filter(|v| (0.0..=1.0).contains(v)) {
-            let used_tenths = (((1.0 - rf) * 1000.0).round() as i32).clamp(0, 1000);
-            let rem_tenths = ((rf * 1000.0).round() as i32).clamp(0, 1000);
-            let (disp_tenths, col) = if show_used {
-                let crit_t = (100 - config.thresholds.quota_crit) * 10;
-                let warn_t = (100 - config.thresholds.quota_warn) * 10;
-                let c = if used_tenths >= crit_t {
-                    ColorToken::Crit.into()
-                } else if used_tenths >= warn_t {
-                    ColorToken::Warn.into()
-                } else {
-                    base_ok
-                };
-                (used_tenths, c)
-            } else {
-                let c = if rem_tenths < config.thresholds.quota_crit * 10 {
-                    ColorToken::Crit.into()
-                } else if rem_tenths < config.thresholds.quota_warn * 10 {
-                    ColorToken::Warn.into()
-                } else {
-                    base_ok
-                };
-                (rem_tenths, c)
-            };
+        if let Some(disp_tenths) = ev.disp_tenths {
+            let col = ev.urgency.color(base_ok);
             let bar_pct = (disp_tenths as f64) / 10.0;
             if with_bar {
                 dst.extend(render_usage_bar(bar_pct, bar_w, col, config, bar_style));
@@ -1149,17 +1140,17 @@ pub fn eval_quota_group(
         }
     };
 
-    if let Some(b) = b_5h {
-        append_entry(&mut full_spans, "5h", b, show_bar, show_reset);
-        append_entry(&mut compact_spans, "5h", b, false, false);
+    if let Some((b, ev)) = ev_5h {
+        append_entry(&mut full_spans, "5h", b, ev, show_bar, show_reset);
+        append_entry(&mut compact_spans, "5h", b, ev, false, false);
     }
-    if b_5h.is_some() && b_wk.is_some() {
+    if ev_5h.is_some() && ev_wk.is_some() {
         full_spans.push(StyledSpan::new(ColorToken::Muted, " / "));
         compact_spans.push(StyledSpan::new(ColorToken::Muted, " / "));
     }
-    if let Some(b) = b_wk {
-        append_entry(&mut full_spans, "week", b, show_bar, show_reset);
-        append_entry(&mut compact_spans, "wk", b, false, false);
+    if let Some((b, ev)) = ev_wk {
+        append_entry(&mut full_spans, "week", b, ev, show_bar, show_reset);
+        append_entry(&mut compact_spans, "wk", b, ev, false, false);
     }
 
     Some(EvaluatedItem {
@@ -1168,6 +1159,82 @@ pub fn eval_quota_group(
         full_spans,
         compact_spans,
     })
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum QuotaUrgency {
+    Ok,
+    Warn,
+    Crit,
+}
+
+impl QuotaUrgency {
+    fn color(self, base_ok: ColorSpec) -> ColorSpec {
+        match self {
+            Self::Ok => base_ok,
+            Self::Warn => ColorToken::Warn.into(),
+            Self::Crit => ColorToken::Crit.into(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct QuotaGroupBucketEval {
+    urgency: QuotaUrgency,
+    rem_pct: i32,
+    disp_tenths: Option<i32>,
+}
+
+fn eval_quota_group_bucket(
+    b: &QuotaBucketData,
+    show_used: bool,
+    thresholds: &ThresholdsConfig,
+) -> QuotaGroupBucketEval {
+    if let Some(rf) = b.remaining_fraction.filter(|v| (0.0..=1.0).contains(v)) {
+        let used_tenths = (((1.0 - rf) * 1000.0).round() as i32).clamp(0, 1000);
+        let rem_tenths = ((rf * 1000.0).round() as i32).clamp(0, 1000);
+        let rem_pct = ((rf * 100.0).round() as i32).clamp(0, 100);
+        let (disp_tenths, urgency) = if show_used {
+            let crit_t = (100 - thresholds.quota_crit) * 10;
+            let warn_t = (100 - thresholds.quota_warn) * 10;
+            let u = if used_tenths >= crit_t {
+                QuotaUrgency::Crit
+            } else if used_tenths >= warn_t {
+                QuotaUrgency::Warn
+            } else {
+                QuotaUrgency::Ok
+            };
+            (used_tenths, u)
+        } else {
+            let u = if rem_tenths < thresholds.quota_crit * 10 {
+                QuotaUrgency::Crit
+            } else if rem_tenths < thresholds.quota_warn * 10 {
+                QuotaUrgency::Warn
+            } else {
+                QuotaUrgency::Ok
+            };
+            (rem_tenths, u)
+        };
+        QuotaGroupBucketEval {
+            urgency,
+            rem_pct,
+            disp_tenths: Some(disp_tenths),
+        }
+    } else if let Some(amt) = b.remaining_amount
+        && amt <= 0
+    {
+        QuotaGroupBucketEval {
+            urgency: QuotaUrgency::Crit,
+            rem_pct: 0,
+            disp_tenths: None,
+        }
+    } else {
+        QuotaGroupBucketEval {
+            urgency: QuotaUrgency::Ok,
+            rem_pct: 100,
+            disp_tenths: None,
+        }
+    }
 }
 
 fn format_hud_reset(bucket: &QuotaBucketData, now_sec: i64) -> Option<String> {
