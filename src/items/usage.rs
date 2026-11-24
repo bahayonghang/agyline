@@ -579,7 +579,9 @@ fn model_quota_bucket(model: &str, period: ModelQuotaPeriod) -> Option<&'static 
         .filter(|part| !part.is_empty());
     let gemini = match parts.next()? {
         "gemini" => true,
-        "orchestrator" if matches!(parts.next(), Some("carbon" | "argon")) => true,
+        // Antigravity Orchestrator codenames (Carbon, Argon, Neon, Hydrogen, etc.) belong to
+        // the Gemini quota family unless explicitly paired with a 3P model name.
+        "orchestrator" => !matches!(parts.next(), Some("claude" | "gpt")),
         "claude" | "gpt" => false,
         _ => return None,
     };
@@ -1458,16 +1460,24 @@ fn eval_quota_group_inline(
         .unwrap_or_else(|| glyphs::agybar_quota_icon(config.glyphs));
     let custom_ic = slot_custom_icon_color(slot);
     let base_ok = slot_fg_color(slot, ColorToken::Ok);
-    let icon_col = custom_ic.unwrap_or_else(|| worst_urgency.color(base_ok));
+    let icon_col = custom_ic.unwrap_or_else(|| match worst_urgency {
+        QuotaUrgency::Ok => ColorToken::High.into(),
+        other => other.color(base_ok),
+    });
     let show_reset = slot.show_reset.unwrap_or(true);
 
     let build = |entries: &[(bool, i32, u8, &QuotaBucketData, QuotaGroupBucketEval)],
                  with_credits: bool|
      -> Vec<StyledSpan> {
-        let mut spans = Vec::with_capacity(8);
+        let mut spans = Vec::with_capacity(10);
         if !icon.is_empty() {
             spans.push(StyledSpan::new(icon_col, format!("{icon} ")));
         }
+        // Disambiguate when two fallback buckets from different families share a period (e.g.
+        // `3p-weekly` and `gemini-weekly` would otherwise both print `7d:`).
+        let collide_periods = entries.len() >= 2
+            && inline_bucket_period_label(&entries[0].3.name)
+                == inline_bucket_period_label(&entries[1].3.name);
         let mut emitted = 0usize;
         for (_, _, _, b, ev) in entries {
             if emitted > 0 {
@@ -1476,10 +1486,15 @@ fn eval_quota_group_inline(
                     glyphs::dot_sep(config.glyphs),
                 ));
             }
-            let period = inline_bucket_period_label(&b.name);
+            let period = if collide_periods {
+                inline_bucket_disambiguated_label(&b.name)
+            } else {
+                inline_bucket_period_label(&b.name)
+            };
+            spans.push(StyledSpan::new(ColorToken::Muted, format!("{period}:")));
             spans.push(StyledSpan::new(
                 ev.urgency.color(base_ok),
-                format!("{period}:{}%", ev.rem_pct),
+                format!("{}%", ev.rem_pct),
             ));
             if show_reset && let Some(reset) = format_inline_reset(b, frame.now_sec) {
                 spans.push(StyledSpan::new(ColorToken::Muted, format!("({reset})")));
@@ -1524,6 +1539,20 @@ fn inline_bucket_period_label(name: &str) -> String {
         rest.to_string()
     } else {
         low
+    }
+}
+
+fn inline_bucket_disambiguated_label(name: &str) -> String {
+    let low = name.trim().to_ascii_lowercase();
+    let period = inline_bucket_period_label(&low);
+    if low.starts_with("gemini-") || low == "gemini" {
+        format!("g-{period}")
+    } else if low.starts_with("3p-") || low == "3p" {
+        format!("3p-{period}")
+    } else if let Some((fam, _)) = low.split_once('-') {
+        format!("{fam}-{period}")
+    } else {
+        period
     }
 }
 

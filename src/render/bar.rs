@@ -1,11 +1,11 @@
-//! Proportional `Usage Bar` renderer for context and quota items. Supports half-cell `line`
-//! (`━╸─`), slanted `parallelogram` (`▰▱`, alias `blocks`), half-cell `braille` (`⣿⣤⣀`), `solid`
-//! (`█` over a polarity-aware track background), shaded `block` (`█░`), and `ascii` (`#-`), with
-//! optional per-cell RGB linear gradients from `ok` to the active usage color.
+//! Proportional `Usage Bar` renderer for context and quota items. Supports cap-height segmented
+//! `cells` (`❚`, alias `segments`), half-cell `line` (`━╸─`), slanted `parallelogram` (`▰▱`, alias
+//! `blocks`), half-cell `braille` (`⣿⣤⣀`), `solid` (`█` over a polarity-aware track background),
+//! shaded `block` (`█░`), and `ascii` (`#-`), with optional 4-tier RGB linear gradients.
 
 use crate::config::{EffectiveConfig, GlyphSet};
 use crate::render::{
-    ColorSpec, ColorToken, EffectiveColorDepth, ResolvedColor, StyledSpan, TextStyle,
+    Ansi16Color, ColorSpec, ColorToken, EffectiveColorDepth, ResolvedColor, StyledSpan, TextStyle,
     bar_track_color,
 };
 
@@ -14,6 +14,7 @@ const PARTIAL_BLOCKS: [&str; 8] = ["", "▏", "▎", "▍", "▌", "▋", "▊",
 /// Visual rendering mode for a `Usage Bar`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BarStyle {
+    Cells,
     #[default]
     Line,
     Solid,
@@ -24,7 +25,8 @@ pub enum BarStyle {
 }
 
 impl BarStyle {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
+        Self::Cells,
         Self::Line,
         Self::Solid,
         Self::Block,
@@ -35,6 +37,7 @@ impl BarStyle {
 
     pub const fn as_key(self) -> &'static str {
         match self {
+            Self::Cells => "cells",
             Self::Line => "line",
             Self::Solid => "solid",
             Self::Block => "block",
@@ -46,6 +49,7 @@ impl BarStyle {
 
     pub fn from_key(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
+            "cells" | "segments" => Some(Self::Cells),
             "line" => Some(Self::Line),
             "solid" => Some(Self::Solid),
             "block" => Some(Self::Block),
@@ -79,8 +83,27 @@ pub fn render_usage_bar(
     }
 
     match style {
+        BarStyle::Cells => {
+            let empty_col = match config.effective_color_depth {
+                EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256 => {
+                    match config
+                        .resolved_palette
+                        .resolve_spec(ColorSpec::Token(ColorToken::SurfaceHi))
+                    {
+                        ResolvedColor::Ansi16(Ansi16Color::White | Ansi16Color::BrightWhite) => {
+                            ColorToken::Muted
+                        }
+                        _ => ColorToken::SurfaceHi,
+                    }
+                }
+                EffectiveColorDepth::Ansi16 | EffectiveColorDepth::None => ColorToken::Muted,
+            };
+            render_whole_cell_bar(pct, width, "❚", "❚", empty_col, fill_col, config)
+        }
         BarStyle::Line => render_half_cell_bar(pct, width, "━", "╸", "─", fill_col, config),
-        BarStyle::Parallelogram => render_whole_cell_bar(pct, width, "▰", "▱", fill_col, config),
+        BarStyle::Parallelogram => {
+            render_whole_cell_bar(pct, width, "▰", "▱", ColorToken::Muted, fill_col, config)
+        }
         BarStyle::Braille => render_half_cell_bar(pct, width, "⣿", "⣤", "⣀", fill_col, config),
         BarStyle::Solid => {
             if matches!(
@@ -89,10 +112,12 @@ pub fn render_usage_bar(
             ) {
                 render_solid_bar(pct, width, fill_col, config)
             } else {
-                render_whole_cell_bar(pct, width, "█", "░", fill_col, config)
+                render_whole_cell_bar(pct, width, "█", "░", ColorToken::Muted, fill_col, config)
             }
         }
-        BarStyle::Block => render_whole_cell_bar(pct, width, "█", "░", fill_col, config),
+        BarStyle::Block => {
+            render_whole_cell_bar(pct, width, "█", "░", ColorToken::Muted, fill_col, config)
+        }
         BarStyle::Ascii => render_ascii_bar(pct, width, fill_col),
     }
 }
@@ -107,7 +132,10 @@ fn render_half_cell_bar(
     config: &EffectiveConfig,
 ) -> Vec<StyledSpan> {
     let total_halves = width * 2;
-    let halves = (((pct / 100.0) * (total_halves as f64)).round() as usize).min(total_halves);
+    let mut halves = (((pct / 100.0) * (total_halves as f64)).round() as usize).min(total_halves);
+    if pct > 0.0 && halves == 0 {
+        halves = 1;
+    }
     let full = halves / 2;
     let half = halves % 2;
     let empty = width.saturating_sub(full + half);
@@ -119,6 +147,7 @@ fn render_half_cell_bar(
         full,
         full_glyph,
         partial,
+        width,
         fill_col,
         TextStyle::PLAIN,
         config,
@@ -137,10 +166,14 @@ fn render_whole_cell_bar(
     width: usize,
     full_glyph: &str,
     empty_glyph: &str,
+    empty_col: ColorToken,
     fill_col: ColorSpec,
     config: &EffectiveConfig,
 ) -> Vec<StyledSpan> {
-    let filled = (((pct / 100.0) * (width as f64)).round() as usize).min(width);
+    let mut filled = (((pct / 100.0) * (width as f64)).round() as usize).min(width);
+    if pct > 0.0 && filled == 0 {
+        filled = 1;
+    }
     let empty = width - filled;
     let mut spans = Vec::with_capacity(if config.bar_gradient { width + 1 } else { 2 });
     push_filled_cells(
@@ -148,15 +181,13 @@ fn render_whole_cell_bar(
         filled,
         full_glyph,
         None,
+        width,
         fill_col,
         TextStyle::PLAIN,
         config,
     );
     if empty > 0 {
-        spans.push(StyledSpan::new(
-            ColorToken::Muted,
-            empty_glyph.repeat(empty),
-        ));
+        spans.push(StyledSpan::new(empty_col, empty_glyph.repeat(empty)));
     }
     spans
 }
@@ -169,7 +200,11 @@ fn render_solid_bar(
 ) -> Vec<StyledSpan> {
     let track_bg = bar_track_color(config.polarity);
     let total_eighths = width * 8;
-    let eighths = (((pct / 100.0) * (total_eighths as f64)).round() as usize).min(total_eighths);
+    let mut eighths =
+        (((pct / 100.0) * (total_eighths as f64)).round() as usize).min(total_eighths);
+    if pct > 0.0 && eighths == 0 {
+        eighths = 1;
+    }
     let full = eighths / 8;
     let rem = eighths % 8;
     let partial_cols = usize::from(rem > 0);
@@ -178,7 +213,9 @@ fn render_solid_bar(
 
     let bar_style = TextStyle::PLAIN.with_bg(track_bg);
     let mut spans = Vec::with_capacity(if config.bar_gradient { width + 1 } else { 2 });
-    push_filled_cells(&mut spans, full, "█", partial, fill_col, bar_style, config);
+    push_filled_cells(
+        &mut spans, full, "█", partial, width, fill_col, bar_style, config,
+    );
     if empty > 0 {
         spans.push(StyledSpan::styled(
             ColorToken::Muted,
@@ -190,7 +227,10 @@ fn render_solid_bar(
 }
 
 fn render_ascii_bar(pct: f64, width: usize, fill_col: ColorSpec) -> Vec<StyledSpan> {
-    let filled = (((pct / 100.0) * (width as f64)).round() as usize).min(width);
+    let mut filled = (((pct / 100.0) * (width as f64)).round() as usize).min(width);
+    if pct > 0.0 && filled == 0 {
+        filled = 1;
+    }
     let empty = width - filled;
     let mut spans = Vec::with_capacity(2);
     if filled > 0 {
@@ -202,13 +242,17 @@ fn render_ascii_bar(pct: f64, width: usize, fill_col: ColorSpec) -> Vec<StyledSp
     spans
 }
 
-// Interpolates filled bar cells linearly in RGB from `Ok` to `fill_col` under TrueColor/Ansi256,
-// coalescing adjacent cells that resolve to the same quantized color to avoid redundant SGR spans.
+// Interpolates filled bar cells smoothly in RGB under TrueColor/Ansi256, coalescing adjacent
+// cells with identical quantized colors. Semantic urgency tokens sample the full-width 4-stop
+// Ok -> Warn -> High -> Crit ramp so mid-range usage (e.g. 48%) already gradients cleanly; custom
+// literal fill colors interpolate linearly from Ok to `fill_col`.
+#[allow(clippy::too_many_arguments)]
 fn push_filled_cells(
     spans: &mut Vec<StyledSpan>,
     full_count: usize,
     full_glyph: &str,
     partial_glyph: Option<&str>,
+    bar_width: usize,
     fill_col: ColorSpec,
     text_style: TextStyle,
     config: &EffectiveConfig,
@@ -225,19 +269,56 @@ fn push_filled_cells(
             EffectiveColorDepth::TrueColor | EffectiveColorDepth::Ansi256
         );
     if use_gradient {
-        let start_rgb = config
+        let is_semantic_tier = matches!(
+            fill_col,
+            ColorSpec::Token(
+                ColorToken::Ok | ColorToken::Warn | ColorToken::High | ColorToken::Crit
+            )
+        );
+        let ok_rgb = config
             .resolved_palette
             .resolve_spec(ColorSpec::Token(ColorToken::Ok))
             .to_rgb();
-        let end_rgb = config.resolved_palette.resolve_spec(fill_col).to_rgb();
-        if start_rgb != end_rgb {
-            let den = total_cells - 1;
+        let warn_rgb = config
+            .resolved_palette
+            .resolve_spec(ColorSpec::Token(ColorToken::Warn))
+            .to_rgb();
+        let high_rgb = config
+            .resolved_palette
+            .resolve_spec(ColorSpec::Token(ColorToken::High))
+            .to_rgb();
+        let crit_rgb = config
+            .resolved_palette
+            .resolve_spec(ColorSpec::Token(ColorToken::Crit))
+            .to_rgb();
+        let custom_end_rgb = config.resolved_palette.resolve_spec(fill_col).to_rgb();
+        let has_variation = if is_semantic_tier {
+            ok_rgb != warn_rgb || warn_rgb != high_rgb || high_rgb != crit_rgb
+        } else {
+            ok_rgb != custom_end_rgb
+        };
+        if has_variation {
+            let width_den = bar_width.saturating_sub(1).max(1);
+            let filled_den = total_cells - 1;
             let mut cur_spec: Option<ColorSpec> = None;
             let mut cur_text = String::with_capacity(full_glyph.len());
             for idx in 0..total_cells {
-                let r = lerp_u8(start_rgb.0, end_rgb.0, idx, den);
-                let g = lerp_u8(start_rgb.1, end_rgb.1, idx, den);
-                let b = lerp_u8(start_rgb.2, end_rgb.2, idx, den);
+                let (r, g, b) = if is_semantic_tier {
+                    let pos = if fill_col == ColorSpec::Token(ColorToken::Crit)
+                        && idx + 1 == total_cells
+                    {
+                        1.0
+                    } else {
+                        (idx as f64 / width_den as f64).clamp(0.0, 1.0)
+                    };
+                    sample_four_tier_rgb(pos, ok_rgb, warn_rgb, high_rgb, crit_rgb)
+                } else {
+                    (
+                        lerp_u8(ok_rgb.0, custom_end_rgb.0, idx, filled_den),
+                        lerp_u8(ok_rgb.1, custom_end_rgb.1, idx, filled_den),
+                        lerp_u8(ok_rgb.2, custom_end_rgb.2, idx, filled_den),
+                    )
+                };
                 let spec = quantized_rgb_spec(r, g, b, config.effective_color_depth);
                 let glyph = if idx < full_count {
                     full_glyph
@@ -273,6 +354,32 @@ fn push_filled_cells(
         fill_txt.push_str(pg);
     }
     spans.push(StyledSpan::styled(fill_col, text_style, fill_txt));
+}
+
+fn sample_four_tier_rgb(
+    pos: f64,
+    ok: (u8, u8, u8),
+    warn: (u8, u8, u8),
+    high: (u8, u8, u8),
+    crit: (u8, u8, u8),
+) -> (u8, u8, u8) {
+    let p = pos.clamp(0.0, 1.0);
+    if p <= 0.50 {
+        lerp_rgb_f64(ok, warn, p / 0.50)
+    } else if p <= 0.75 {
+        lerp_rgb_f64(warn, high, (p - 0.50) / 0.25)
+    } else {
+        lerp_rgb_f64(high, crit, (p - 0.75) / 0.25)
+    }
+}
+
+fn lerp_rgb_f64(a: (u8, u8, u8), b: (u8, u8, u8), t: f64) -> (u8, u8, u8) {
+    let t = t.clamp(0.0, 1.0);
+    let mix = |x: u8, y: u8| -> u8 {
+        let v = f64::from(x) + (f64::from(y) - f64::from(x)) * t;
+        v.round().clamp(0.0, 255.0) as u8
+    };
+    (mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2))
 }
 
 fn lerp_u8(a: u8, b: u8, num: usize, den: usize) -> u8 {
@@ -459,7 +566,10 @@ mod tests {
 
     #[test]
     fn parallelogram_and_braille_styles_preserve_width_and_degrade_cleanly() {
-        assert_eq!(BarStyle::ALL.len(), 6);
+        assert_eq!(BarStyle::ALL.len(), 7);
+        assert_eq!(BarStyle::from_key("cells"), Some(BarStyle::Cells));
+        assert_eq!(BarStyle::from_key("segments"), Some(BarStyle::Cells));
+        assert_eq!(BarStyle::Cells.as_key(), "cells");
         assert_eq!(
             BarStyle::from_key("parallelogram"),
             Some(BarStyle::Parallelogram)
@@ -473,9 +583,42 @@ mod tests {
         base_doc.color_depth = crate::config::ColorDepth::TrueColor;
         let tc_cfg = EffectiveConfig::from_doc(&base_doc, None, &BTreeMap::new(), false);
 
+        // Cap-height segmented `cells` (`❚`) lights filled cells in active color and empty cells
+        // in `SurfaceHi` (falling back to `Muted` on light `terminal` so empty cells stay visible).
+        let cat_doc = ConfigDoc {
+            color_depth: crate::config::ColorDepth::TrueColor,
+            bar_gradient: false,
+            ..ConfigDoc::default()
+        };
+        let cat_cfg = EffectiveConfig::from_doc(&cat_doc, None, &BTreeMap::new(), false);
+        let cell_spans =
+            render_usage_bar(50.0, 10, ColorToken::Ok.into(), &cat_cfg, BarStyle::Cells);
+        assert_eq!(cell_spans.len(), 2);
+        assert_eq!(cell_spans[0].text, "❚❚❚❚❚");
+        assert_eq!(cell_spans[0].color, ColorSpec::Token(ColorToken::Ok));
+        assert_eq!(cell_spans[1].text, "❚❚❚❚❚");
+        assert_eq!(cell_spans[1].color, ColorSpec::Token(ColorToken::SurfaceHi));
+        assert_eq!(str_display_width("❚❚❚❚❚❚❚❚❚❚"), 10);
+
+        let mut light_term_doc = ConfigDoc::cometix_base();
+        light_term_doc.theme = crate::config::ThemeSetting::Light;
+        light_term_doc.color_depth = crate::config::ColorDepth::TrueColor;
+        let light_term_cfg =
+            EffectiveConfig::from_doc(&light_term_doc, None, &BTreeMap::new(), false);
+        let light_cells = render_usage_bar(
+            50.0,
+            10,
+            ColorToken::Ok.into(),
+            &light_term_cfg,
+            BarStyle::Cells,
+        );
+        assert_eq!(light_cells[1].color, ColorSpec::Token(ColorToken::Muted));
+
         // Worked examples for parallelogram (whole-cell ▰/▱) and braille (half-cell ⣿/⣤/⣀).
+        // Positive usage (<5%) lights at least 1 cell so low-percent 1M contexts stay visible.
         let para_expected = [
             (0.0, "▱▱▱▱▱▱▱▱▱▱"),
+            (2.9, "▰▱▱▱▱▱▱▱▱▱"),
             (50.0, "▰▰▰▰▰▱▱▱▱▱"),
             (100.0, "▰▰▰▰▰▰▰▰▰▰"),
         ];
@@ -494,6 +637,7 @@ mod tests {
 
         let braille_expected = [
             (0.0, "⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀"),
+            (1.0, "⣤⣀⣀⣀⣀⣀⣀⣀⣀⣀"),
             (5.0, "⣤⣀⣀⣀⣀⣀⣀⣀⣀⣀"),
             (35.3, "⣿⣿⣿⣤⣀⣀⣀⣀⣀⣀"),
             (100.0, "⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿"),
@@ -610,7 +754,8 @@ mod tests {
             "TrueColor gradient should emit interpolated steps"
         );
 
-        // Monotonic red channel across filled RGB spans from 166 -> 243.
+        // Multi-stop gradient across Ok (Green) -> Warn (Yellow) -> High (Peach) -> Crit (Red):
+        // green channel falls monotonically from 227 -> 139 and mid-bar hits warm yellow/peach.
         let filled_rgbs: Vec<(u8, u8, u8)> = spans[..spans.len() - 1]
             .iter()
             .map(|s| match s.color {
@@ -620,14 +765,32 @@ mod tests {
             .collect();
         for pair in filled_rgbs.windows(2) {
             assert!(
-                pair[0].0 <= pair[1].0,
-                "red must rise monotonically: {pair:?}"
-            );
-            assert!(
                 pair[0].1 >= pair[1].1,
-                "green must fall monotonically: {pair:?}"
+                "green must fall monotonically across Ok->Warn->High->Crit: {pair:?}"
             );
         }
+        assert!(
+            filled_rgbs.iter().any(|&(r, g, _)| r >= 240 && g >= 210),
+            "mid-bar must pass through warm yellow rather than muddy brown: {filled_rgbs:?}"
+        );
+
+        // Mid-range Ok usage (48%) already gradients from Green toward Yellow across the bar width.
+        let mid_spans = render_usage_bar(
+            48.0,
+            10,
+            ColorToken::Ok.into(),
+            &tc_cfg,
+            BarStyle::Parallelogram,
+        );
+        assert!(
+            mid_spans.len() > 3,
+            "48% Ok bar must emit multi-stop gradient spans: {mid_spans:?}"
+        );
+        assert_eq!(mid_spans[0].color, ColorSpec::Rgb(166, 227, 161));
+        assert_ne!(
+            mid_spans[mid_spans.len() - 2].color,
+            ColorSpec::Rgb(166, 227, 161)
+        );
 
         // Live ANSI and shared Ratatui preview agree on exact RGB start/end colors.
         let frame = RenderedFrame {

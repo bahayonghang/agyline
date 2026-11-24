@@ -75,7 +75,7 @@ fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         concat!(
-            "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} \x1b[0;38;2;127;132;156m\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
+            "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} \x1b[0;38;2;69;71;90m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
             "  \x1b[0m\x1b[0;38;2;127;132;156m\u{25cb} idle\x1b[0m\n",
         )
     );
@@ -255,7 +255,7 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     assert!(!text.contains(";48;2;"));
     assert_eq!(
         text,
-        "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;124;127;147m\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
+        "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;188;192;204m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
     );
 }
 
@@ -367,7 +367,7 @@ fn cli_config_subcommand_prints_effective_settings_and_path() {
         "item_style",
         "minimal",
         "bar_style",
-        "parallelogram",
+        "cells",
         "bar_gradient",
         "true",
         "separator",
@@ -502,7 +502,10 @@ fn cli_set_subcommand_lists_updates_atomically_and_validates() {
         ),
         ("theme", &["auto", "dark", "light"][..]),
         ("style", &["minimal", "badge", "pill"][..]),
-        ("bar", &["line", "parallelogram", "braille", "ascii"][..]),
+        (
+            "bar",
+            &["cells", "line", "parallelogram", "braille", "ascii"][..],
+        ),
         ("bar-gradient", &["true", "false"][..]),
         ("sep", &["pipe", "dashed", "dot", "square", "none"][..]),
         ("compact-at", &["0", "500"][..]),
@@ -679,12 +682,18 @@ fn cli_set_subcommand_lists_updates_atomically_and_validates() {
 // best-effort without affecting stdout/stderr/exit-0; when unset or != "1", zero debug I/O runs.
 #[test]
 fn pipe_agyline_debug_captures_raw_payload_only_when_one_and_never_fails_render() {
-    let payload = br#"{"model":{"display_name":"Claude Opus 4.6"},"cwd":"/tmp/demo"}"#;
+    // Omit `cwd` so the default line's `git` slot does not spawn an async `__refresh-git` worker
+    // that could race with the zero-directory assertion below.
+    let payload = br#"{"model":{"display_name":"Claude Opus 4.6"}}"#;
 
     // 1. Unset and non-"1" values produce zero debug files and do not create AGYLINE_HOME.
+    let run_stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
     for val in [None, Some("0"), Some("false"), Some("true"), Some("2")] {
         let home = std::env::temp_dir().join(format!(
-            "agyline_debug_off_{}_{}",
+            "agyline_debug_off_{}_{run_stamp}_{}",
             std::process::id(),
             SANDBOX_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));

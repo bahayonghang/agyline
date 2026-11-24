@@ -408,7 +408,7 @@ pub struct ItemSlot {
     pub show_used: Option<bool>,
     /// Context / Quota / QuotaGroup: display proportional `Usage Bar`.
     pub show_bar: Option<bool>,
-    /// `Usage Bar` style (`line`, `parallelogram`, `braille`, `solid`, `block`, `ascii`).
+    /// `Usage Bar` style (`cells`, `line`, `parallelogram`, `braille`, `solid`, `block`, `ascii`).
     pub bar_style: Option<String>,
     /// `Usage Bar` column width (`4..=20`, default `10`).
     pub bar_width: Option<u8>,
@@ -1213,7 +1213,7 @@ fn parse_config_overlay_with_home(
             "bar_style" => match val.as_str().and_then(BarStyle::from_key) {
                 Some(bs) => doc.bar_style = bs,
                 None => warnings.push(
-                    "invalid 'bar_style': expected line, parallelogram, braille, solid, block, or ascii"
+                    "invalid 'bar_style': expected cells, line, parallelogram, braille, solid, block, or ascii"
                         .to_string(),
                 ),
             },
@@ -1682,7 +1682,7 @@ fn parse_item_slot(val: &toml::Value, warnings: &mut Vec<String>) -> Option<Item
                             slot.bar_style = Some(bs.as_key().to_string());
                         } else {
                             warnings.push(format!(
-                                "invalid '{id_str}.bar_style': expected line, parallelogram, braille, solid, block, or ascii"
+                                "invalid '{id_str}.bar_style': expected cells, line, parallelogram, braille, solid, block, or ascii"
                             ));
                         }
                     }

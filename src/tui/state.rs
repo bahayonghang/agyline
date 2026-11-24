@@ -1332,7 +1332,7 @@ impl ConfiguratorApp {
                 } else {
                     if let Some(ref mut st) = self.text_edit {
                         st.error = Some(
-                            "Expected bar_style: line, parallelogram, braille, solid, block, or ascii"
+                            "Expected bar_style: cells, line, parallelogram, braille, solid, block, or ascii"
                                 .to_string(),
                         );
                     }

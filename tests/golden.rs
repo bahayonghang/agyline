@@ -753,7 +753,7 @@ fn agybar_default_two_row_and_showcase_scenarios_golden() {
         "wide default must render 2 rows: {wide_plain:?}"
     );
     assert!(wide_rows[0].contains("✦ Claude Opus 4.6 [high]"));
-    assert!(wide_rows[0].contains('▰') && wide_rows[0].contains('▱'));
+    assert!(wide_rows[0].contains('❚'));
     assert!(wide_rows[0].contains("48.0% (96k/200k)"));
     assert!(wide_rows[0].contains("↑48k ↓12k"));
     assert!(wide_rows[0].contains("⚡ 7d:64%(3d) · 5h:82%(2h15m)"));

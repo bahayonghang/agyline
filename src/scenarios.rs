@@ -525,7 +525,7 @@ fn build_scenarios() -> Vec<Scenario> {
     let sc_wide = Scenario {
         name: "showcase_wide",
         label: "showcase_wide (Catppuccin Wide)",
-        description: "Wide two-row Catppuccin Default Line with gradient parallelogram bar, inline quotas, and middle-ellipsized home path.",
+        description: "Wide two-row Catppuccin Default Line with full-height segmented gradient bar, inline quotas, and middle-ellipsized home path.",
         default_width: 120,
         frame: FrameData {
             payload: p_wide,

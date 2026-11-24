@@ -481,6 +481,10 @@ fn print_set_key_options(key: SetKey, home_dir: &Path, stdout: &mut dyn Write) {
         }
         SetKey::Bar => {
             let _ = writeln!(stdout, "Valid Usage Bar styles (agyline set bar <value>):");
+            let _ = writeln!(
+                stdout,
+                "  cells          ❚ cap-height segmented bars (alias: segments)"
+            );
             let _ = writeln!(stdout, "  line           ━╸─ half-cell line");
             let _ = writeln!(stdout, "  parallelogram  ▰▱ slanted blocks (alias: blocks)");
             let _ = writeln!(stdout, "  braille        ⣿⣤⣀ half-cell braille");
@@ -573,7 +577,7 @@ fn validate_set_value(
             .map(ValidatedSetValue::Bar)
             .ok_or_else(|| {
                 format!(
-                    "invalid bar '{raw_val}'; expected one of: line, parallelogram (blocks), braille, solid, block, ascii"
+                    "invalid bar '{raw_val}'; expected one of: cells (segments), line, parallelogram (blocks), braille, solid, block, ascii"
                 )
             }),
         SetKey::BarGradient => parse_cli_bool(raw_val)
@@ -845,6 +849,23 @@ fn execute_showcase(opts: &PreviewOptions, env: &RenderEnv<'_>, streams: &mut Cl
         doc.item_style = style;
         emit_section(
             &format!("Container Style: {}", style.as_key()),
+            &doc,
+            &frame_wide,
+            sc_wide.default_width,
+        );
+    }
+
+    for bar_style in [
+        BarStyle::Parallelogram,
+        BarStyle::Solid,
+        BarStyle::Block,
+        BarStyle::Braille,
+        BarStyle::Line,
+    ] {
+        let mut doc = base_doc.clone();
+        doc.bar_style = bar_style;
+        emit_section(
+            &format!("Bar Style: {}", bar_style.as_key()),
             &doc,
             &frame_wide,
             sc_wide.default_width,
@@ -1322,7 +1343,7 @@ Keys:
   palette                 Built-in or custom palette name
   theme                   auto, dark, or light
   style                   Container Style: minimal, badge, or pill
-  bar                     Usage Bar style: line, parallelogram (blocks), braille, solid, block, ascii
+  bar                     Usage Bar style: cells (segments), line, parallelogram (blocks), braille, solid, block, ascii
   bar-gradient            Per-cell Usage Bar gradient: true/false (on/off, 1/0)
   sep                     Separator preset (pipe, dashed, dot, square, none) or custom string
   compact-at              Compact Threshold in columns (0..=500; 0 disables auto-collapse)

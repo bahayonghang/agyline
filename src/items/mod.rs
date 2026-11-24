@@ -89,7 +89,7 @@ const CONTEXT_OPTS: [ItemOptionSpec; 5] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
+        summary: "Usage Bar style: cells, line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -203,7 +203,7 @@ const QUOTA_OPTS: [ItemOptionSpec; 8] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
+        summary: "Usage Bar style: cells, line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",
@@ -267,7 +267,7 @@ const QUOTA_GROUP_OPTS: [ItemOptionSpec; 9] = [
     ItemOptionSpec {
         key: "bar_style",
         kind: ItemOptionKind::Text,
-        summary: "Usage Bar style: line, parallelogram, braille, solid, block, or ascii",
+        summary: "Usage Bar style: cells, line, parallelogram, braille, solid, block, or ascii",
     },
     ItemOptionSpec {
         key: "bar_width",

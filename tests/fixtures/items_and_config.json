@@ -137,8 +137,8 @@
       "payload": {
         "session_id": ""
       },
-      "expected_plain": "  ✦ Model │ ▱▱▱▱▱▱▱▱▱▱ 0.0% ! config\n  ○ idle\n",
-      "expected_ansi": "  \u001b[0m\u001b[0;1;38;2;203;166;247m✦ Model\u001b[0;38;2;108;112;134m │ \u001b[0;38;2;127;132;156m▱▱▱▱▱▱▱▱▱▱\u001b[0;38;2;166;227;161m 0.0%\u001b[0;38;2;243;139;168m ! config\u001b[0m\n  \u001b[0m\u001b[0;38;2;127;132;156m○ idle\u001b[0m\n"
+      "expected_plain": "  ✦ Model │ ❚❚❚❚❚❚❚❚❚❚ 0.0% ! config\n  ○ idle\n",
+      "expected_ansi": "  \u001b[0m\u001b[0;1;38;2;203;166;247m✦ Model\u001b[0;38;2;108;112;134m │ \u001b[0;38;2;69;71;90m❚❚❚❚❚❚❚❚❚❚\u001b[0;38;2;166;227;161m 0.0%\u001b[0;38;2;243;139;168m ! config\u001b[0m\n  \u001b[0m\u001b[0;38;2;127;132;156m○ idle\u001b[0m\n"
     },
     {
       "id": "IC11_narrowing_stage1_compact",

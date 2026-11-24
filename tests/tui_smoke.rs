@@ -1214,23 +1214,26 @@ fn style_tab_v03_palettes_container_style_bars_gradient_separator_and_roundtrip(
     app.handle_event(press(KeyCode::Down)); // ItemStyle (4)
     app.handle_event(press(KeyCode::Left)); // pill -> badge
 
-    // Navigate to BarStyle (5): cycle through all 6 BarStyle::ALL variants.
+    // Navigate to BarStyle (5): cycle through all 7 BarStyle::ALL variants.
     app.handle_event(press(KeyCode::Down)); // BarStyle (5)
-    assert_eq!(app.doc().bar_style, BarStyle::Parallelogram);
+    assert_eq!(app.doc().bar_style, BarStyle::Cells);
     let mut seen_bars = vec![app.doc().bar_style];
-    for _ in 0..5 {
+    for _ in 0..6 {
         app.handle_event(press(KeyCode::Right));
         seen_bars.push(app.doc().bar_style);
     }
-    assert_eq!(seen_bars.len(), 6);
+    assert_eq!(seen_bars.len(), 7);
+    assert!(seen_bars.contains(&BarStyle::Cells));
     assert!(seen_bars.contains(&BarStyle::Parallelogram));
     assert!(seen_bars.contains(&BarStyle::Braille));
     assert!(seen_bars.contains(&BarStyle::Line));
     assert!(seen_bars.contains(&BarStyle::Solid));
     assert!(seen_bars.contains(&BarStyle::Block));
     assert!(seen_bars.contains(&BarStyle::Ascii));
-    app.handle_event(press(KeyCode::Right)); // wrap back to Parallelogram
-    app.handle_event(press(KeyCode::Right)); // Braille
+    app.handle_event(press(KeyCode::Right)); // wrap back to Cells
+    assert_eq!(app.doc().bar_style, BarStyle::Cells);
+    app.handle_event(press(KeyCode::Left)); // Ascii
+    app.handle_event(press(KeyCode::Left)); // Braille
     assert_eq!(app.doc().bar_style, BarStyle::Braille);
 
     // Navigate to BarGradient (6): check per-cell RGB gradient vs flat toggle.
@@ -1577,7 +1580,7 @@ fn preset_switching_default_and_hud_updates_dynamic_height_and_scopes() {
     // Starts on 2-row default preset.
     assert_eq!(app.doc().preset, "default");
     assert_eq!(app.preview_box_height(), 5);
-    assert_eq!(app.doc().bar_style, BarStyle::Parallelogram);
+    assert_eq!(app.doc().bar_style, BarStyle::Cells);
     assert!(app.doc().bar_gradient);
     assert_eq!(app.doc().compact_at, DEFAULT_COMPACT_AT);
 
@@ -1600,7 +1603,7 @@ fn preset_switching_default_and_hud_updates_dynamic_height_and_scopes() {
     app.handle_event(press(KeyCode::Right)); // Layout -> Style
     app.handle_event(press(KeyCode::Enter));
     assert_eq!(app.doc().palette, "catppuccin");
-    assert_eq!(app.doc().bar_style, BarStyle::Parallelogram);
+    assert_eq!(app.doc().bar_style, BarStyle::Cells);
     assert!(app.doc().bar_gradient);
     assert_eq!(app.doc().lines.len(), 3);
     assert_eq!(app.doc().compact_at, 0);
@@ -1666,8 +1669,8 @@ fn inspector_v03_slot_options_live_preview_toml_drawer_and_80x22_scroll() {
     app.handle_event(press(KeyCode::Right)); // default -> agybar
     assert_eq!(app.doc().lines[0][0].style.as_deref(), Some("agybar"));
 
-    // 2. Context (Row 1 #1): BarStyle cycles from global parallelogram -> braille, Label empty hides
-    // "ctx " while Delete restores default "ctx", ShowTokens toggles (used/window).
+    // 2. Context (Row 1 #1): BarStyle cycles from global cells -> line -> solid -> block, Label
+    // empty hides "ctx " while Delete restores default "ctx", ShowTokens toggles (used/window).
     app.handle_event(press(KeyCode::Tab)); // ActiveRows
     app.handle_event(press(KeyCode::Down)); // context
     app.handle_event(press(KeyCode::Tab)); // Catalog
@@ -1676,11 +1679,12 @@ fn inspector_v03_slot_options_live_preview_toml_drawer_and_80x22_scroll() {
     for _ in 0..7 {
         app.handle_event(press(KeyCode::Down)); // bar_style (7)
     }
-    app.handle_event(press(KeyCode::Right)); // inherits parallelogram -> overrides to braille
-    assert_eq!(app.doc().lines[0][1].bar_style.as_deref(), Some("braille"));
-    app.handle_event(press(KeyCode::Right)); // braille -> ascii
-    app.handle_event(press(KeyCode::Right)); // ascii -> line (must stay Some("line"), NOT None!)
+    app.handle_event(press(KeyCode::Right)); // inherits cells -> overrides to line (must stay Some("line"), NOT None!)
     assert_eq!(app.doc().lines[0][1].bar_style.as_deref(), Some("line"));
+    app.handle_event(press(KeyCode::Right)); // line -> solid
+    assert_eq!(app.doc().lines[0][1].bar_style.as_deref(), Some("solid"));
+    app.handle_event(press(KeyCode::Right)); // solid -> block
+    assert_eq!(app.doc().lines[0][1].bar_style.as_deref(), Some("block"));
 
     app.handle_event(press(KeyCode::Down)); // bar_width (8)
     app.handle_event(press(KeyCode::Down)); // label (9)
@@ -1779,7 +1783,7 @@ fn inspector_v03_slot_options_live_preview_toml_drawer_and_80x22_scroll() {
     // Open TOML drawer ('t') and verify edits reflect immediately in live TOML + preview!
     app.handle_event(press(KeyCode::Char('t')));
     let toml_out = serialize_config_doc(app.doc());
-    assert!(toml_out.contains("bar_style = \"line\""));
+    assert!(toml_out.contains("bar_style = \"block\""));
     assert!(toml_out.contains("style = \"branch\""));
     assert!(toml_out.contains("style = \"dot\""));
     assert!(toml_out.contains("style = \"arrows\""));

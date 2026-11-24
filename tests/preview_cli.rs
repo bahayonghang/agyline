@@ -436,6 +436,11 @@ fn preview_showcase_renders_gallery_statelessly_and_honors_plain_and_width() {
         "mono",
         "badge",
         "pill",
+        "Bar Style: parallelogram",
+        "Bar Style: solid",
+        "Bar Style: block",
+        "Bar Style: braille",
+        "Bar Style: line",
         "pipe",
         "dashed",
         "dot",
@@ -596,7 +601,7 @@ fn hud_default_preset_renders_three_rows_and_collapses_on_single_line() {
         2,
         "Default preset must emit 2 rows: {def_txt:?}"
     );
-    assert!(def_lines[0].contains("✦ Claude Opus 4.6 [high]") && def_lines[0].contains('▰'));
+    assert!(def_lines[0].contains("✦ Claude Opus 4.6 [high]") && def_lines[0].contains('❚'));
     assert!(def_lines[1].contains("● working") && def_lines[1].contains("⎇ main*"));
 
     // 2. Explicit `hud` preset preserves the 3-row HUD layout and single-line collapse.

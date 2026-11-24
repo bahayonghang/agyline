@@ -21,7 +21,7 @@ pub struct PresetInfo {
 const BUILTIN_PRESETS: [PresetInfo; 7] = [
     PresetInfo {
         name: "default",
-        summary: "2-row Catppuccin gradient layout with parallelogram bars, inline quotas, and auto-compact",
+        summary: "2-row Catppuccin gradient layout with full-height segmented bars, inline quotas, and auto-compact",
     },
     PresetInfo {
         name: "hud",
@@ -111,7 +111,7 @@ pub fn default_preset_doc() -> ConfigDoc {
     let mut doc = ConfigDoc::cometix_base();
     doc.preset = "default".to_string();
     doc.palette = "catppuccin".to_string();
-    doc.bar_style = BarStyle::Parallelogram;
+    doc.bar_style = BarStyle::Cells;
     doc.bar_gradient = true;
     doc.item_style = ItemStyle::Minimal;
     doc.separator = " │ ".to_string();

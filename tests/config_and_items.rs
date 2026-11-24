@@ -371,7 +371,7 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     assert_eq!(
         out.plain,
         concat!(
-            "  \u{2726} Model \u{2502} \u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1}\u{25b1} 0.0% ! config\n",
+            "  \u{2726} Model \u{2502} \u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a} 0.0% ! config\n",
             "  \u{25cb} idle\n",
         )
     );
@@ -1845,7 +1845,7 @@ fn top_level_bar_style_bar_gradient_and_context_show_tokens_parse_roundtrip_and_
     use agyline::BarStyle;
 
     let def = ConfigDoc::default();
-    assert_eq!(def.bar_style, BarStyle::Parallelogram);
+    assert_eq!(def.bar_style, BarStyle::Cells);
     assert!(def.bar_gradient);
     let hud = agyline::build_preset_doc("hud", None).expect("hud preset");
     assert_eq!(hud.bar_style, BarStyle::Line);
@@ -1891,7 +1891,7 @@ items = [{ id = "context", show_tokens = "nope" }]
 "#,
     )
     .expect("tolerant parse");
-    assert_eq!(bad_doc.bar_style, BarStyle::Parallelogram);
+    assert_eq!(bad_doc.bar_style, BarStyle::Cells);
     assert!(bad_doc.bar_gradient);
     assert_eq!(bad_doc.lines[0][0].show_tokens, None);
     assert!(bad_warnings.len() >= 3, "warnings: {bad_warnings:?}");
@@ -2144,7 +2144,7 @@ fn payload_parses_ai_credits_leniently_and_new_item_variants_roundtrip_and_rende
     let def = ConfigDoc::default();
     assert_eq!(def.preset, "default");
     assert_eq!(def.palette, "catppuccin");
-    assert_eq!(def.bar_style, BarStyle::Parallelogram);
+    assert_eq!(def.bar_style, BarStyle::Cells);
     assert!(def.bar_gradient);
     assert_eq!(def.item_style, ItemStyle::Minimal);
     assert_eq!(def.separator, " │ ");
@@ -2409,4 +2409,61 @@ fn payload_parses_ai_credits_leniently_and_new_item_variants_roundtrip_and_rende
         narrow_q.thresholds.quota_crit < narrow_q.thresholds.quota_high
             && narrow_q.thresholds.quota_high < narrow_q.thresholds.quota_warn
     );
+
+    // Orchestrator codenames (Neon, Hydrogen, etc.) belong to Gemini quota, avoiding cross-family
+    // `7d: · 7d:` collisions; unknown third-party models disambiguate colliding periods cleanly.
+    let mut orch_frame = frame.clone();
+    orch_frame.payload.model_id = "orchestrator-neon".to_string();
+    orch_frame.payload.model_display_name = "Orchestrator (Neon)".to_string();
+    orch_frame.payload.quota_buckets = vec![
+        QuotaBucketData {
+            name: "3p-weekly".to_string(),
+            disabled: false,
+            remaining_fraction: Some(0.63),
+            remaining_amount: None,
+            reset_in_seconds: Some(16 * 3600 + 9 * 60),
+            reset_time: None,
+        },
+        QuotaBucketData {
+            name: "gemini-weekly".to_string(),
+            disabled: false,
+            remaining_fraction: Some(0.85),
+            remaining_amount: None,
+            reset_in_seconds: Some(6 * 86_400 + 12 * 3600),
+            reset_time: None,
+        },
+        QuotaBucketData {
+            name: "gemini-5h".to_string(),
+            disabled: false,
+            remaining_fraction: Some(0.92),
+            remaining_amount: None,
+            reset_in_seconds: Some(3 * 3600 + 40 * 60),
+            reset_time: None,
+        },
+    ];
+    let orch_ev = evaluate_slot_dual(&q_slot, &orch_frame, &cfg).expect("orchestrator neon quota");
+    let orch_txt: String = orch_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(orch_txt, "⚡ 7d:85%(6d12h) · 5h:92%(3h40m)");
+    assert_eq!(
+        orch_ev.full_spans[0].color,
+        ColorToken::High.into(),
+        "⚡ icon defaults to warm High/Peach when quota is healthy"
+    );
+    assert_eq!(
+        orch_ev.full_spans[1].color,
+        ColorToken::Muted.into(),
+        "period label (`7d:`) uses muted foreground"
+    );
+    assert_eq!(
+        orch_ev.full_spans[2].color,
+        ColorToken::Ok.into(),
+        "healthy percentage (`85%`) uses Ok color"
+    );
+
+    let mut unk_frame = orch_frame.clone();
+    unk_frame.payload.model_id = "custom-local-model".to_string();
+    unk_frame.payload.model_display_name = "Custom Local".to_string();
+    let unk_ev = evaluate_slot_dual(&q_slot, &unk_frame, &cfg).expect("unknown model fallback");
+    let unk_txt: String = unk_ev.full_spans.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(unk_txt, "⚡ 3p-7d:63%(16h9m) · g-7d:85%(6d12h)");
 }
