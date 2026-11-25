@@ -22,9 +22,9 @@
 
 ## 核心特性
 
-- **双极性 Catppuccin 与 Monochrome 调色板**：内置 `palette = "catppuccin"` 在深色主题下自动切换为 **Catppuccin Mocha**、在浅色主题下自动切换为 **Catppuccin Latte**，覆盖 15 个语义颜色槽（含 `ok` / `warn` / `high` / `crit` 四级紧迫度与 `surface` / `surface_hi` 容器底色）。另提供双极性 `mono`、`terminal`、7 套固定极性 RGB 调色板，以及自定义 `~/.gemini/agyline/palettes/*.toml`。
+- **双极性 Catppuccin 与 Monochrome 调色板**：内置 `palette = "catppuccin"` 在深色主题下自动切换为 **Catppuccin Mocha**、在浅色主题下自动切换为 **Catppuccin Latte**，覆盖 15 个语义颜色槽（含 `ok` / `warn` / `high` / `crit` 四级紧迫度与 `surface` / `surface_hi` 容器底色）；`theme = "auto"` 优先读取 `COLORFGBG`，缺失时无子进程探测系统浅/深色主题（Windows `AppsUseLightTheme`）。另提供双极性 `mono`、`terminal`、7 套固定极性 RGB 调色板，以及自定义 `~/.gemini/agyline/palettes/*.toml`。
 - **智能色深自动探测**：`color_depth = "auto"` 优先遵守 `NO_COLOR` 与 `TERM=dumb`，在 macOS `Apple_Terminal` 上自动降级至 256 色，并在回退到泛用 `*256color` 前优先识别现代 TrueColor 终端（`iTerm2`、`WezTerm`、`Ghostty`、`Kitty`、`Alacritty`、`VS Code`、`Windows Terminal`、`Warp`、`Hyper`、`Tabby`、`Rio`）。
-- **逐格渐变 `Usage Bar` 与 `/compact` 告警**：支持与数字等高的独立竖块 `cells`（`❚`，别名 `segments`，默认）、斜方块 `parallelogram`（`▰▱`，别名 `blocks`）、盲文 `braille`（`⣿⣤⣀`）、纯前景细轨 `line`（`━╸─`）、`solid`、`block` 与 `ascii` 样式；开启 `bar_gradient = true` 后沿进度条全宽执行 4 停点轻量 RGB 线性渐变（绿→黄→橙→红），并在 256 色 / 16 色 / ASCII 下无损降级且严格保持列宽。`context` 进度条支持显示 `(used/window)` token 比值，在达到 `context_crit`（默认 `90%`）时自动追加加粗 **`→ /compact`** 告警。
+- **全条渐变刻度 `Usage Bar` 与 `/compact` 告警**：支持与数字等高的粗/细独立竖块 `cells`（`❚❘`，别名 `segments`，默认）、斜方块 `parallelogram`（`▰▱`，别名 `blocks`）、盲文 `braille`（`⣿⣤⣀`）、纯前景细轨 `line`（`━╸─`）、`solid`、`block` 与 `ascii` 样式；开启 `bar_gradient = true` 后沿进度条全宽执行 4 停点轻量 RGB 线性渐变（绿→黄→橙→红），已填格呈高饱和实心色，未填刻度同步呈现按明暗极性柔化的同色系刻度（低占比也能一眼看到彩色全条且分清进度），并在 256 色 / 16 色 / ASCII 下无损降级且严格保持列宽。`context` 进度条支持显示 `(used/window)` token 比值，在达到 `context_crit`（默认 `90%`）时自动追加加粗 **`→ /compact`** 告警。
 - **行级 `Container Style` 与语义分隔符别名**：支持在无框分隔 `minimal`、通用着色色块 `badge`（无需 Nerd Font）与圆角 Powerline 胶囊 `pill`（`\u{e0b6}` / `\u{e0b4}`）间切换，按终端能力自动降级（非 Nerd 字体时 `pill` → `badge`，低于 256 色时退回 `minimal`）；`separator` 支持语义预设（`pipe`、`dashed`、`dot`、`square`、`none`）及任意自定义文本。
 - **窄屏 `Compact Threshold` 自动折叠**：当终端宽度低于 `compact_at`（默认 `88` 列，`0` 为关闭）时，多行布局先自动折叠为单行紧凑展示，再由 `overflow = "fit"` 执行优先级压缩，确保分屏窄窗口零折行。
 - **精致 2 行新 `Default Line` + 完整历史预设兼容**：
@@ -159,7 +159,7 @@ glyphs = "nerd"               # nerd | unicode | ascii
 color_depth = "auto"          # auto | truecolor | 256 | 16 | none
 item_style = "minimal"        # minimal | badge | pill
 bar_style = "cells"           # cells | parallelogram | braille | line | solid | block | ascii
-bar_gradient = true           # 启用进度条逐格 RGB 线性渐变
+bar_gradient = true           # 启用进度条全宽 4 停点彩色渐变（含柔化空槽刻度）
 separator = " │ "             # 或语义别名：pipe | dashed | dot | square | none
 indent = "  "
 single_line = false
@@ -187,7 +187,7 @@ url = ""                      # 本机回环 URL；留空或 "off" 关闭
 | 变量 | 作用 |
 | --- | --- |
 | `AGYLINE_HOME` | 重定位 `config.toml`、自定义 `presets/`、`palettes/` 与 `state/`（不影响 `agy` 自身的对话数据库目录） |
-| `AGY_THEME` | 强制指定 `dark` 或 `light` 极性，覆盖 `config.toml`（`COLORFGBG` 仅在 `theme = "auto"` 时生效） |
+| `AGY_THEME` | 强制指定 `dark` 或 `light` 极性，覆盖 `config.toml`（`theme = "auto"` 时优先 `COLORFGBG`，其次探测系统浅/深色主题） |
 | `AGY_STATUSLINE_LINES` | 设为 `1` 强制单行输出，优先级高于 `compact_at` |
 | `AGY_STATUSLINE_INDENT` | 覆盖行首缩进 |
 | `AGY_SHOW_DEFAULT_MODE` | 设为 `1` 强制显示默认 ask 模式徽章 |

@@ -22,9 +22,9 @@
 
 ## Highlights
 
-- **Dual-polarity Catppuccin & Monochrome Palettes**: `palette = "catppuccin"` adapts automatically between **Catppuccin Mocha** (dark `Theme`) and **Catppuccin Latte** (light `Theme`) across 15 semantic tokens (including 4 urgency tiers `ok` / `warn` / `high` / `crit` and `surface` / `surface_hi` backgrounds). Includes dual-polarity `mono`, `terminal`, 7 fixed-polarity RGB palettes, and custom `~/.gemini/agyline/palettes/*.toml`.
+- **Dual-polarity Catppuccin & Monochrome Palettes**: `palette = "catppuccin"` adapts automatically between **Catppuccin Mocha** (dark `Theme`) and **Catppuccin Latte** (light `Theme`) across 15 semantic tokens (including 4 urgency tiers `ok` / `warn` / `high` / `crit` and `surface` / `surface_hi` backgrounds); `theme = "auto"` checks `COLORFGBG` first and then the host OS app theme (Windows `AppsUseLightTheme`, zero subprocesses). Includes dual-polarity `mono`, `terminal`, 7 fixed-polarity RGB palettes, and custom `~/.gemini/agyline/palettes/*.toml`.
 - **Smart Auto Color-Depth Detection**: `color_depth = "auto"` honors `NO_COLOR` and `TERM=dumb` first, downgrades macOS `Apple_Terminal` cleanly to 256-color, and promotes modern TrueColor terminals (`iTerm2`, `WezTerm`, `Ghostty`, `Kitty`, `Alacritty`, `VS Code`, `Windows Terminal`, `Warp`, `Hyper`, `Tabby`, `Rio`) ahead of generic `*256color` fallback.
-- **Per-Cell Gradient `Usage Bar`s & `/compact` Alert**: Supports cap-height segmented `cells` (`❚`, alias `segments`, default), slanted `parallelogram` (`▰▱`, alias `blocks`), `braille` (`⣿⣤⣀`), `line` (`━╸─`), `solid`, `block`, and `ascii` bars with allocation-light 4-tier RGB linear gradients (`bar_gradient = true`) degrading losslessly across 256-color, 16-color, and ASCII terminals. The `context` bar shows `(used/window)` counts and appends a bold **`→ /compact`** alert at or above `context_crit` (default `90%`).
+- **Full-Bar Gradient `Usage Bar`s & `/compact` Alert**: Supports cap-height segmented `cells` (`❚❘`, alias `segments`, default), slanted `parallelogram` (`▰▱`, alias `blocks`), `braille` (`⣿⣤⣀`), `line` (`━╸─`), `solid`, `block`, and `ascii` bars. With `bar_gradient = true`, filled cells render across a vibrant 4-tier RGB urgency ramp (green → yellow → peach → red) while unfilled scale ticks carry polarity-softened hues of the same ramp—keeping low-percentage bars colorful yet clearly legible—and degrade losslessly across 256-color, 16-color, and ASCII terminals. The `context` bar shows `(used/window)` counts and appends a bold **`→ /compact`** alert at or above `context_crit` (default `90%`).
 - **`Container Style` & Semantic Separators**: Switch row framing between separator-divided `minimal`, universal colored `badge` (no Nerd Font needed), and Powerline-capped `pill` (`\u{e0b6}` / `\u{e0b4}`), with automatic capability degradation (`pill` → `badge` on non-Nerd glyphs; `badge`/`pill` → `minimal` below 256 colors) and semantic `separator` aliases (`pipe`, `dashed`, `dot`, `square`, `none`, or custom text).
 - **Responsive `Compact Threshold` Collapse**: Multi-row layouts automatically collapse into a single compact row below `compact_at` (default `88` columns; `0` disables) before `overflow = "fit"` priority narrowing runs—keeping narrow split panes wrap-free.
 - **Focused 2-Row `Default Line` + Preserved Presets**:
@@ -159,7 +159,7 @@ glyphs = "nerd"               # nerd | unicode | ascii
 color_depth = "auto"          # auto | truecolor | 256 | 16 | none
 item_style = "minimal"        # minimal | badge | pill
 bar_style = "cells"           # cells | parallelogram | braille | line | solid | block | ascii
-bar_gradient = true           # per-cell RGB linear gradient across filled cells
+bar_gradient = true           # full-bar 4-tier RGB gradient across filled & empty scale ticks
 separator = " │ "             # or semantic preset: pipe | dashed | dot | square | none
 indent = "  "
 single_line = false
@@ -187,7 +187,7 @@ url = ""                      # loopback URL or empty/"off" to disable
 | Variable | Effect |
 | --- | --- |
 | `AGYLINE_HOME` | Relocates `config.toml`, custom `presets/`, `palettes/`, and `state/` (never relocates `agy`'s conversation DBs) |
-| `AGY_THEME` | Forces `dark` or `light` polarity over `config.toml` (`COLORFGBG` applies only when `theme = "auto"`) |
+| `AGY_THEME` | Forces `dark` or `light` polarity over `config.toml` (`COLORFGBG`, then OS light/dark theme, applies when `theme = "auto"`) |
 | `AGY_STATUSLINE_LINES` | `1` forces single-line output ahead of `compact_at` |
 | `AGY_STATUSLINE_INDENT` | Overrides row indent |
 | `AGY_SHOW_DEFAULT_MODE` | `1` forces printing the default ask mode pill |
