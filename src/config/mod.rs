@@ -1,7 +1,8 @@
 //! Config layer. `ConfigDoc` is the TOML document as written, round-trippable for the
 //! configurator; `EffectiveConfig` is that doc plus env overrides, resolved polarity, palette and
-//! color depth, ready to render. Explicit `AGY_*` vars beat config.toml, `COLORFGBG` applies only
-//! when `theme = "auto"`, and a broken file still renders the default line with a warning badge.
+//! color depth, ready to render. Explicit `AGY_*` vars beat config.toml, `COLORFGBG` (then OS
+//! light/dark preference) applies only when `theme = "auto"`, and a broken file still renders the
+//! default line with a warning badge.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -15,6 +16,27 @@ use crate::render::palette::{
 };
 
 pub mod presets;
+
+/// Internal snapshot key carrying the in-process OS app-theme probe from `RenderEnv::from_process`
+/// and `ConfiguratorEnv::from_process` into `EffectiveConfig::from_doc` without breaking pure
+/// unit tests that pass an empty `env_vars` map.
+pub const SYSTEM_THEME_HINT_KEY: &str = "__AGYLINE_OS_THEME";
+
+/// Records the host OS theme probe into an environment snapshot, clearing any stale/external value
+/// first so user env cannot accidentally spoof the internal fallback key.
+pub(crate) fn insert_system_theme_hint(
+    env_vars: &mut BTreeMap<String, String>,
+    polarity: Option<ThemePolarity>,
+) {
+    env_vars.remove(SYSTEM_THEME_HINT_KEY);
+    if let Some(p) = polarity {
+        let val = match p {
+            ThemePolarity::Light => "light",
+            ThemePolarity::Dark => "dark",
+        };
+        env_vars.insert(SYSTEM_THEME_HINT_KEY.to_string(), val.to_string());
+    }
+}
 
 /// `AGYLINE_HOME` relocates the whole config home (config.toml, presets, palettes, state); unset
 /// or blank falls back to `~/.gemini/agyline`. `lookup` is injected so tests and background
@@ -30,7 +52,8 @@ pub(crate) fn resolve_home_dir(
         .unwrap_or_else(|| user_home.join(".gemini").join("agyline"))
 }
 
-/// The `theme` key. `auto` defers to `COLORFGBG`; `dark` and `light` pin polarity and ignore it.
+/// The `theme` key. `auto` defers to `COLORFGBG`, then OS light/dark theme; `dark` and `light`
+/// pin polarity and ignore both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeSetting {
     Auto,
@@ -1954,8 +1977,8 @@ fn parse_env_bool(raw: &str) -> Option<bool> {
 }
 
 fn resolve_auto_polarity(env_vars: &BTreeMap<String, String>) -> ThemePolarity {
-    // Both reference scripts read the last ';'-separated COLORFGBG field: >= 7 means a light
-    // background. Non-numeric or absent stays dark, matching their default palette.
+    // Explicit terminal signal (`COLORFGBG`) beats the OS preference: the last ';'-separated
+    // numeric field >= 7 means a light background, < 7 means a dark background.
     if let Some(colorfgbg) = env_vars
         .get("COLORFGBG")
         .map(|s| s.trim())
@@ -1963,9 +1986,23 @@ fn resolve_auto_polarity(env_vars: &BTreeMap<String, String>) -> ThemePolarity {
         && let Some(bg_part) = colorfgbg.rsplit(';').next()
         && !bg_part.is_empty()
         && bg_part.bytes().all(|b| b.is_ascii_digit())
-        && bg_part.parse::<u32>().is_ok_and(|bg| bg >= 7)
+        && let Ok(bg) = bg_part.parse::<u32>()
     {
-        return ThemePolarity::Light;
+        return if bg >= 7 {
+            ThemePolarity::Light
+        } else {
+            ThemePolarity::Dark
+        };
+    }
+    // Next, honor the in-process OS app-theme probe (e.g. Windows AppsUseLightTheme) captured by
+    // `RenderEnv::from_process` / `ConfiguratorEnv::from_process`.
+    if let Some(os_theme) = env_vars.get(SYSTEM_THEME_HINT_KEY).map(|s| s.trim()) {
+        if os_theme.eq_ignore_ascii_case("light") {
+            return ThemePolarity::Light;
+        }
+        if os_theme.eq_ignore_ascii_case("dark") {
+            return ThemePolarity::Dark;
+        }
     }
     ThemePolarity::Dark
 }

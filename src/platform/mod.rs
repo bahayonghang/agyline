@@ -84,3 +84,8 @@ pub fn configure_background_command(cmd: &mut Command) {
 pub fn stdout_terminal_columns() -> Option<usize> {
     imp::stdout_terminal_columns()
 }
+
+/// Best-effort OS app-theme polarity without spawning a child process (`None` when unavailable).
+pub fn system_theme_polarity() -> Option<crate::config::ThemePolarity> {
+    imp::system_theme_polarity()
+}

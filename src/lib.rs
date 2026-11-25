@@ -12,8 +12,9 @@ pub use collect::{
 pub use config::{
     ActiveEnvOverride, ColorDepth, ConfigDoc, ConfigLoadResult, ConfigSyntaxError,
     DEFAULT_COMPACT_AT, EffectiveConfig, GlyphSet, ItemId, ItemSlot, ItemStyle, OverflowMode,
-    PaletteOverrides, PresetScope, ThemePolarity, ThemeSetting, ThresholdsConfig,
-    inspect_env_overrides, load_config_doc, parse_config_doc, parse_config_doc_with_home,
+    PaletteOverrides, PresetScope, SYSTEM_THEME_HINT_KEY, ThemePolarity, ThemeSetting,
+    ThresholdsConfig, inspect_env_overrides, load_config_doc, parse_config_doc,
+    parse_config_doc_with_home,
     presets::{PresetInfo, apply_preset, build_preset_doc, builtin_presets, discover_presets},
     resolve_separator, serialize_config_doc,
 };
@@ -28,7 +29,10 @@ pub use items::{
     EvaluatedItem, ItemCatalogEntry, ItemCategory, ItemOptionKind, ItemOptionSpec, catalog,
     evaluate_slot, evaluate_slot_dual,
 };
-pub use platform::{PlatformKind, create_file_symlink, host_platform, stdout_terminal_columns};
+pub use platform::{
+    PlatformKind, create_file_symlink, host_platform, stdout_terminal_columns,
+    system_theme_polarity,
+};
 pub use render::{
     Ansi16Color, BarStyle, ColorSpec, ColorToken, EffectiveColorDepth, PaletteInfo,
     PalettePolarity, RenderedFrame, ResolvedColor, ResolvedPalette, SlotOutcome, StyledItem,

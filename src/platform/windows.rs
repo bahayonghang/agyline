@@ -24,6 +24,10 @@ const STD_OUTPUT_HANDLE: u32 = (-11_i32) as u32;
 const INVALID_HANDLE_VALUE: isize = -1;
 const ERROR_ACCESS_DENIED: i32 = 5;
 const ERROR_SHARING_VIOLATION: i32 = 32;
+// Predefined Win32 registry root (`((HKEY)(ULONG_PTR)((LONG)0x80000001))`).
+const HKEY_CURRENT_USER: isize = 0x8000_0001_u32 as i32 as isize;
+const RRF_RT_REG_DWORD: u32 = 0x0000_0010;
+const ERROR_SUCCESS: i32 = 0;
 
 type Handle = *mut core::ffi::c_void;
 
@@ -108,6 +112,19 @@ unsafe extern "system" {
     fn GetConsoleScreenBufferInfo(
         h_console_output: Handle,
         lp_console_screen_buffer_info: *mut ConsoleScreenBufferInfo,
+    ) -> i32;
+}
+
+#[link(name = "advapi32")]
+unsafe extern "system" {
+    fn RegGetValueW(
+        hkey: Handle,
+        lp_sub_key: *const u16,
+        lp_value: *const u16,
+        dw_flags: u32,
+        pdw_type: *mut u32,
+        pv_data: *mut core::ffi::c_void,
+        pcb_data: *mut u32,
     ) -> i32;
 }
 
@@ -378,4 +395,55 @@ pub fn stdout_terminal_columns() -> Option<usize> {
         .ok()
         .and_then(|s| s.trim().parse::<usize>().ok())
         .filter(|&c| c > 0)
+}
+
+/// Queries `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`
+/// in-process via `RegGetValueW` (zero subprocess overhead) so `theme = "auto"` adapts to Windows
+/// light/dark mode when `COLORFGBG` is unset.
+pub fn system_theme_polarity() -> Option<crate::config::ThemePolarity> {
+    let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let value: Vec<u16> = "AppsUseLightTheme"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut data: u32 = 0;
+    let mut cb_data = core::mem::size_of::<u32>() as u32;
+    // SAFETY: `subkey` and `value` are NUL-terminated UTF-16 buffers valid for this call,
+    // `RRF_RT_REG_DWORD` restricts the returned type to a 4-byte DWORD, and `data` has size
+    // `cb_data` (4 bytes).
+    let rc = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER as Handle,
+            subkey.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_DWORD,
+            ptr::null_mut(),
+            (&raw mut data).cast(),
+            &raw mut cb_data,
+        )
+    };
+    if rc == ERROR_SUCCESS && cb_data == core::mem::size_of::<u32>() as u32 {
+        Some(if data != 0 {
+            crate::config::ThemePolarity::Light
+        } else {
+            crate::config::ThemePolarity::Dark
+        })
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::system_theme_polarity;
+
+    #[test]
+    fn windows_personalize_registry_probe_does_not_fail_unexpectedly() {
+        // Most interactive Windows sessions expose AppsUseLightTheme; ensure calling the Win32
+        // FFI succeeds cleanly without UB and yields a valid polarity when present.
+        let _ = system_theme_polarity();
+    }
 }

@@ -72,7 +72,8 @@ impl ConfiguratorEnv {
     /// The only constructor that reads the real process: one env snapshot feeds home resolution,
     /// the AGY_* badges and the Effective preview so they cannot disagree.
     pub fn from_process() -> Self {
-        let env_vars: BTreeMap<String, String> = std::env::vars().collect();
+        let mut env_vars: BTreeMap<String, String> = std::env::vars().collect();
+        crate::config::insert_system_theme_hint(&mut env_vars, platform::system_theme_polarity());
         let lookup = |k: &str| env_vars.get(k).cloned();
         let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
         let home_dir = crate::config::resolve_home_dir(&lookup, &user_home);

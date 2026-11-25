@@ -64,6 +64,7 @@ impl<'a> RenderEnv<'a> {
                 env_vars.insert(key.to_string(), val);
             }
         }
+        crate::config::insert_system_theme_hint(&mut env_vars, platform::system_theme_polarity());
         let lookup = |k: &str| env_vars.get(k).cloned();
         let user_home = platform::user_home_dir(&lookup).unwrap_or_else(|| PathBuf::from("."));
         let home_dir = crate::config::resolve_home_dir(&lookup, &user_home);

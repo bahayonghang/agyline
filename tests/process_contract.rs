@@ -10,7 +10,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use agyline::{CliStreams, MAX_STDIN_BYTES, run_cli};
+use agyline::{CliStreams, MAX_STDIN_BYTES, ThemePolarity, run_cli, system_theme_polarity};
 
 static SANDBOX_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -66,19 +66,41 @@ fn run_with_stdin(args: &[&str], stdin_bytes: &[u8]) -> Output {
     run_with_stdin_and_env(args, stdin_bytes, &[])
 }
 
-// Pre-session `{}` must still print the default line: stdout only, 0 B stderr, exit 0.
+// Pre-session `{}` must still print the default line: stdout only, 0 B stderr, exit 0, adapting
+// to COLORFGBG (and host OS light/dark theme when COLORFGBG is unset) with a full-bar scale.
 #[test]
 fn pipe_renders_pre_session_empty_object_with_zero_stderr_and_exit_zero() {
-    let output = run_with_stdin(&[], b"{}");
-    assert_eq!(output.status.code(), Some(0));
-    assert!(output.stderr.is_empty(), "stderr must be 0 B");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        concat!(
-            "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} \x1b[0;38;2;69;71;90m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
-            "  \x1b[0m\x1b[0;38;2;127;132;156m\u{25cb} idle\x1b[0m\n",
-        )
+    let expected_dark = concat!(
+        "  \x1b[0m\x1b[0;1;38;2;203;166;247m\u{2726} Model\x1b[0;38;2;108;112;134m \u{2502} ",
+        "\x1b[0;38;2;92;121;97m\u{2758}\x1b[0;38;2;101;121;98m\u{2758}\x1b[0;38;2;110;121;99m\u{2758}\x1b[0;38;2;119;121;101m\u{2758}\x1b[0;38;2;128;121;102m\u{2758}\x1b[0;38;2;132;116;99m\u{2758}\x1b[0;38;2;132;106;90m\u{2758}\x1b[0;38;2;132;96;86m\u{2758}\x1b[0;38;2;131;88;93m\u{2758}\x1b[0;38;2;129;79;100m\u{2758}",
+        "\x1b[0;38;2;166;227;161m 0.0%\x1b[0m\n",
+        "  \x1b[0m\x1b[0;38;2;127;132;156m\u{25cb} idle\x1b[0m\n",
     );
+    let expected_light = concat!(
+        "  \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Model\x1b[0;38;2;140;143;161m \u{2502} ",
+        "\x1b[0;38;2;143;196;134m\u{2758}\x1b[0;38;2;162;194;132m\u{2758}\x1b[0;38;2;182;192;131m\u{2758}\x1b[0;38;2;201;190;129m\u{2758}\x1b[0;38;2;220;188;127m\u{2758}\x1b[0;38;2;234;182;124m\u{2758}\x1b[0;38;2;242;171;120m\u{2758}\x1b[0;38;2;245;159;119m\u{2758}\x1b[0;38;2;234;138;131m\u{2758}\x1b[0;38;2;223;117;142m\u{2758}",
+        "\x1b[0;38;2;64;160;43m 0.0%\x1b[0m\n",
+        "  \x1b[0m\x1b[0;38;2;124;127;147m\u{25cb} idle\x1b[0m\n",
+    );
+
+    let dark_out = run_with_stdin_and_env(&[], b"{}", &[("COLORFGBG", "15;0")]);
+    assert_eq!(dark_out.status.code(), Some(0));
+    assert!(dark_out.stderr.is_empty(), "stderr must be 0 B");
+    assert_eq!(String::from_utf8_lossy(&dark_out.stdout), expected_dark);
+
+    let light_out = run_with_stdin_and_env(&[], b"{}", &[("COLORFGBG", "0;15")]);
+    assert_eq!(light_out.status.code(), Some(0));
+    assert!(light_out.stderr.is_empty(), "stderr must be 0 B");
+    assert_eq!(String::from_utf8_lossy(&light_out.stdout), expected_light);
+
+    let auto_out = run_with_stdin(&[], b"{}");
+    assert_eq!(auto_out.status.code(), Some(0));
+    assert!(auto_out.stderr.is_empty(), "stderr must be 0 B");
+    let expected_auto = match system_theme_polarity() {
+        Some(ThemePolarity::Light) => expected_light,
+        Some(ThemePolarity::Dark) | None => expected_dark,
+    };
+    assert_eq!(String::from_utf8_lossy(&auto_out.stdout), expected_auto);
 }
 
 // Any malformed or oversized frame is swallowed: exit 0 with 0 B on both streams, so a corrupt
@@ -255,7 +277,11 @@ fn pipe_respects_agy_env_overrides_and_omits_email() {
     assert!(!text.contains(";48;2;"));
     assert_eq!(
         text,
-        "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;188;192;204m\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n"
+        concat!(
+            "    \x1b[0m\x1b[0;1;38;2;136;57;239m\u{2726} Gemini 4 Carbon\x1b[0;38;2;124;127;147m [high]\x1b[0;38;2;140;143;161m \u{2502} ",
+            "\x1b[0;38;2;143;196;134m\u{2758}\x1b[0;38;2;162;194;132m\u{2758}\x1b[0;38;2;182;192;131m\u{2758}\x1b[0;38;2;201;190;129m\u{2758}\x1b[0;38;2;220;188;127m\u{2758}\x1b[0;38;2;234;182;124m\u{2758}\x1b[0;38;2;242;171;120m\u{2758}\x1b[0;38;2;245;159;119m\u{2758}\x1b[0;38;2;234;138;131m\u{2758}\x1b[0;38;2;223;117;142m\u{2758}",
+            "\x1b[0;38;2;64;160;43m 0.0%\x1b[0;38;2;140;143;161m \u{2502} \x1b[0;38;2;230;69;83m\u{25b8}\u{25b8} best-of-n\x1b[0m\n",
+        )
     );
 }
 

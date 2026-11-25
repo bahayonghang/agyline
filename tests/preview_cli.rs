@@ -414,8 +414,9 @@ fn preview_conflicting_flags_unknown_scenario_and_invalid_width_exit_two() {
 fn preview_showcase_renders_gallery_statelessly_and_honors_plain_and_width() {
     let sb = PreviewSandbox::new("showcase");
 
-    // 1. ANSI showcase gallery without touching AGYLINE_HOME.
-    let ansi_out = sb.run(&["preview", "--showcase"], b"", &[]);
+    // 1. ANSI showcase gallery without touching AGYLINE_HOME (pin dark terminal for Mocha check;
+    // section 5 below explicitly verifies light COLORFGBG -> Catppuccin Latte).
+    let ansi_out = sb.run(&["preview", "--showcase"], b"", &[("COLORFGBG", "15;0")]);
     assert_eq!(
         ansi_out.status.code(),
         Some(0),

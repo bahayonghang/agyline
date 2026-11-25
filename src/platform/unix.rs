@@ -119,3 +119,9 @@ pub fn stdout_terminal_columns() -> Option<usize> {
         .and_then(|s| s.trim().parse::<usize>().ok())
         .filter(|&c| c > 0)
 }
+
+/// POSIX terminals signal polarity via `COLORFGBG`; we avoid spawning `defaults`/`gsettings` on
+/// the render hot path, so this returns `None` and lets `auto` default to dark.
+pub fn system_theme_polarity() -> Option<crate::config::ThemePolarity> {
+    None
+}

@@ -341,6 +341,51 @@ items = [{ id = "mode", show_default = true }]
     );
 }
 
+// Auto polarity precedence: COLORFGBG beats OS hint (both dark < 7 and light >= 7), OS hint
+// steers auto when COLORFGBG is absent, explicit config `theme` beats both, and the internal OS
+// hint key never surfaces as a user AGY_* env override.
+#[test]
+fn auto_theme_uses_colorfgbg_before_os_hint_and_falls_back_to_dark() {
+    let auto_doc = ConfigDoc::default();
+    assert_eq!(auto_doc.theme, ThemeSetting::Auto);
+
+    // Absent signals fall back to Dark (Catppuccin Mocha).
+    let eff_default = EffectiveConfig::from_doc(&auto_doc, None, &BTreeMap::new(), true);
+    assert_eq!(eff_default.polarity, ThemePolarity::Dark);
+
+    // OS light hint switches dual-polarity catppuccin to Light (Catppuccin Latte).
+    let mut os_light = BTreeMap::new();
+    os_light.insert(
+        agyline::SYSTEM_THEME_HINT_KEY.to_string(),
+        "light".to_string(),
+    );
+    assert!(inspect_env_overrides(&os_light).is_empty());
+    let eff_os_light = EffectiveConfig::from_doc(&auto_doc, None, &os_light, true);
+    assert_eq!(eff_os_light.polarity, ThemePolarity::Light);
+
+    // Explicit COLORFGBG=15;0 (dark terminal) beats an OS light hint.
+    let mut dark_term_on_light_os = os_light.clone();
+    dark_term_on_light_os.insert("COLORFGBG".to_string(), "15;0".to_string());
+    let eff_dark_term = EffectiveConfig::from_doc(&auto_doc, None, &dark_term_on_light_os, true);
+    assert_eq!(eff_dark_term.polarity, ThemePolarity::Dark);
+
+    // Explicit COLORFGBG=0;15 (light terminal) beats an OS dark hint.
+    let mut light_term_on_dark_os = BTreeMap::new();
+    light_term_on_dark_os.insert(
+        agyline::SYSTEM_THEME_HINT_KEY.to_string(),
+        "dark".to_string(),
+    );
+    light_term_on_dark_os.insert("COLORFGBG".to_string(), "0;15".to_string());
+    let eff_light_term = EffectiveConfig::from_doc(&auto_doc, None, &light_term_on_dark_os, true);
+    assert_eq!(eff_light_term.polarity, ThemePolarity::Light);
+
+    // Explicit `theme = "dark"` in config ignores the OS light hint.
+    let mut pinned_dark = auto_doc;
+    pinned_dark.theme = ThemeSetting::Dark;
+    let eff_pinned = EffectiveConfig::from_doc(&pinned_dark, None, &os_light, true);
+    assert_eq!(eff_pinned.polarity, ThemePolarity::Dark);
+}
+
 // A syntax-broken config.toml degrades to the default line plus a red " ! config" Crit badge,
 // and the loader reports the exact line/column; the live render itself stays silent.
 #[test]
@@ -371,7 +416,7 @@ fn broken_toml_renders_default_line_with_crit_config_badge_and_line_col_diagnost
     assert_eq!(
         out.plain,
         concat!(
-            "  \u{2726} Model \u{2502} \u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a}\u{275a} 0.0% ! config\n",
+            "  \u{2726} Model \u{2502} \u{2758}\u{2758}\u{2758}\u{2758}\u{2758}\u{2758}\u{2758}\u{2758}\u{2758}\u{2758} 0.0% ! config\n",
             "  \u{25cb} idle\n",
         )
     );

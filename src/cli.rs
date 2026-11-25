@@ -466,7 +466,10 @@ fn print_set_key_options(key: SetKey, home_dir: &Path, stdout: &mut dyn Write) {
         }
         SetKey::Theme => {
             let _ = writeln!(stdout, "Valid themes (agyline set theme <value>):");
-            let _ = writeln!(stdout, "  auto           follow terminal COLORFGBG");
+            let _ = writeln!(
+                stdout,
+                "  auto           follow terminal COLORFGBG or OS light/dark theme"
+            );
             let _ = writeln!(stdout, "  dark           pin dark polarity");
             let _ = writeln!(stdout, "  light          pin light polarity");
         }
@@ -483,7 +486,7 @@ fn print_set_key_options(key: SetKey, home_dir: &Path, stdout: &mut dyn Write) {
             let _ = writeln!(stdout, "Valid Usage Bar styles (agyline set bar <value>):");
             let _ = writeln!(
                 stdout,
-                "  cells          ❚ cap-height segmented bars (alias: segments)"
+                "  cells          ❚❘ cap-height segmented bars (alias: segments)"
             );
             let _ = writeln!(stdout, "  line           ━╸─ half-cell line");
             let _ = writeln!(stdout, "  parallelogram  ▰▱ slanted blocks (alias: blocks)");
