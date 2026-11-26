@@ -75,14 +75,22 @@ Measured on Windows `x86_64` (`rustc 1.88+`, `--release` profile):
 Requires **Rust 1.88+**. Official `agy` and `agy.exe` binaries stay completely untouched; `agyline` integrates only via `statusLine` in `~/.gemini/antigravity-cli/settings.json`.
 
 ```bash
-# Build and install from this repository
+# Build and install from a local clone
 cargo install --path . --locked
+
+# Or install directly from GitHub (`main` by default; pass `--branch dev` for the dev branch; add `--force` to overwrite an existing install)
+cargo install --git https://github.com/bahayonghang/agyline.git --locked
+cargo install --git https://github.com/bahayonghang/agyline.git --branch dev --locked
 
 # Wire into ~/.gemini/antigravity-cli/settings.json (shows unified diff & saves rollback snapshot)
 agyline install
 
-# Or combine both with just
+# Or combine local install + hook wiring with just
 just install
+
+# Self-update from GitHub (default: main branch; pass `dev` for the dev branch)
+agyline update
+agyline update dev
 ```
 
 ### Verification & Safe Uninstall
@@ -125,6 +133,12 @@ agyline preview --list                  # list all 9 built-in scenarios
 agyline preview -s showcase_wide -w 120 # render one scenario at an explicit width
 agyline preview --all --plain           # escape-free preview of every scenario
 agyline preview --input frame.json      # preview a captured payload file (`-` for stdin)
+
+# Self-update (stages `cargo install --git --locked` in a temp root and replaces in place)
+agyline update                          # update from main branch (skips rebuild if commit matches)
+agyline update dev                      # update from dev branch
+agyline update dev --check              # check remote branch commit without building (--dry-run)
+agyline update --force                  # rebuild even when already on the latest recorded commit
 
 # Version & troubleshooting
 agyline version                         # alias for -V / --version
@@ -193,6 +207,7 @@ url = ""                      # loopback URL or empty/"off" to disable
 | `AGY_SHOW_DEFAULT_MODE` | `1` forces printing the default ask mode pill |
 | `AGY_CACHE_RELAY` | Overrides `[cache_relay].url` (`off` skips relay state file and touches) |
 | `AGYLINE_DEBUG` | `1` saves raw live stdin JSON best-effort to `<AGYLINE_HOME>/state/last_payload.json` (zero I/O otherwise) |
+| `AGYLINE_UPDATE_REPO` | Overrides the Git repository URL used by `agyline update` (default: upstream GitHub repo) |
 
 ### Built-in Catalog Summary
 

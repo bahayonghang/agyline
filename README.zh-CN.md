@@ -75,14 +75,22 @@
 需要 **Rust 1.88+**。官方 `agy` / `agy.exe` 二进制保持原样不动，`agyline` 仅通过 `~/.gemini/antigravity-cli/settings.json` 中的 `statusLine` 接入。
 
 ```bash
-# 从本仓库编译并安装
+# 从本地仓库编译并安装
 cargo install --path . --locked
+
+# 或直接从 GitHub 安装（默认 main 分支；加 `--branch dev` 从开发分支安装；覆盖已有安装时可追加 `--force`）
+cargo install --git https://github.com/bahayonghang/agyline.git --locked
+cargo install --git https://github.com/bahayonghang/agyline.git --branch dev --locked
 
 # 接入 ~/.gemini/antigravity-cli/settings.json（写入前展示 unified diff 并自动留存回滚快照）
 agyline install
 
-# 或使用 just 一键安装
+# 或使用 just 一键完成本地安装与接入
 just install
+
+# 从 GitHub 自更新（默认主分支 main；传入 dev 从开发分支更新）
+agyline update
+agyline update dev
 ```
 
 ### 校验与安全卸载
@@ -125,6 +133,12 @@ agyline preview --list                  # 列出全部 9 个内置场景
 agyline preview -s showcase_wide -w 120 # 指定场景与列宽预览
 agyline preview --all --plain           # 输出全部场景的纯文本视图
 agyline preview --input frame.json      # 预览本地抓取的载荷文件（`-` 表示标准输入）
+
+# 自更新（在临时目录分段执行 `cargo install --git --locked` 后原地安全替换）
+agyline update                          # 默认从 main 分支更新（提交未变化时自动跳过重编译）
+agyline update dev                      # 从 dev 开发分支更新
+agyline update dev --check              # 仅检查远程分支提交并打印更新计划（别名 --dry-run）
+agyline update --force                  # 即使已处于最新记录提交也强制重编译
 
 # 版本查询与载荷排障
 agyline version                         # 等价于 -V / --version
@@ -193,6 +207,7 @@ url = ""                      # 本机回环 URL；留空或 "off" 关闭
 | `AGY_SHOW_DEFAULT_MODE` | 设为 `1` 强制显示默认 ask 模式徽章 |
 | `AGY_CACHE_RELAY` | 覆盖 `[cache_relay].url`（设为 `off` 跳过中继状态文件与保活 touch） |
 | `AGYLINE_DEBUG` | 设为 `1` 时尽力将实时原始 stdin JSON 写入 `<AGYLINE_HOME>/state/last_payload.json`（其余值零额外 I/O） |
+| `AGYLINE_UPDATE_REPO` | 覆盖 `agyline update` 使用的 Git 仓库地址（默认为上游 GitHub 仓库） |
 
 ### 内置目录一览
 
