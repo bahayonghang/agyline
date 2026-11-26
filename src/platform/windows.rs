@@ -11,8 +11,11 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::ptr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
+
+static EXE_SWAP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 // Worker creation flags: no inherited console, a separate process group so terminal Ctrl+C does
 // not kill the refresh, and no console window flashing while the line is being printed.
@@ -349,6 +352,121 @@ pub fn replace_file_with_retry(tmp: &Path, dst: &Path) -> io::Result<()> {
         }
     }
     let _ = fs::remove_file(tmp);
+    Err(last_err.unwrap_or_else(|| io::Error::other("rename failed")))
+}
+
+pub fn exe_filename(stem: &str) -> String {
+    format!("{stem}.exe")
+}
+
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let raw = path.to_string_lossy();
+    if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{unc}"))
+    } else if let Some(rest) = raw.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path
+    }
+}
+
+/// Windows cannot overwrite or delete a running `.exe`, but NTFS allows renaming it out of the
+/// way. Copy `staged_bin` to a sibling file on the same volume first so cross-drive errors or
+/// read-only target directories fail before `target_exe` is touched.
+pub fn replace_executable(staged_bin: &Path, target_exe: &Path) -> io::Result<()> {
+    let parent = target_exe.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "target executable has no parent directory",
+        )
+    })?;
+    let target_name = target_exe
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "target executable has no valid filename",
+            )
+        })?;
+
+    let seq = EXE_SWAP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let sibling_new = parent.join(format!(".{target_name}.new.{pid}.{seq}"));
+    if let Err(err) = fs::copy(staged_bin, &sibling_new) {
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+
+    if !target_exe.exists() {
+        return rename_exe_with_retry(&sibling_new, target_exe).inspect_err(|_| {
+            let _ = fs::remove_file(&sibling_new);
+        });
+    }
+
+    let backup_old = parent.join(format!("{target_name}.old.{pid}.{seq}"));
+    if let Err(err) = rename_exe_with_retry(target_exe, &backup_old) {
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+
+    if let Err(err) = rename_exe_with_retry(&sibling_new, target_exe) {
+        // Restore the original binary if placing the staged binary fails mid-swap.
+        let _ = rename_exe_with_retry(&backup_old, target_exe);
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+
+    // Succeeds for non-running targets (such as tests); for the active exe Windows rejects deletion
+    // until exit and the next `agyline update` sweeps the `.old.*` file.
+    let _ = fs::remove_file(&backup_old);
+    Ok(())
+}
+
+/// Removes prior `<exe>.old.*` files left behind when replacing a running Windows executable.
+pub fn cleanup_stale_executable_backups(target_exe: &Path) {
+    let Some(parent) = target_exe.parent() else {
+        return;
+    };
+    let Some(target_name) = target_exe.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let prefix = format!("{}.old.", target_name.to_ascii_lowercase());
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if name_str.to_ascii_lowercase().starts_with(&prefix) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+// Executables face brief antivirus/indexer scans longer than small JSON state files, so allow
+// ~200 ms of transient ACCESS_DENIED / SHARING_VIOLATION retries before failing the swap.
+fn rename_exe_with_retry(src: &Path, dst: &Path) -> io::Result<()> {
+    let mut last_err = None;
+    for attempt in 0..20 {
+        match fs::rename(src, dst) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                let is_transient = err.kind() == io::ErrorKind::PermissionDenied
+                    || matches!(
+                        err.raw_os_error(),
+                        Some(ERROR_ACCESS_DENIED) | Some(ERROR_SHARING_VIOLATION)
+                    );
+                last_err = Some(err);
+                if !is_transient || attempt == 19 {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
     Err(last_err.unwrap_or_else(|| io::Error::other("rename failed")))
 }
 

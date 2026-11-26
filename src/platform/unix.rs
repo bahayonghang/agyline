@@ -9,6 +9,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static EXE_SWAP_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub fn host_platform() -> super::PlatformKind {
     super::PlatformKind::Unix
@@ -124,4 +127,71 @@ pub fn stdout_terminal_columns() -> Option<usize> {
 /// the render hot path, so this returns `None` and lets `auto` default to dark.
 pub fn system_theme_polarity() -> Option<crate::config::ThemePolarity> {
     None
+}
+
+pub fn exe_filename(stem: &str) -> String {
+    stem.to_string()
+}
+
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    path
+}
+
+/// Copies `staged_bin` onto `target_exe`'s filesystem with mode 0755, then atomically renames it
+/// over `target_exe`. Concurrent `agy` renders keep executing the unlinked old inode cleanly.
+pub fn replace_executable(staged_bin: &Path, target_exe: &Path) -> io::Result<()> {
+    let parent = target_exe.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "target executable has no parent directory",
+        )
+    })?;
+    let target_name = target_exe
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "target executable has no valid filename",
+            )
+        })?;
+
+    let seq = EXE_SWAP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let sibling_new = parent.join(format!(".{target_name}.new.{}.{seq}", std::process::id()));
+    if let Err(err) = fs::copy(staged_bin, &sibling_new) {
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+    if let Err(err) = fs::set_permissions(&sibling_new, fs::Permissions::from_mode(0o755)) {
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+    if let Err(err) = fs::rename(&sibling_new, target_exe) {
+        let _ = fs::remove_file(&sibling_new);
+        return Err(err);
+    }
+    Ok(())
+}
+
+/// Best-effort sweep for `<exe>.old.*` backups beside `target_exe`.
+pub fn cleanup_stale_executable_backups(target_exe: &Path) {
+    let Some(parent) = target_exe.parent() else {
+        return;
+    };
+    let Some(target_name) = target_exe.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let prefix = format!("{target_name}.old.");
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if name_str.starts_with(&prefix) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }

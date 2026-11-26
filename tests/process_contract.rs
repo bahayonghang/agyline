@@ -169,6 +169,7 @@ fn cli_version_and_help_print_to_stdout_and_omit_hidden_workers() {
         assert!(text.contains("preview"));
         assert!(text.contains("install"));
         assert!(text.contains("uninstall"));
+        assert!(text.contains("update"));
         assert!(!text.contains("__refresh-git"));
         assert!(!text.contains("__touch"));
         assert!(!text.contains("__refresh-transcript"));

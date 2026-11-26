@@ -89,3 +89,26 @@ pub fn stdout_terminal_columns() -> Option<usize> {
 pub fn system_theme_polarity() -> Option<crate::config::ThemePolarity> {
     imp::system_theme_polarity()
 }
+
+/// Platform executable filename for `stem` (`<stem>.exe` on Windows, `<stem>` on Unix).
+pub fn exe_filename(stem: &str) -> String {
+    imp::exe_filename(stem)
+}
+
+/// Strips the Windows `\\?\` extended-length prefix from canonicalized paths; identity on Unix.
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    imp::strip_verbatim_prefix(path)
+}
+
+/// Replaces `target_exe` with `staged_bin` without leaving a broken executable behind. Copies
+/// `staged_bin` onto `target_exe`'s filesystem first so the final swap is a same-volume rename;
+/// Windows renames a running `.exe` to a sibling `.old.<pid>` backup and rolls back on failure.
+pub fn replace_executable(staged_bin: &Path, target_exe: &Path) -> io::Result<()> {
+    imp::replace_executable(staged_bin, target_exe)
+}
+
+/// Best-effort cleanup of `<exe_name>.old.*` backup files left beside `target_exe` by prior
+/// Windows self-updates. Never called on the live render path.
+pub fn cleanup_stale_executable_backups(target_exe: &Path) {
+    imp::cleanup_stale_executable_backups(target_exe)
+}

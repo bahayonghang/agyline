@@ -1,9 +1,9 @@
 //! Process entry: the mode comes from argv plus stdin/stdout TTY-ness. No args over a pipe is the
 //! live render `agy` invokes (with opt-in `AGYLINE_DEBUG=1` payload capture); a TTY opens the
-//! configurator; `config`/`set`/`version`/`preview`/`install`/`uninstall` are user subcommands.
-//! `__refresh-git`, `__touch`, and `__refresh-transcript` are hidden re-entries for detached
-//! workers, the mechanism keeping git, relay HTTP, and transcript reads off the printing path.
-//! Exit: 0 ok, 1 failure, 2 bad args.
+//! configurator; `config`/`set`/`version`/`preview`/`install`/`uninstall`/`update` are user
+//! subcommands. `__refresh-git`, `__touch`, and `__refresh-transcript` are hidden re-entries for
+//! detached workers, the mechanism keeping git, relay HTTP, and transcript reads off the printing
+//! path. Exit: 0 ok, 1 failure, 2 bad args.
 
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, OpenOptions};
@@ -28,6 +28,7 @@ use crate::render::{BarStyle, discover_palettes, emit_ansi, emit_plain};
 use crate::scenarios::{builtin_scenarios, find_scenario, stateless_frame_from_payload};
 use crate::state::{atomic_write_bytes, ensure_state_dir};
 use crate::statusline::{RenderEnv, render_lines_with_width, run_live_frame_ansi};
+use crate::update::{UpdateEnv, UpdateOptions, run_update_cli, validate_branch_name};
 
 const SET_KEYS_LIST: &str = "preset, palette, theme, style, bar, bar-gradient, sep, compact-at";
 
@@ -51,6 +52,7 @@ enum HelpTopic {
     Preview,
     Install,
     Uninstall,
+    Update,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +135,7 @@ enum CliAction {
     Preview(PreviewOptions),
     Install(InstallOptions),
     Uninstall(UninstallOptions),
+    Update(UpdateOptions),
     UsageError(String),
 }
 
@@ -221,6 +224,13 @@ pub fn run_cli(args: &[OsString], streams: &mut CliStreams<'_>) -> u8 {
         },
         CliAction::Uninstall(opts) => match InstallEnv::from_process() {
             Ok(env) => run_uninstall_cli(&env, opts, streams),
+            Err(err) => {
+                let _ = writeln!(streams.stderr, "error: {err}");
+                1
+            }
+        },
+        CliAction::Update(opts) => match UpdateEnv::from_process() {
+            Ok(env) => run_update_cli(&env, &opts, streams),
             Err(err) => {
                 let _ = writeln!(streams.stderr, "error: {err}");
                 1
@@ -1007,6 +1017,7 @@ fn parse_args(args: &[OsString], stdin_is_terminal: bool) -> CliAction {
         "preview" => parse_preview_args(&args[2..]),
         "install" => parse_install_args(&args[2..]),
         "uninstall" => parse_uninstall_args(&args[2..]),
+        "update" => parse_update_args(&args[2..]),
         other if other.starts_with('-') => {
             CliAction::UsageError(format!("unknown flag '{other}'"))
         }
@@ -1296,6 +1307,57 @@ fn parse_uninstall_args(tail: &[OsString]) -> CliAction {
     CliAction::Uninstall(opts)
 }
 
+fn parse_update_args(tail: &[OsString]) -> CliAction {
+    let mut opts = UpdateOptions::default();
+    let mut saw_branch = false;
+    let mut positional_only = false;
+    let mut idx = 0;
+    while idx < tail.len() {
+        let s = tail[idx].to_string_lossy();
+        if !positional_only {
+            match s.as_ref() {
+                "-h" | "--help" => return CliAction::Help(HelpTopic::Update),
+                "--check" | "--dry-run" => {
+                    opts.check = true;
+                    idx += 1;
+                    continue;
+                }
+                "-f" | "--force" => {
+                    opts.force = true;
+                    idx += 1;
+                    continue;
+                }
+                "--" => {
+                    positional_only = true;
+                    idx += 1;
+                    continue;
+                }
+                flag if flag.starts_with('-') => {
+                    return CliAction::UsageError(format!("unknown flag '{flag}' for 'update'"));
+                }
+                _ => {}
+            }
+        }
+
+        if saw_branch {
+            return CliAction::UsageError(format!("unexpected argument '{s}' for 'update'"));
+        }
+        match validate_branch_name(&s) {
+            Ok(branch) => {
+                opts.branch = branch;
+                saw_branch = true;
+            }
+            Err(reason) => {
+                return CliAction::UsageError(format!(
+                    "invalid branch '{s}' for 'update': {reason}"
+                ));
+            }
+        }
+        idx += 1;
+    }
+    CliAction::Update(opts)
+}
+
 fn help_text(topic: HelpTopic) -> &'static str {
     // The hidden worker modes are deliberately absent: internal re-entry, not user commands.
     match topic {
@@ -1320,6 +1382,7 @@ Subcommands:
   version                 Print version
   install                 Configure agy settings.json to run agyline
   uninstall               Restore previous agy statusLine configuration
+  update [branch]         Update agyline from GitHub (default: main; pass 'dev' for dev branch)
 "
         }
         HelpTopic::Config => {
@@ -1390,6 +1453,25 @@ Options:
       --reset             Remove statusLine instead of restoring previous snapshot
       --purge             Remove a dedicated <AGYLINE_HOME>; refuses home, .gemini, and mixed directories
   -h, --help              Print help
+"
+        }
+        HelpTopic::Update => {
+            "\
+Usage: agyline update [branch] [--check|--dry-run] [-f|--force]
+
+Builds the requested branch via `cargo install --git` in an isolated staging
+directory and replaces the running agyline binary in place.
+
+Arguments:
+  [branch]                Remote branch to update from (default: main; e.g. dev)
+
+Options:
+      --check, --dry-run  Check the remote branch commit and print plan without updating
+  -f, --force             Rebuild even when already on the latest recorded commit
+  -h, --help              Print help
+
+Environment:
+  AGYLINE_UPDATE_REPO     Override the Git repository URL (default: GitHub upstream)
 "
         }
     }

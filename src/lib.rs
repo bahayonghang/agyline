@@ -30,7 +30,8 @@ pub use items::{
     evaluate_slot, evaluate_slot_dual,
 };
 pub use platform::{
-    PlatformKind, create_file_symlink, host_platform, stdout_terminal_columns,
+    PlatformKind, cleanup_stale_executable_backups, create_file_symlink, exe_filename,
+    host_platform, replace_executable, stdout_terminal_columns, strip_verbatim_prefix,
     system_theme_polarity,
 };
 pub use render::{
@@ -55,6 +56,12 @@ pub use tui::{
     ConfiguratorApp, ConfiguratorEnv, ConfiguratorExit, TuiTab, render_tui_frame,
     rendered_frame_to_ratatui_lines, run_configurator,
 };
+pub use update::{
+    DEFAULT_UPDATE_BRANCH, DEFAULT_UPDATE_REPO, RemoteProbe, SystemUpdateRunner, UPDATE_REPO_ENV,
+    UpdateEnv, UpdateError, UpdateOptions, UpdateRunner, UpdateState, is_cargo_target_artifact,
+    load_update_state, probe_remote_branch, run_update_cli, run_update_with_runner,
+    validate_branch_name,
+};
 
 mod cli;
 mod collect;
@@ -68,3 +75,4 @@ mod scenarios;
 mod state;
 mod statusline;
 mod tui;
+mod update;

@@ -6,6 +6,7 @@ edition = "2024"
 rust-version = "1.88"
 description = "Fast, configurable status line for the Antigravity CLI (agy)"
 license = "MIT"
+repository = "https://github.com/bahayonghang/agyline"
 
 [dependencies]
 crossterm = "0.28"
